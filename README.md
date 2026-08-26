@@ -17,3 +17,9 @@ Ejecutar
 uvicorn app.main:app --reload
 
 Frontend
+
+Pasar .env.example a .env
+npm install
+
+Ejecutar
+npm run dev
