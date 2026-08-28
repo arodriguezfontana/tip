@@ -12,6 +12,10 @@ class Settings(BaseSettings):
     POSTGRES_DB: str = "tip"
     DATABASE_URL: str = ""
 
+    TELEGRAM_TOKEN: str
+    GOOGLE_API_KEY: str
+    TELEGRAM_WEBHOOK_SECRET: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",
