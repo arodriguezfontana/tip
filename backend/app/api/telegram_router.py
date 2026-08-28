@@ -53,10 +53,6 @@ async def recibir_mensaje(
     if "message" in data and "text" in data["message"]:
         chat_id = str(data["message"]["chat"]["id"])
         mensaje_usuario = data["message"]["text"]
-
-        # Mandamos todo el proceso al fondo: FastAPI ya no espera a Gemini,
-        # sigue de largo al instante y Telegram deja de reintentar el webhook.
         background_tasks.add_task(procesar_y_enviar, chat_id, mensaje_usuario)
 
-    # Telegram recibe este OK en 0.01 segundos y deja de penalizarte.
     return {"status": "ok"}
