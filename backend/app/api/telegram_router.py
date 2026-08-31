@@ -22,7 +22,17 @@ async def enviar_mensaje(chat_id: int, texto: str):
     payload = {"chat_id": chat_id, "text": texto}
 
     async with httpx.AsyncClient(timeout=100.0) as client:
-        await client.post(url, json=payload)
+        response = await client.post(url, json=payload)
+
+    try:
+        response.raise_for_status()
+    except httpx.HTTPStatusError:
+        logger.error(
+            "Fallo al enviar mensaje a Telegram chat_id=%s status=%d body=%s",
+            chat_id, response.status_code, response.text,
+        )
+        raise
+    logger.info("Mensaje enviado a Telegram chat_id=%s status=%d", chat_id, response.status_code)
 
 
 async def procesar_y_enviar(chat_id: str, mensaje: str):

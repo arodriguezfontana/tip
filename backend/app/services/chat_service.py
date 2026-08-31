@@ -1,6 +1,6 @@
 import asyncio
 import logging
-
+import time
 from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.core.config import settings
@@ -8,7 +8,9 @@ from app.services.tools.menu_tools import consultar_productos
 
 logger = logging.getLogger(__name__)
 
-LLM_TIMEOUT_SECONDS = 60
+LLM_TIMEOUT_SECONDS = 30
+LLM_MAX_INTENTOS = 2
+TOOL_TIMEOUT_SECONDS = 15
 MAX_TOOL_ITERATIONS = 3
 MENSAJE_FALLBACK_LOOP = "Disculpá, no pude terminar de procesar tu consulta. ¿Podés reformularla?"
 
@@ -23,7 +25,10 @@ class ChatService:
         )
         self.herramientas = [consultar_productos]
         self.herramientas_por_nombre = {h.name: h for h in self.herramientas}
-        self.llm_con_herramientas = self.llm.bind_tools(self.herramientas)
+        self.llm_con_herramientas = self.llm.bind_tools(
+            self.herramientas,
+            automatic_function_calling={"disable": True},
+        )
         self.system_prompt = """
             Sos el asistente virtual de un restaurante local. Tu tono es amable, cordial y servicial.
             Tu objetivo es saludar a los clientes y responder preguntas generales.
@@ -40,6 +45,24 @@ class ChatService:
         """
         self.sesiones = {}
 
+    async def _invocar_llm(self, historial):
+        for intento in range(1, LLM_MAX_INTENTOS + 1):
+            t0 = time.time()
+            try:
+                respuesta_ia = await asyncio.wait_for(
+                    self.llm_con_herramientas.ainvoke(historial),
+                    timeout=LLM_TIMEOUT_SECONDS,
+                )
+                logger.info("LLM call: %.2fs | historial=%d msgs", time.time() - t0, len(historial))
+                return respuesta_ia
+            except asyncio.TimeoutError:
+                logger.warning(
+                    "Timeout en llamada al LLM (intento %d/%d) tras %.2fs",
+                    intento, LLM_MAX_INTENTOS, time.time() - t0,
+                )
+                if intento == LLM_MAX_INTENTOS:
+                    raise
+
     async def obtener_respuesta(self, mensaje_usuario: str, session_id: str) -> str:
         if session_id not in self.sesiones:
             self.sesiones[session_id] = [
@@ -51,22 +74,30 @@ class ChatService:
 
         respuesta_ia = None
         for _ in range(MAX_TOOL_ITERATIONS):
-            respuesta_ia = await asyncio.wait_for(
-                self.llm_con_herramientas.ainvoke(historial),
-                timeout=LLM_TIMEOUT_SECONDS,
-            )
+            respuesta_ia = await self._invocar_llm(historial)
             historial.append(respuesta_ia)
 
             if not respuesta_ia.tool_calls:
                 break
 
             for tool_call in respuesta_ia.tool_calls:
+                t0 = time.time()
                 herramienta = self.herramientas_por_nombre.get(tool_call["name"])
                 if herramienta is None:
                     resultado = f"Herramienta desconocida: {tool_call['name']}"
                 else:
                     try:
-                        resultado = await herramienta.ainvoke(tool_call["args"])
+                        resultado = await asyncio.wait_for(
+                            herramienta.ainvoke(tool_call["args"]),
+                            timeout=TOOL_TIMEOUT_SECONDS,
+                        )
+                        logger.info("Tool %s: %.2fs", tool_call["name"], time.time() - t0)
+                    except asyncio.TimeoutError:
+                        logger.error(
+                            "Timeout ejecutando la herramienta %s tras %.2fs",
+                            tool_call["name"], time.time() - t0,
+                        )
+                        resultado = "Ocurrió un error consultando la información."
                     except Exception:
                         logger.exception("Error ejecutando la herramienta %s", tool_call["name"])
                         resultado = "Ocurrió un error consultando la información."
