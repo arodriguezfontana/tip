@@ -1,10 +1,7 @@
 from sqlalchemy.orm import Session
 
-from app.core.config import settings
-from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.modules.menu import Category, Ingredient, Product, ProductIngredient
-from app.modules.user import User
 
 
 def get_or_create(db: Session, model, defaults: dict | None = None, **kwargs):
@@ -196,27 +193,9 @@ def seed_postres(db: Session, categoria: Category):
         )
 
 
-def seed_admin(db: Session) -> User:
-    """Crea la cuenta ADMIN del dueño del local a partir de las credenciales configuradas."""
-    admin, _ = get_or_create(
-        db,
-        User,
-        email=settings.ADMIN_EMAIL,
-        defaults={
-            "hashed_password": hash_password(settings.ADMIN_PASSWORD),
-            "role": "ADMIN",
-            "is_active": True,
-        },
-    )
-    return admin
-
-
 def run():
     db = SessionLocal()
     try:
-        seed_admin(db)
-        db.flush()
-
         categoria_pizzas, _ = get_or_create(db, Category, name="Pizzas")
         categoria_bebidas, _ = get_or_create(db, Category, name="Bebidas")
         categoria_postres, _ = get_or_create(db, Category, name="Postres")
@@ -230,7 +209,7 @@ def run():
         seed_postres(db, categoria_postres)
 
         db.commit()
-        print("Seed completado: admin, categorías, ingredientes y productos de la pizzería cargados.")
+        print("Seed completado: categorías, ingredientes y productos de la pizzería cargados.")
     except Exception:
         db.rollback()
         raise
