@@ -32,3 +32,13 @@ export interface CheckoutFormErrors {
   phone?: string;
   address?: string;
 }
+
+export interface AdminOrder {
+  id: number;
+  customer_name: string;
+  shipping_address: string;
+  total_amount: number;
+  status: string;
+  created_at: string;
+  item_count: number;
+}

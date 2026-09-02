@@ -1,10 +1,13 @@
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/TopBar';
+import { OwnerOrdersDrawer } from '@/components/OwnerOrdersDrawer';
 
 export default function AdminDashboardPage() {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
+  const [ordersPanelOpen, setOrdersPanelOpen] = useState(false);
 
   const handleLogout = () => {
     logout();
@@ -13,7 +16,10 @@ export default function AdminDashboardPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopBar />
+      <TopBar
+        onToggleOrdersPanel={() => setOrdersPanelOpen((prev) => !prev)}
+        ordersPanelOpen={ordersPanelOpen}
+      />
       <main className="flex-1 px-4 py-10">
         <div className="max-w-2xl mx-auto space-y-6">
           <div className="bg-white rounded-2xl shadow-md p-8 flex items-center justify-between">
@@ -39,6 +45,8 @@ export default function AdminDashboardPage() {
           </div>
         </div>
       </main>
+
+      <OwnerOrdersDrawer open={ordersPanelOpen} onClose={() => setOrdersPanelOpen(false)} />
     </div>
   );
 }

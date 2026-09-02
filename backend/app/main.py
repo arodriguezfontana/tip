@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.db.session import get_db
 from app.api import auth_router
 from app.api import chat_router
+from app.api import order_router
 from app.api import telegram_router
 
 app = FastAPI(
@@ -40,6 +41,7 @@ def health_check(db: Session = Depends(get_db)):
 
 api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
+api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
 
 app.include_router(api_router)
