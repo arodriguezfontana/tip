@@ -1,7 +1,6 @@
 """Tools de LangChain para que el chatbot consulte datos reales del local."""
 
 from langchain_core.tools import tool
-
 from app.db.session import SessionLocal
 from app.modules.menu import Category, Product
 
@@ -30,5 +29,7 @@ def consultar_productos(categoria: str | None = None) -> str:
             for p in productos
         ]
         return "\n".join(lineas)
+    except Exception:
+        return "Ocurrió un error al consultar la base de datos de productos."
     finally:
         db.close()
