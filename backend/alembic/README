@@ -1,1 +1,9 @@
-Generic single-database configuration.
+### ¿Como clonar el repositorio?
+```bash
+git clone https://github.com/arodriguezfontana/tip
+cd tip
+```
+
+### Ejecución con Docker Compose
+```bash
+docker compose up --build
