@@ -8,6 +8,7 @@ from app.api import auth_router
 from app.api import chat_router
 from app.api import order_router
 from app.api import telegram_router
+from app.api import stats_router  # Corregido el path relativo de importación
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
@@ -43,6 +44,7 @@ api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
+api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])  
 
 app.include_router(api_router)
 

@@ -38,7 +38,7 @@ class ChatService:
             o disponibilidad, SIEMPRE usá la herramienta "consultar_productos" para traer la
             información real antes de responder. Nunca inventes productos ni precios.
 
-            REGLA ESTRICTA DE TOMA DE PEDIDOS (US-07):
+            REGLA ESTRICTA DE TOMA DE PEDIDOS:
             Paso 1: Cuando el cliente indique qué quiere comer, usá la herramienta "calcular_y_preparar_pedido" pasando los ítems y cantidades. (Deja nombre y dirección en null por ahora).
             Paso 2: Presentale al cliente el resumen de los productos con sus precios exactos calculados por la base de datos.
             Paso 3: INMEDIATAMENTE después de mostrar el resumen de precios, pedile proactivamente su **nombre** y su **dirección de envío**. **NO guardes nada en la base de datos todavía**.

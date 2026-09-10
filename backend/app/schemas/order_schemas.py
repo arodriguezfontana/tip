@@ -13,3 +13,6 @@ class OrderResponse(BaseModel):
     item_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
+class OrderStatusUpdate(BaseModel):
+    status: str
