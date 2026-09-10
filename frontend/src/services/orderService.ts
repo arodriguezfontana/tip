@@ -15,3 +15,8 @@ export async function fetchOrders(params: FetchOrdersParams = {}): Promise<Admin
   });
   return data;
 }
+
+export async function updateOrderStatus(orderId: number, status: string): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/status`, { status });
+  return data;
+}
