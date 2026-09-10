@@ -1,10 +1,13 @@
 """Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta."""
 
 import json
+import logging
 from langchain_core.tools import tool
 from app.db.session import SessionLocal
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
+
+logger = logging.getLogger(__name__)
 
 
 @tool
@@ -69,6 +72,7 @@ def calcular_y_preparar_pedido(items_solicitados: str, customer_name: str | None
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
     except Exception as e:
+        logger.exception("Error procesando el cálculo del pedido. items_solicitados=%s", items_solicitados)
         return f"Error procesando el cálculo del pedido: {str(e)}"
     finally:
         db.close()
@@ -93,7 +97,8 @@ def confirmar_y_guardar_pedido(datos_pedido_json: str) -> str:
             customer_name=datos["cliente"],
             shipping_address=datos["direccion"],
             total_amount=datos["total"],
-            status="Pendiente"
+            status="Pendiente",
+            delivery_method=datos.get("metodo_entrega") or "domicilio",
         )
         db.add(nueva_orden)
         db.flush()
@@ -112,6 +117,7 @@ def confirmar_y_guardar_pedido(datos_pedido_json: str) -> str:
         return f"¡Pedido confirmado y registrado con éxito! Tu número de orden es el #{nueva_orden.id}. ¡Gracias por tu compra!"
     except Exception as e:
         db.rollback()
+        logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
         return f"Error al guardar la orden: {str(e)}"
     finally:
         db.close()

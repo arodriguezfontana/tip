@@ -1,13 +1,14 @@
 import { useEffect, useMemo, useState } from 'react';
 import type { AdminOrder } from '@/types/order';
-import { fetchOrders, updateOrderStatus } from '@/services/orderService';
+import { fetchOrders } from '@/services/orderService';
 import { formatCurrency } from '@/utils/currency';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, presetLabel, rangeForPreset } from '@/utils/dateRange';
 import type { GroupBy } from '@/utils/orderGrouping';
 import { groupOrdersByPeriod } from '@/utils/orderGrouping';
+import { ComandasBoard } from '@/components/ComandasBoard';
 
-type Tab = 'pendientes' | 'historial' | 'ingresos';
+type Tab = 'comandas' | 'historial' | 'ingresos';
 
 const PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
 const GROUP_BY_OPTIONS: { value: GroupBy; label: string }[] = [
@@ -36,7 +37,7 @@ function formatDateTime(iso: string): string {
 }
 
 export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: () => void }) {
-  const [tab, setTab] = useState<Tab>('pendientes');
+  const [tab, setTab] = useState<Tab>('comandas');
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -75,20 +76,6 @@ export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: (
     loadOrders();
   }, [open, range.from, range.to, preset, customFrom, customTo]);
 
-  const handleStatusChange = async (orderId: number, newStatus: string) => {
-    try {
-      await updateOrderStatus(orderId, newStatus);
-      await loadOrders();
-    } catch {
-      setError('Error al actualizar el estado del pedido.');
-    }
-  };
-
-  const pendingOrders = useMemo(
-    () => orders.filter((o) => o.status.trim().toLowerCase() === 'pendiente'),
-    [orders]
-  );
-
   const totalRevenue = useMemo(() => orders.reduce((sum, order) => sum + order.total_amount, 0), [orders]);
   const revenueGroups = useMemo(() => groupOrdersByPeriod(orders, groupBy), [orders, groupBy]);
 
@@ -123,17 +110,12 @@ export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: (
         <div className="flex border-b border-gray-200 bg-white shrink-0">
           <button
             type="button"
-            onClick={() => setTab('pendientes')}
+            onClick={() => setTab('comandas')}
             className={`flex-1 py-3 text-sm font-semibold transition relative ${
-              tab === 'pendientes' ? 'text-black border-b-2 border-black' : 'text-gray-500 hover:text-gray-800'
+              tab === 'comandas' ? 'text-black border-b-2 border-black' : 'text-gray-500 hover:text-gray-800'
             }`}
           >
-            Pendientes
-            {pendingOrders.length > 0 && (
-              <span className="ml-1.5 bg-yellow-500 text-black text-xs font-bold px-1.5 py-0.5 rounded-full">
-                {pendingOrders.length}
-              </span>
-            )}
+            Comandas
           </button>
           <button
             type="button"
@@ -156,7 +138,7 @@ export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: (
         </div>
 
         <div className="p-6 space-y-4 overflow-y-auto flex-1">
-          {tab !== 'pendientes' && (
+          {tab !== 'comandas' && (
             <div>
               <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
                 Rango de fechas
@@ -196,7 +178,7 @@ export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: (
             </div>
           )}
 
-          {tab !== 'pendientes' && (
+          {tab !== 'comandas' && (
             <div className="bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dinero facturado</p>
@@ -211,45 +193,10 @@ export function OwnerOrdersDrawer({ open, onClose }: { open: boolean; onClose: (
 
           {error && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
-          {loading ? (
+          {tab === 'comandas' ? (
+            <ComandasBoard active={open && tab === 'comandas'} />
+          ) : loading ? (
             <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
-          ) : tab === 'pendientes' ? (
-            pendingOrders.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-12">No hay comandas pendientes de confirmación.</p>
-            ) : (
-              <div className="space-y-4">
-                {pendingOrders.map((order) => (
-                  <div key={order.id} className="bg-white rounded-2xl shadow-md p-5 space-y-3">
-                    <div className="flex justify-between items-center">
-                      <span className="font-bold text-gray-900">Pedido #{order.id}</span>
-                      <span className="text-xs text-gray-500">{formatDateTime(order.created_at)}</span>
-                    </div>
-                    <div className="text-sm space-y-1 text-gray-700">
-                      <p><strong>Cliente:</strong> {order.customer_name}</p>
-                      <p><strong>Dirección:</strong> {order.shipping_address}</p>
-                      <p><strong>Total:</strong> <span className="font-semibold text-black">{formatCurrency(order.total_amount)}</span></p>
-                      <p className="text-xs text-gray-500">Ítems en la orden: {order.item_count}</p>
-                    </div>
-                    <div className="flex gap-2 pt-2">
-                      <button
-                        type="button"
-                        onClick={() => handleStatusChange(order.id, 'Confirmado')}
-                        className="flex-1 bg-green-600 hover:bg-green-700 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        Aceptar
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => handleStatusChange(order.id, 'Rechazado')}
-                        className="flex-1 bg-red-600 hover:bg-red-700 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
-                      >
-                        Rechazado
-                      </button>
-                    </div>
-                  </div>
-                ))}
-              </div>
-            )
           ) : tab === 'historial' ? (
             orders.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
