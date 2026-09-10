@@ -1,13 +1,11 @@
 from datetime import datetime
+from typing import Dict, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
-from sqlalchemy import func
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.modules.order import Order
-from app.modules.order_item import OrderItem
-from app.modules.product import Product
 from app.modules.user import User
 from app.schemas.stats_schemas import (
     BestSellingDayResponse,
@@ -15,7 +13,7 @@ from app.schemas.stats_schemas import (
     TopProductResponse,
 )
 
-router = APIRouter(prefix="/stats", tags=["Statistics"])
+router = APIRouter()
 
 
 def _filter_orders_by_date(db: Session, date_from: datetime | None, date_to: datetime | None):
@@ -34,7 +32,7 @@ def get_status_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
 ) -> StatusDistributionResponse:
-    """Devuelve la distribución de pedidos por su estado (Pendientes, Confirmados, Rechazados)."""
+    """Devuelve la distribución de pedidos por su estado."""
     orders = _filter_orders_by_date(db, date_from, date_to)
     
     distribution: Dict[str, int] = {}
@@ -45,42 +43,50 @@ def get_status_distribution(
     return StatusDistributionResponse(status_distribution=distribution)
 
 
-@router.get("/top-products", response_model=list[TopProductResponse])
+@router.get("/top-products", response_model=List[TopProductResponse])
 def get_top_products(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
-    limit: int = Query(5, description="Cantidad máxima de productos a retornar"),
+    limit: int = Query(5),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_user),
-) -> list[TopProductResponse]:
-    """Devuelve el top de productos más vendidos y su recaudación asociada."""
+) -> List[TopProductResponse]:
+    """Calcula el top de productos más vendidos a partir de los ítems de las órdenes."""
     orders = _filter_orders_by_date(db, date_from, date_to)
-    order_ids = [o.id for o in orders]
+    
+    product_stats: Dict[str, Dict[str, float]] = {}
 
-    if not order_ids:
-        return []
+    for order in orders:
+        for item in getattr(order, "items", []):
+            prod_name = getattr(item, "product_name", None)
+            if not prod_name and hasattr(item, "product") and item.product:
+                prod_name = getattr(item.product, "name", "Producto desconocido")
+            if not prod_name:
+                prod_name = f"Producto #{getattr(item, 'product_id', 'N/A')}"
 
-    results = (
-        db.query(
-            Product.name,
-            func.sum(OrderItem.quantity).label("total_qty"),
-            func.sum(OrderItem.quantity * OrderItem.unit_price).label("total_rev")
-        )
-        .join(OrderItem, OrderItem.product_id == Product.id)
-        .filter(OrderItem.order_id.in_(order_ids))
-        .group_by(Product.name)
-        .order_by(func.sum(OrderItem.quantity).desc())
-        .limit(limit)
-        .all()
-    )
+            qty = float(getattr(item, "quantity", 1))
+            price = float(getattr(item, "unit_price", 0.0))
+            revenue = qty * price
+
+            if prod_name not in product_stats:
+                product_stats[prod_name] = {"quantity": 0.0, "revenue": 0.0}
+            
+            product_stats[prod_name]["quantity"] += qty
+            product_stats[prod_name]["revenue"] += revenue
+
+    sorted_products = sorted(
+        product_stats.items(),
+        key=lambda x: x[1]["quantity"],
+        reverse=True
+    )[:limit]
 
     return [
         TopProductResponse(
-            product_name=row[0],
-            total_quantity=int(row[1]),
-            total_revenue=float(row[2])
+            product_name=name,
+            total_quantity=int(data["quantity"]),
+            total_revenue=float(data["revenue"]),
         )
-        for row in results
+        for name, data in sorted_products
     ]
 
 
