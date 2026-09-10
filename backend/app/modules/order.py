@@ -21,6 +21,8 @@ class Order(Base):
     total_amount = Column(Float, nullable=False)
     status = Column(String(50), nullable=False, default="Pendiente")
     delivery_method = Column(String(20), nullable=False, server_default="domicilio")
+    telegram_chat_id = Column(String(32), nullable=True)
+    estimated_minutes = Column(Integer, nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")

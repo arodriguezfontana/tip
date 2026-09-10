@@ -1,3 +1,5 @@
+import logging
+
 from fastapi import Depends, FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
@@ -9,6 +11,8 @@ from app.api import chat_router
 from app.api import order_router
 from app.api import telegram_router
 from app.api import stats_router  # Corregido el path relativo de importación
+
+logging.basicConfig(level=logging.INFO)
 
 app = FastAPI(
     title=settings.PROJECT_NAME,

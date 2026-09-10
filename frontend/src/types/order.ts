@@ -55,6 +55,7 @@ export interface AdminOrder {
   total_amount: number;
   status: OrderStatus;
   delivery_method: DeliveryMethod;
+  estimated_minutes: number | null;
   created_at: string;
   item_count: number;
 }

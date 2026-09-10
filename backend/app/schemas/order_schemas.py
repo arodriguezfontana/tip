@@ -1,7 +1,7 @@
 from datetime import datetime
 from typing import Literal
 
-from pydantic import BaseModel, ConfigDict
+from pydantic import BaseModel, ConfigDict, Field
 
 OrderStatusLiteral = Literal[
     "Pendiente", "Confirmado", "En Camino", "Listo para Retirar", "Finalizado", "Rechazado"
@@ -15,6 +15,7 @@ class OrderResponse(BaseModel):
     total_amount: float
     status: str
     delivery_method: str
+    estimated_minutes: int | None
     created_at: datetime
     item_count: int
 
@@ -22,3 +23,4 @@ class OrderResponse(BaseModel):
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatusLiteral
+    estimated_minutes: int | None = Field(None, gt=0)

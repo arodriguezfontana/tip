@@ -11,19 +11,22 @@ const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
 
 interface ComandaCardProps {
   order: AdminOrder;
-  onStatusChange: (orderId: number, newStatus: OrderStatus) => Promise<void>;
+  onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
 }
 
 export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
+  const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
+  const parsedMinutes = Number(estimatedMinutesInput);
+  const isValidMinutes = estimatedMinutesInput.trim() !== '' && Number.isInteger(parsedMinutes) && parsedMinutes > 0;
 
-  const handleClick = async (newStatus: OrderStatus) => {
+  const handleClick = async (newStatus: OrderStatus, estimatedMinutes?: number) => {
     setPending(true);
     try {
-      await onStatusChange(order.id, newStatus);
+      await onStatusChange(order.id, newStatus, estimatedMinutes);
     } finally {
       setPending(false);
     }
@@ -47,15 +50,27 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
         <p className="text-xs text-gray-500">Ítems: {order.item_count}</p>
         <p className="font-semibold text-black">{formatCurrency(order.total_amount)}</p>
+        {order.status !== 'Pendiente' && order.estimated_minutes != null && (
+          <p className="text-xs text-gray-500">Demora estimada: {order.estimated_minutes}min</p>
+        )}
       </div>
 
-      <div className="flex gap-2 pt-1">
-        {order.status === 'Pendiente' && (
-          <>
+      {order.status === 'Pendiente' && (
+        <div className="space-y-2 pt-1">
+          <input
+            type="number"
+            min={1}
+            step={1}
+            placeholder="Demora estimada (min)"
+            value={estimatedMinutesInput}
+            onChange={(e) => setEstimatedMinutesInput(e.target.value)}
+            className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black"
+          />
+          <div className="flex gap-2">
             <button
               type="button"
-              disabled={pending}
-              onClick={() => handleClick('Confirmado')}
+              disabled={pending || !isValidMinutes}
+              onClick={() => handleClick('Confirmado', parsedMinutes)}
               className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
             >
               Confirmar
@@ -68,10 +83,12 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
             >
               Rechazar
             </button>
-          </>
-        )}
+          </div>
+        </div>
+      )}
 
-        {order.status === 'Confirmado' && (
+      {order.status === 'Confirmado' && (
+        <div className="flex gap-2 pt-1">
           <button
             type="button"
             disabled={pending}
@@ -80,9 +97,11 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
           >
             {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
           </button>
-        )}
+        </div>
+      )}
 
-        {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
+      {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
+        <div className="flex gap-2 pt-1">
           <button
             type="button"
             disabled={pending}
@@ -91,8 +110,8 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
           >
             Finalizar
           </button>
-        )}
-      </div>
+        </div>
+      )}
     </div>
   );
 }

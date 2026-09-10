@@ -60,9 +60,9 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
     }));
   }, [orders]);
 
-  const handleStatusChange = async (orderId: number, newStatus: OrderStatus) => {
+  const handleStatusChange = async (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => {
     try {
-      const updated = await updateOrderStatus(orderId, newStatus);
+      const updated = await updateOrderStatus(orderId, newStatus, estimatedMinutes);
       setOrders((prev) => {
         const isTerminal = updated.status === 'Finalizado' || updated.status === 'Rechazado';
         if (isTerminal) {
@@ -71,8 +71,9 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
         return prev.map((order) => (order.id === orderId ? updated : order));
       });
       setError(null);
-    } catch {
-      setError('No se pudo actualizar el estado del pedido.');
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
+      setError(message || 'No se pudo actualizar el estado del pedido.');
     }
   };
 

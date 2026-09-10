@@ -22,10 +22,33 @@ def _create_order(db_session, status="Pendiente", delivery_method="domicilio"):
 def test_pendiente_to_confirmado_succeeds(client, db_session):
     order = _create_order(db_session)
 
-    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
+    response = client.patch(
+        f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado", "estimated_minutes": 30}
+    )
 
     assert response.status_code == 200
     assert response.json()["status"] == "Confirmado"
+    assert response.json()["estimated_minutes"] == 30
+
+
+def test_confirmar_sin_estimated_minutes_is_rejected(client, db_session):
+    order = _create_order(db_session)
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
+
+    assert response.status_code == 400
+
+
+@pytest.mark.parametrize("estimated_minutes", [0, -5])
+def test_confirmar_con_estimated_minutes_invalido_is_rejected(client, db_session, estimated_minutes):
+    order = _create_order(db_session)
+
+    response = client.patch(
+        f"/api/v1/orders/{order.id}/status",
+        json={"status": "Confirmado", "estimated_minutes": estimated_minutes},
+    )
+
+    assert response.status_code == 422
 
 
 def test_confirmado_to_en_camino_succeeds_for_domicilio(client, db_session):
