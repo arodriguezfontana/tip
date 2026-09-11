@@ -33,12 +33,29 @@ export interface CheckoutFormErrors {
   address?: string;
 }
 
+export type OrderStatus =
+  | 'Pendiente'
+  | 'Confirmado'
+  | 'En Camino'
+  | 'Listo para Retirar'
+  | 'Finalizado'
+  | 'Rechazado';
+
+export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
+  'Pendiente',
+  'Confirmado',
+  'En Camino',
+  'Listo para Retirar',
+];
+
 export interface AdminOrder {
   id: number;
   customer_name: string;
   shipping_address: string;
   total_amount: number;
-  status: string;
+  status: OrderStatus;
+  delivery_method: DeliveryMethod;
+  estimated_minutes: number | null;
   created_at: string;
   item_count: number;
 }

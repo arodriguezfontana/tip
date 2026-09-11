@@ -10,25 +10,30 @@ MENSAJE_FALLBACK = (
 )
 
 
+async def send_telegram_message(chat_id: int, texto: str) -> None:
+    """Envía un mensaje a un chat de Telegram. Reutilizable fuera del flujo conversacional."""
+    if not settings.TELEGRAM_TOKEN:
+        logger.error("TELEGRAM_TOKEN no está configurado.")
+        return
+
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/sendMessage"
+    payload = {"chat_id": chat_id, "text": texto}
+
+    async with httpx.AsyncClient(timeout=30.0) as client:
+        try:
+            response = await client.post(url, json=payload)
+            response.raise_for_status()
+        except httpx.HTTPError as e:
+            logger.error("Error al enviar mensaje a Telegram: %s", e)
+
+
 class TelegramService:
     def __init__(self):
         self.chat_service = ChatService()
 
     async def enviar_mensaje(self, chat_id: int, texto: str):
         """Envía la respuesta de la IA de vuelta a Telegram."""
-        if not settings.TELEGRAM_TOKEN:
-            logger.error("TELEGRAM_TOKEN no está configurado.")
-            return
-
-        url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/sendMessage"
-        payload = {"chat_id": chat_id, "text": texto}
-
-        async with httpx.AsyncClient(timeout=30.0) as client:
-            try:
-                response = await client.post(url, json=payload)
-                response.raise_for_status()
-            except httpx.HTTPError as e:
-                logger.error("Error al enviar mensaje a Telegram: %s", e)
+        await send_telegram_message(chat_id, texto)
 
     async def procesar_y_enviar(self, chat_id: str, mensaje: str):
         """Procesa el mensaje con el ChatService (IA) y despacha la respuesta."""

@@ -52,8 +52,8 @@ def get_top_products(
     current_user: User = Depends(get_current_user),
 ) -> List[TopProductResponse]:
     """Calcula el top de productos más vendidos a partir de los ítems de las órdenes."""
-    orders = _filter_orders_by_date(db, date_from, date_to)
-    
+    orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]
+
     product_stats: Dict[str, Dict[str, float]] = {}
 
     for order in orders:
@@ -98,7 +98,7 @@ def get_best_selling_day(
     current_user: User = Depends(get_current_user),
 ) -> BestSellingDayResponse:
     """Calcula y devuelve el día de la semana con mayor volumen de ventas."""
-    orders = _filter_orders_by_date(db, date_from, date_to)
+    orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]
 
     python_days_map = {
         0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
