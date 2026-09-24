@@ -47,6 +47,9 @@ class ChatService:
                - Si el cliente responde afirmativamente ("Sí", "Correcto", "Dale"), **solo en ese momento** invocá la herramienta "confirmar_y_guardar_pedido" para persistirlo en la base de datos.
                - Si el cliente responde con un "No" o quiere cambiar algo, ajustá los datos, recalculá y volvé a pedir confirmación sin guardar nada.
 
+            REGLA ADICIONAL PARA HORARIOS (US-12):
+            - Si el cliente menciona una hora específica para recibir o retirar el pedido, asegúrate de pasársela al parámetro `hora_programada` en la herramienta `calcular_y_preparar_pedido`. Si no dice nada, déjalo en null (para ahora).
+
             REGLA ANTI-REPETICIÓN: si ya llamaste una herramienta y tenés su resultado disponible en la conversación, no la vuelvas a llamar con los mismos datos — respondé directamente en base a ese resultado. Solo volvé a llamar una herramienta si el cliente pidió explícitamente un cambio (otro producto, otra cantidad, otro dato).
         """
         self.sesiones = {}

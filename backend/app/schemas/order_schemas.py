@@ -1,6 +1,5 @@
 from datetime import datetime
 from typing import Literal
-
 from pydantic import BaseModel, ConfigDict, Field
 
 OrderStatusLiteral = Literal[
@@ -16,10 +15,12 @@ class OrderResponse(BaseModel):
     status: str
     delivery_method: str
     estimated_minutes: int | None
+    scheduled_for: datetime | None 
     created_at: datetime
     item_count: int
 
     model_config = ConfigDict(from_attributes=True)
+
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatusLiteral
