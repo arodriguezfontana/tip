@@ -48,6 +48,17 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
       <div className="text-sm space-y-1 text-gray-700">
         <p className="font-medium">{order.customer_name}</p>
         <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
+        
+        {order.scheduled_for ? (
+          <div className="flex items-center gap-1.5 my-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl text-xs font-semibold w-fit">
+            <span>🕒 Programado: {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+          </div>
+        ) : (
+          <div className="flex items-center gap-1.5 my-1.5 bg-gray-50 text-gray-600 px-2.5 py-0.5 rounded-xl text-xs font-medium w-fit">
+            <span>⚡ Para ahora</span>
+          </div>
+        )}
+
         <p className="text-xs text-gray-500">Ítems: {order.item_count}</p>
         <p className="font-semibold text-black">{formatCurrency(order.total_amount)}</p>
         {order.status !== 'Pendiente' && order.estimated_minutes != null && (

@@ -1,6 +1,6 @@
 """Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta."""
 
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 import json
 import logging
 from typing import Annotated
@@ -21,18 +21,32 @@ def calcular_y_preparar_pedido(
     hora_programada: str | None = None,
 ) -> str:
     """Calcula de forma exacta el total de un pedido consultando los precios reales.
-    Si el cliente indica una hora específica para el pedido, inclúyela en 'hora_programada' (ej. "21:30").
     """
     db = SessionLocal()
     try:
-        lista_items = json.loads(items_solicitados)
+        lista_items = []
+        
+        try:
+            parsed = json.loads(items_solicitados)
+            if isinstance(parsed, list):
+                lista_items = parsed
+            elif isinstance(parsed, dict):
+                lista_items = [parsed]
+        except Exception:
+            partes = items_solicitados.split(",")
+            for parte in partes:
+                lista_items.append({"nombre": parte.strip(), "cantidad": 1})
+
         resumen_lineas = []
         total_general = 0.0
         items_validados = []
 
         for item in lista_items:
-            nombre_buscado = item.get("nombre", "").strip()
-            cantidad = item.get("cantidad", 1)
+            nombre_buscado = str(item.get("nombre", "")).strip()
+            cantidad = int(item.get("cantidad", 1))
+
+            if not nombre_buscado:
+                continue
 
             producto = db.query(Product).filter(
                 Product.is_active.is_(True),
@@ -88,7 +102,7 @@ def calcular_y_preparar_pedido(
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
     except Exception as e:
-        logger.exception("Error procesando el cálculo del pedido.")
+        logger.exception("Error procesando el cálculo del pedido. items_solicitados=%s", items_solicitados)
         return f"Error procesando el cálculo: {str(e)}"
     finally:
         db.close()
@@ -99,7 +113,12 @@ def confirmar_y_guardar_pedido(
     datos_pedido_json: str,
     telegram_chat_id: Annotated[str | None, InjectedToolArg] = None,
 ) -> str:
-    """Persiste definitivamente la orden en la base de datos con estado 'Pendiente'."""
+    """Persiste definitivamente la orden en la base de datos con estado 'Pendiente'.
+    Se ejecuta únicamente cuando el usuario confirma explícitamente con un 'Sí'.
+
+    Args:
+        datos_pedido_json: El objeto JSON con los items, total, nombre y dirección validados previamente.
+    """
     db = SessionLocal()
     try:
         datos = json.loads(datos_pedido_json)
@@ -113,12 +132,24 @@ def confirmar_y_guardar_pedido(
 
         scheduled_dt = None
         hora_str = datos.get("hora_programada")
+        mensaje_aviso_demora = ""
+
         if hora_str:
             try:
-                ahora = datetime.now()
+                ahora = datetime.now(timezone.utc)
                 hora_limpia = hora_str.replace("hs", "").strip()
                 parsed_time = datetime.strptime(hora_limpia, "%H:%M" if ":" in hora_limpia else "%H%M").time()
-                scheduled_dt = datetime.combine(ahora.date(), parsed_time).replace(tzinfo=timezone.utc)
+                
+                candidate_dt = datetime.combine(ahora.date(), parsed_time).replace(tzinfo=timezone.utc)
+                
+                DEMORA_MINIMA_MINUTOS = 25
+                tiempo_minimo_permitido = ahora + timedelta(minutes=DEMORA_MINIMA_MINUTOS)
+
+                if candidate_dt < tiempo_minimo_permitido:
+                    scheduled_dt = None
+                    mensaje_aviso_demora = f" (Nota: Como el horario solicitado es muy pronto, lo procesamos como pedido inmediato con una demora estimada de {DEMORA_MINIMA_MINUTOS} minutos)."
+                else:
+                    scheduled_dt = candidate_dt
             except Exception:
                 logger.warning("No se pudo parsear la hora programada: %s", hora_str)
 
@@ -146,11 +177,11 @@ def confirmar_y_guardar_pedido(
 
         db.commit()
         
-        horario_texto = f" programado para las {hora_str}" if hora_str else ""
-        return f"¡Pedido confirmado y registrado con éxito{horario_texto}! Tu número de orden es el #{nueva_orden.id}. ¡Gracias por tu compra!"
+        horario_texto = f" programado para las {hora_str}" if scheduled_dt else ""
+        return f"¡Pedido confirmado y registrado con éxito{horario_texto}!{mensaje_aviso_demora} Tu número de orden es el #{nueva_orden.id}. ¡Gracias por tu compra!"
     except Exception as e:
         db.rollback()
-        logger.exception("Error al guardar la orden.")
+        logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
         return f"Error al guardar la orden: {str(e)}"
     finally:
         db.close()
