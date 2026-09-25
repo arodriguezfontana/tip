@@ -5,7 +5,7 @@ import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed } from '@/utils/elapsedTime';
 
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
-  domicilio: 'Envío a domicilio',
+  domicilio: 'A domicilio',
   retiro: 'Retiro en local',
 };
 
@@ -33,96 +33,105 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 space-y-3">
-      <div className="flex justify-between items-center">
-        <span className="font-bold text-gray-900">Pedido #{order.id}</span>
-        <span
-          className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-            isOverdue ? 'bg-red-100 text-red-700' : 'bg-gray-100 text-gray-700'
-          }`}
-        >
-          {formatElapsed(elapsedMs)}
-        </span>
-      </div>
-
-      <div className="text-sm space-y-1 text-gray-700">
-        <p className="font-medium">{order.customer_name}</p>
-        <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
-        
-        {order.scheduled_for ? (
-          <div className="flex items-center gap-1.5 my-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl text-xs font-semibold w-fit">
-            <span>🕒 Programado: {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' })}</span>
+    <div className={`bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}>
+      <div className="flex flex-col gap-3">
+        <div className="flex items-center justify-between border-b border-gray-50 pb-2">
+          <div className="flex items-center gap-2">
+            <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
           </div>
-        ) : (
-          <div className="flex items-center gap-1.5 my-1.5 bg-gray-50 text-gray-600 px-2.5 py-0.5 rounded-xl text-xs font-medium w-fit">
-            <span>⚡ Para ahora</span>
+          <span
+            className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
+              isOverdue ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-gray-100 text-gray-600'
+            }`}
+          >
+            {formatElapsed(elapsedMs)}
+          </span>
+        </div>
+
+        <div className="text-sm space-y-1">
+          <p className="font-medium text-gray-900">{order.customer_name}</p>
+          <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
+        </div>
+
+        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+          {order.scheduled_for ? (
+            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl font-semibold">
+              <span>{new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}</span>
+            </div>
+          ) : (
+            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-xl font-semibold">
+              <span>Para ahora</span>
+            </div>
+          )}
+
+          <span className="font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
+        </div>
+
+        <div className="text-xs text-gray-500 flex justify-between items-center pt-1 border-t border-gray-50">
+          <span>Ítems: {order.item_count}</span>
+          {order.status !== 'Pendiente' && order.estimated_minutes != null && !order.scheduled_for && (
+            <span className="bg-gray-50 px-2 py-0.5 rounded-md font-medium">Demora: {order.estimated_minutes} min</span>
+          )}
+        </div>
+
+        {order.status === 'Pendiente' && (
+          <div className="space-y-2 pt-2 border-t border-gray-50">
+            <input
+              type="number"
+              min={1}
+              step={1}
+              placeholder="Demora estimada (min)"
+              value={estimatedMinutesInput}
+              onChange={(e) => setEstimatedMinutesInput(e.target.value)}
+              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
+            />
+            <div className="flex gap-2">
+              <button
+                type="button"
+                disabled={pending || !isValidMinutes}
+                onClick={() => handleClick('Confirmado', parsedMinutes)}
+                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                Confirmar
+              </button>
+              <button
+                type="button"
+                disabled={pending}
+                onClick={() => handleClick('Rechazado')}
+                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              >
+                Rechazar
+              </button>
+            </div>
           </div>
         )}
 
-        <p className="text-xs text-gray-500">Ítems: {order.item_count}</p>
-        <p className="font-semibold text-black">{formatCurrency(order.total_amount)}</p>
-        {order.status !== 'Pendiente' && order.estimated_minutes != null && (
-          <p className="text-xs text-gray-500">Demora estimada: {order.estimated_minutes}min</p>
-        )}
-      </div>
-
-      {order.status === 'Pendiente' && (
-        <div className="space-y-2 pt-1">
-          <input
-            type="number"
-            min={1}
-            step={1}
-            placeholder="Demora estimada (min)"
-            value={estimatedMinutesInput}
-            onChange={(e) => setEstimatedMinutesInput(e.target.value)}
-            className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black"
-          />
-          <div className="flex gap-2">
-            <button
-              type="button"
-              disabled={pending || !isValidMinutes}
-              onClick={() => handleClick('Confirmado', parsedMinutes)}
-              className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
-            >
-              Confirmar
-            </button>
+        {order.status === 'Confirmado' && (
+          <div className="pt-2 border-t border-gray-50">
             <button
               type="button"
               disabled={pending}
-              onClick={() => handleClick('Rechazado')}
-              className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
+              onClick={() => handleClick(order.delivery_method === 'retiro' ? 'Listo para Retirar' : 'En Camino')}
+              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
             >
-              Rechazar
+              {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
             </button>
           </div>
-        </div>
-      )}
+        )}
 
-      {order.status === 'Confirmado' && (
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => handleClick(order.delivery_method === 'retiro' ? 'Listo para Retirar' : 'En Camino')}
-            className="flex-1 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
-          >
-            {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
-          </button>
-        </div>
-      )}
-
-      {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
-        <div className="flex gap-2 pt-1">
-          <button
-            type="button"
-            disabled={pending}
-            onClick={() => handleClick('Finalizado')}
-            className="flex-1 bg-black hover:bg-gray-800 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-sm"
-          >
-            Finalizar
-          </button>
-        </div>
-      )}
+        {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
+          <div className="pt-2 border-t border-gray-50">
+            <button
+              type="button"
+              disabled={pending}
+              onClick={() => handleClick('Finalizado')}
+              className="w-full bg-black hover:bg-gray-800 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+            >
+              Finalizar
+            </button>
+          </div>
+        )}
+      </div>
     </div>
   );
 }
