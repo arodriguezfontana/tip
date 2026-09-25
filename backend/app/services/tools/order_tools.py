@@ -3,6 +3,7 @@
 from datetime import datetime, timedelta, timezone
 import json
 import logging
+import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolArg
 from app.db.session import SessionLocal
@@ -35,7 +36,14 @@ def calcular_y_preparar_pedido(
         except Exception:
             partes = items_solicitados.split(",")
             for parte in partes:
-                lista_items.append({"nombre": parte.strip(), "cantidad": 1})
+                parte_limpia = parte.strip()
+                match_num = re.search(r'^(\d+)\s*(?:x|-)?\s*(.+)$', parte_limpia)
+                if match_num:
+                    cant = int(match_num.group(1))
+                    nombre = match_num.group(2).strip()
+                    lista_items.append({"nombre": nombre, "cantidad": cant})
+                else:
+                    lista_items.append({"nombre": parte_limpia, "cantidad": 1})
 
         resumen_lineas = []
         total_general = 0.0
@@ -43,7 +51,7 @@ def calcular_y_preparar_pedido(
 
         for item in lista_items:
             nombre_buscado = str(item.get("nombre", "")).strip()
-            cantidad = int(item.get("cantidad", 1))
+            cantidad = int(item.get("cantidad") or item.get("quantity") or 1)
 
             if not nombre_buscado:
                 continue
@@ -95,10 +103,13 @@ def calcular_y_preparar_pedido(
                 faltantes.append("tu dirección de envío")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
         else:
-            destino = "Retirás en el local" if es_retiro else f"Envío a: {shipping_address}"
-            tiempo_str = f" para las {hora_programada}" if hora_programada else " para ahora"
-            texto_respuesta += f"\n{destino}{tiempo_str} (Cliente: {customer_name}). ¿Es correcto? (Si querés programarlo para otra hora o cambiar algo, avisame ahora)."
-
+           destino = "retirar en el local" if es_retiro else f"envío a domicilio en {shipping_address}"
+           tiempo_str = f"para las {hora_programada}" if hora_programada else "para ahora"
+            
+           texto_respuesta = (
+                f"Perfecto, {customer_name}. Vamos a {destino}, {tiempo_str}. "
+                f"¿Están bien estos datos para confirmar el pedido?"
+            )
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
     except Exception as e:
@@ -123,11 +134,18 @@ def confirmar_y_guardar_pedido(
     try:
         datos = json.loads(datos_pedido_json)
 
-        metodo_entrega = datos.get("metodo_entrega")
-        delivery_method = metodo_entrega if metodo_entrega in ("domicilio", "retiro") else "domicilio"
+        raw_delivery = str(datos.get("metodo_entrega", "domicilio")).lower()
+        if "retiro" in raw_delivery or "local" in raw_delivery:
+            delivery_method = "retiro"
+        else:
+            delivery_method = "domicilio"
+            
         es_retiro = delivery_method == "retiro"
 
-        if not datos.get("cliente") or (not es_retiro and not datos.get("direccion")):
+        cliente = datos.get("cliente") or datos.get("customer_name") or "Cliente"
+        direccion = datos.get("direccion") or datos.get("shipping_address")
+        
+        if not cliente or (not es_retiro and not direccion):
             return "Faltan datos obligatorios (nombre o dirección) para registrar la orden."
 
         scheduled_dt = None
@@ -147,16 +165,16 @@ def confirmar_y_guardar_pedido(
 
                 if candidate_dt < tiempo_minimo_permitido:
                     scheduled_dt = None
-                    mensaje_aviso_demora = f" (Nota: Como el horario solicitado es muy pronto, lo procesamos como pedido inmediato con una demora estimada de {DEMORA_MINIMA_MINUTOS} minutos)."
+                    mensaje_aviso_demora = f" (Nota: Como el horario solicitado era muy pronto, se procesó como pedido inmediato)."
                 else:
                     scheduled_dt = candidate_dt
             except Exception:
                 logger.warning("No se pudo parsear la hora programada: %s", hora_str)
 
         nueva_orden = Order(
-            customer_name=datos["cliente"],
-            shipping_address=datos.get("direccion") or "Retiro en el local",
-            total_amount=datos["total"],
+            customer_name=cliente,
+            shipping_address="Retiro en el local" if es_retiro else (direccion or "Sin especificar"),
+            total_amount=float(datos.get("total", 0)),
             status="Pendiente",
             delivery_method=delivery_method,
             telegram_chat_id=telegram_chat_id,
@@ -165,7 +183,8 @@ def confirmar_y_guardar_pedido(
         db.add(nueva_orden)
         db.flush()
 
-        for item in datos["items"]:
+        items_data = datos.get("items", [])
+        for item in items_data:
             db.add(
                 OrderItem(
                     order_id=nueva_orden.id,
@@ -178,10 +197,10 @@ def confirmar_y_guardar_pedido(
         db.commit()
         
         horario_texto = f" programado para las {hora_str}" if scheduled_dt else ""
-        return f"¡Pedido confirmado y registrado con éxito{horario_texto}!{mensaje_aviso_demora} Tu número de orden es el #{nueva_orden.id}. ¡Gracias por tu compra!"
+        return f"¡Listo {datos.get('cliente', '')}! Registramos tu pedido con éxito{horario_texto}.{mensaje_aviso_demora} Muchas gracias por elegirnos."
     except Exception as e:
         db.rollback()
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
-        return f"Error al guardar la orden: {str(e)}"
+        return f"Error al procesar el registro del pedido. Por favor, intentá nuevamente."
     finally:
         db.close()
