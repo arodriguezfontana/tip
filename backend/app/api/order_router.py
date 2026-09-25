@@ -27,6 +27,7 @@ def _to_response(order: Order) -> OrderResponse:
         status=order.status,
         delivery_method=order.delivery_method,
         estimated_minutes=order.estimated_minutes,
+        scheduled_for=order.scheduled_for,
         created_at=order.created_at,
         item_count=len(order.items),
     )

@@ -1,5 +1,5 @@
 from datetime import datetime
-from typing import Literal
+from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field
 
 OrderStatusLiteral = Literal[
@@ -15,7 +15,7 @@ class OrderResponse(BaseModel):
     status: str
     delivery_method: str
     estimated_minutes: int | None
-    scheduled_for: datetime | None 
+    scheduled_for: Optional[datetime] = None 
     created_at: datetime
     item_count: int
 
