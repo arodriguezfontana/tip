@@ -25,7 +25,7 @@ def consultar_productos(categoria: str | None = None) -> str:
             return "No hay productos cargados que coincidan con esa búsqueda."
 
         lineas = [
-            f"- {p.name} (${p.price:.2f}) [{p.category.name}]: {p.description or 'sin descripción'}"
+            f"- {p.name} (${p.price:,.2f}) [{p.category.name}]"
             for p in productos
         ]
         return "\n".join(lineas)

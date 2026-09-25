@@ -26,6 +26,18 @@ class MissingEstimatedMinutesError(Exception):
         super().__init__("Debe indicar un tiempo estimado de demora al confirmar el pedido.")
 
 
+def calcular_demora_inteligente(db: Session, order: Order) -> int:
+    """Calcula la demora estimada con 15 minutos de base y carga en cocina."""
+    pedidos_en_cola = db.query(Order).filter(Order.status.in_(["Pendiente", "Confirmado"])).count()
+    
+    tiempo_base = 15 + (pedidos_en_cola * 3)
+    
+    items_count = len(order.items) if order.items else 1
+    tiempo_items = items_count * 2
+    
+    demora_sugerida = min(tiempo_base + tiempo_items, 90)
+    return max(demora_sugerida, 15)
+
 def transition_order_status(
     db: Session, order: Order, new_status: str, estimated_minutes: int | None = None
 ) -> Order:
@@ -33,8 +45,9 @@ def transition_order_status(
     if new_status not in allowed:
         raise InvalidTransitionError(order.status, new_status)
 
-    if new_status == "Confirmado" and estimated_minutes is None:
-        raise MissingEstimatedMinutesError()
+    if new_status == "Confirmado":
+        if estimated_minutes is None:
+            estimated_minutes = calcular_demora_inteligente(db, order)
 
     order.status = new_status
     if estimated_minutes is not None:

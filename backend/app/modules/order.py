@@ -23,6 +23,7 @@ class Order(Base):
     delivery_method = Column(String(20), nullable=False, server_default="domicilio")
     telegram_chat_id = Column(String(32), nullable=True)
     estimated_minutes = Column(Integer, nullable=True)
+    scheduled_for = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
