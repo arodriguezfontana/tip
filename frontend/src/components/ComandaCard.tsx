@@ -39,6 +39,13 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
           <div className="flex items-center gap-2">
             <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
+            <span
+              className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
+                order.source === 'web' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-sky-50 text-sky-700 border border-sky-200'
+              }`}
+            >
+              {order.source === 'web' ? 'Web' : 'Bot'}
+            </span>
           </div>
           <span
             className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
@@ -52,6 +59,8 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         <div className="text-sm space-y-1">
           <p className="font-medium text-gray-900">{order.customer_name}</p>
           <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
+          {order.customer_phone && <p className="text-xs text-gray-500">Tel: {order.customer_phone}</p>}
+          {order.notes && <p className="text-xs text-gray-600 italic break-words">“{order.notes}”</p>}
         </div>
 
         <div className="flex flex-wrap items-center justify-between gap-2 text-xs">

@@ -1,19 +1,31 @@
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+import logging
+
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status as http_status
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_user
 from app.db.session import get_db
 from app.modules.order import Order
 from app.modules.user import User
-from app.schemas.order_schemas import OrderResponse, OrderStatusUpdate
+from app.schemas.order_schemas import (
+    OrderResponse,
+    OrderStatusUpdate,
+    WebOrderCreate,
+    WebOrderCreatedResponse,
+    WebOrderItemResponse,
+)
 from app.services.order_notification_service import notify_order_status_change
 from app.services.order_service import (
     InvalidTransitionError,
     MissingEstimatedMinutesError,
     transition_order_status,
 )
+from app.services.web_order_service import InvalidOrderError, create_web_order
+
+logger = logging.getLogger(__name__)
 
 router = APIRouter()
 
@@ -26,6 +38,9 @@ def _to_response(order: Order) -> OrderResponse:
         total_amount=order.total_amount,
         status=order.status,
         delivery_method=order.delivery_method,
+        source=order.source,
+        customer_phone=order.customer_phone,
+        notes=order.notes,
         estimated_minutes=order.estimated_minutes,
         scheduled_for=order.scheduled_for,
         created_at=order.created_at,
@@ -54,6 +69,47 @@ def list_orders(
     orders = query.order_by(Order.created_at.desc()).all()
 
     return [_to_response(order) for order in orders]
+
+@router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
+def create_order_from_web(payload: WebOrderCreate, db: Session = Depends(get_db)) -> WebOrderCreatedResponse:
+    """Endpoint público: registra un pedido hecho desde la web del cliente.
+
+    Valida que los productos existan, estén disponibles y que las cantidades sean válidas;
+    los precios se toman de la base de datos. El pedido queda 'Pendiente' igual que los del bot.
+    """
+    try:
+        order = create_web_order(db, payload)
+    except InvalidOrderError as exc:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except SQLAlchemyError:
+        logger.exception("Error al guardar un pedido web.")
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No pudimos registrar tu pedido en este momento. Por favor, intentá nuevamente en unos minutos.",
+        )
+
+    return WebOrderCreatedResponse(
+        id=order.id,
+        status=order.status,
+        customer_name=order.customer_name,
+        customer_phone=order.customer_phone,
+        delivery_method=order.delivery_method,
+        shipping_address=order.shipping_address,
+        notes=order.notes,
+        total_amount=order.total_amount,
+        created_at=order.created_at,
+        items=[
+            WebOrderItemResponse(
+                product_id=item.product_id,
+                product_name=item.product.name,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                subtotal=item.unit_price * item.quantity,
+            )
+            for item in order.items
+        ],
+    )
+
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)
 def update_order_status(

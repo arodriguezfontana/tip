@@ -1,4 +1,5 @@
 import { useCart } from '@/hooks/useCart';
+import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 
 export function CartSummary() {
@@ -32,7 +33,8 @@ export function CartSummary() {
                   <button
                     type="button"
                     onClick={() => updateQuantity(item.product.id, item.quantity + 1)}
-                    className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition text-sm"
+                    disabled={item.quantity >= MAX_QUANTITY_PER_ITEM}
+                    className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition text-sm disabled:opacity-40 disabled:cursor-not-allowed"
                     aria-label={`Agregar una unidad de ${item.product.name}`}
                   >
                     +

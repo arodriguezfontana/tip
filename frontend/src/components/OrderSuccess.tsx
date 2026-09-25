@@ -1,25 +1,23 @@
-import type { CartItem, CheckoutFormData } from '@/types/order';
+import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 
 export function OrderSuccess({
-  items,
+  order,
   form,
-  total,
   onNewOrder,
 }: {
-  items: CartItem[];
+  order: WebOrderCreated;
   form: CheckoutFormData;
-  total: number;
   onNewOrder: () => void;
 }) {
   return (
     <div className="bg-white rounded-2xl shadow-xl p-8 max-w-lg mx-auto">
       <div className="rounded-xl bg-green-50 text-green-800 px-4 py-3 text-sm mb-6 flex items-center gap-2">
         <span className="text-lg">✓</span>
-        <span>¡Pedido confirmado! En breve nos pondremos en contacto para coordinar la entrega.</span>
+        <span>¡Recibimos tu pedido! En breve nos pondremos en contacto para coordinar la entrega.</span>
       </div>
 
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Resumen del pedido</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Pedido #{order.id}</h2>
 
       <div className="mt-4 space-y-1 text-sm text-gray-700">
         <p>
@@ -45,21 +43,19 @@ export function OrderSuccess({
       </div>
 
       <ul className="mt-4 divide-y divide-gray-200 border-t border-gray-200">
-        {items.map((item) => (
-          <li key={item.product.id} className="py-2 flex items-center justify-between text-sm">
+        {order.items.map((item) => (
+          <li key={item.product_id} className="py-2 flex items-center justify-between text-sm">
             <span className="text-gray-700">
-              {item.product.name} x{item.quantity}
+              {item.product_name} x{item.quantity}
             </span>
-            <span className="text-gray-900 font-medium">
-              {formatCurrency(item.product.price * item.quantity)}
-            </span>
+            <span className="text-gray-900 font-medium">{formatCurrency(item.subtotal)}</span>
           </li>
         ))}
       </ul>
 
       <div className="flex items-center justify-between mt-4 pt-4 border-t border-gray-200">
         <span className="font-semibold text-gray-900">Total</span>
-        <span className="font-bold text-gray-900">{formatCurrency(total)}</span>
+        <span className="font-bold text-gray-900">{formatCurrency(order.total_amount)}</span>
       </div>
 
       <button

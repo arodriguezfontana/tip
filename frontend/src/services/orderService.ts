@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { AdminOrder, OrderStatus } from '@/types/order';
+import type { AdminOrder, OrderStatus, WebOrderCreated, WebOrderPayload } from '@/types/order';
 
 export interface FetchOrdersParams {
   dateFrom?: Date;
@@ -30,5 +30,10 @@ export async function updateOrderStatus(
     status,
     ...(estimatedMinutes !== undefined ? { estimated_minutes: estimatedMinutes } : {}),
   });
+  return data;
+}
+
+export async function createWebOrder(payload: WebOrderPayload): Promise<WebOrderCreated> {
+  const { data } = await api.post<WebOrderCreated>('/orders/web', payload);
   return data;
 }

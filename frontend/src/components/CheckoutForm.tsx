@@ -1,12 +1,22 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { useCart } from '@/hooks/useCart';
-import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod } from '@/types/order';
+import { createWebOrder } from '@/services/orderService';
+import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated } from '@/types/order';
+
+const PHONE_PATTERN = /^\+?[0-9\s()-]{6,30}$/;
+
+function getErrorMessage(err: unknown): string {
+  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
+    return err.message;
+  }
+  return 'No pudimos registrar tu pedido. Por favor, intentá nuevamente.';
+}
 
 export function CheckoutForm({
   onSubmitSuccess,
 }: {
-  onSubmitSuccess: (form: CheckoutFormData) => void;
+  onSubmitSuccess: (order: WebOrderCreated, form: CheckoutFormData) => void;
 }) {
   const { items } = useCart();
 
@@ -16,6 +26,8 @@ export function CheckoutForm({
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<CheckoutFormErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validate = (): CheckoutFormErrors => {
     const nextErrors: CheckoutFormErrors = {};
@@ -24,6 +36,8 @@ export function CheckoutForm({
     }
     if (!phone.trim()) {
       nextErrors.phone = 'Ingresá tu número de teléfono.';
+    } else if (!PHONE_PATTERN.test(phone.trim())) {
+      nextErrors.phone = 'Ingresá un teléfono válido (solo números, espacios, guiones o +).';
     }
     if (deliveryMethod === 'domicilio' && !address.trim()) {
       nextErrors.address = 'Ingresá la dirección de entrega.';
@@ -31,14 +45,33 @@ export function CheckoutForm({
     return nextErrors;
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting) return;
+
     const nextErrors = validate();
     setErrors(nextErrors);
+    setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
-    onSubmitSuccess({ name, phone, deliveryMethod, address, notes });
+
+    setSubmitting(true);
+    try {
+      const order = await createWebOrder({
+        customer_name: name.trim(),
+        customer_phone: phone.trim(),
+        delivery_method: deliveryMethod,
+        shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
+        notes: notes.trim() || null,
+        items: items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+      });
+      onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes });
+    } catch (err) {
+      setSubmitError(getErrorMessage(err));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -130,11 +163,18 @@ export function CheckoutForm({
             />
           </div>
 
+          {submitError && (
+            <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+              {submitError}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition"
+            disabled={submitting}
+            className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Confirmar pedido
+            {submitting ? 'Enviando pedido...' : 'Confirmar pedido'}
           </button>
         </form>
       )}

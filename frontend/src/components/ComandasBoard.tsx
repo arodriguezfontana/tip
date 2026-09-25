@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from 'react';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
-import type { AdminOrder, OrderStatus, DeliveryMethod } from '@/types/order';
+import type { AdminOrder, OrderStatus } from '@/types/order';
 import { fetchOrders, updateOrderStatus } from '@/services/orderService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { generarMockOrders } from '@/utils/mockOrdenes';

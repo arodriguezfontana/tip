@@ -1,11 +1,12 @@
 from datetime import datetime
-from sqlalchemy import CheckConstraint, Column, Float, ForeignKey, Integer, String, DateTime
+from sqlalchemy import CheckConstraint, Column, Float, ForeignKey, Integer, String, Text, DateTime
 from sqlalchemy.orm import relationship
 from sqlalchemy.sql import func
 from app.db.base_class import Base
 
 ORDER_STATUSES = ("Pendiente", "Confirmado", "En Camino", "Listo para Retirar", "Finalizado", "Rechazado")
 DELIVERY_METHODS = ("domicilio", "retiro")
+ORDER_SOURCES = ("bot", "web")
 
 
 class Order(Base):
@@ -13,6 +14,7 @@ class Order(Base):
     __table_args__ = (
         CheckConstraint(f"status IN {ORDER_STATUSES}", name="ck_orders_status"),
         CheckConstraint(f"delivery_method IN {DELIVERY_METHODS}", name="ck_orders_delivery_method"),
+        CheckConstraint(f"source IN {ORDER_SOURCES}", name="ck_orders_source"),
     )
 
     id = Column(Integer, primary_key=True, index=True)
@@ -22,6 +24,9 @@ class Order(Base):
     status = Column(String(50), nullable=False, default="Pendiente")
     delivery_method = Column(String(20), nullable=False, server_default="domicilio")
     telegram_chat_id = Column(String(32), nullable=True)
+    source = Column(String(20), nullable=False, default="bot", server_default="bot")
+    customer_phone = Column(String(30), nullable=True)
+    notes = Column(Text, nullable=True)
     estimated_minutes = Column(Integer, nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)

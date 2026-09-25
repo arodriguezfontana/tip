@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import type { ReactNode } from 'react';
+import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import type { CartItem, Product } from '@/types/order';
 import { CartContext } from '@/context/cart-context';
 
@@ -11,10 +12,12 @@ export function CartProvider({ children }: { children: ReactNode }) {
       const existing = prev.find((item) => item.product.id === product.id);
       if (existing) {
         return prev.map((item) =>
-          item.product.id === product.id ? { ...item, quantity: item.quantity + quantity } : item
+          item.product.id === product.id
+            ? { ...item, quantity: Math.min(item.quantity + quantity, MAX_QUANTITY_PER_ITEM) }
+            : item
         );
       }
-      return [...prev, { product, quantity }];
+      return [...prev, { product, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) }];
     });
   };
 
@@ -28,7 +31,9 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return;
     }
     setItems((prev) =>
-      prev.map((item) => (item.product.id === productId ? { ...item, quantity } : item))
+      prev.map((item) =>
+        item.product.id === productId ? { ...item, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) } : item
+      )
     );
   };
 
