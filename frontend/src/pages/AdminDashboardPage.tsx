@@ -25,7 +25,10 @@ export default function AdminDashboardPage() {
       <TopBar onToggleMenu={() => setMenuOpen((prev) => !prev)} menuOpen={menuOpen} onLogout={handleLogout} />
       <main className="flex-1 px-4 py-10">
         <div className="max-w-6xl mx-auto space-y-6">
-          {activeView === 'comandas' && <ComandasBoard active={activeView === 'comandas'} />}
+          {/* Siempre montado para que el sondeo y la alerta sonora sigan activos en las otras vistas. */}
+          <div hidden={activeView !== 'comandas'}>
+            <ComandasBoard />
+          </div>
           {activeView === 'historial' && <HistorialView />}
           {activeView === 'ingresos' && <IngresosView />}
           {activeView === 'estadisticas' && <StatsSection />}

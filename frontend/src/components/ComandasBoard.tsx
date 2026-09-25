@@ -4,6 +4,7 @@ import type { AdminOrder, OrderStatus } from '@/types/order';
 import { fetchOrders, updateOrderStatus } from '@/services/orderService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { generarMockOrders } from '@/utils/mockOrdenes';
+import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -16,12 +17,26 @@ const COLUMN_LABELS: Record<OrderStatus, string> = {
   Rechazado: 'Rechazado',
 };
 
-
-interface ComandasBoardProps {
-  active: boolean;
+function SpeakerIcon({ muted }: { muted: boolean }) {
+  return (
+    <svg
+      xmlns="http://www.w3.org/2000/svg"
+      viewBox="0 0 24 24"
+      fill="none"
+      stroke="currentColor"
+      strokeWidth="2"
+      strokeLinecap="round"
+      strokeLinejoin="round"
+      className="w-4 h-4"
+      aria-hidden="true"
+    >
+      <path d="M11 5 6 9H2v6h4l5 4V5z" />
+      {muted ? <path d="m23 9-6 6M17 9l6 6" /> : <path d="M15.54 8.46a5 5 0 0 1 0 7.07M19.07 4.93a10 10 0 0 1 0 14.14" />}
+    </svg>
+  );
 }
 
-export function ComandasBoard({ active }: ComandasBoardProps) {
+export function ComandasBoard() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -38,7 +53,7 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
   const [pendingFilter, setPendingFilter] = useState<'ahora' | 'programados'>('ahora');
 
   useEffect(() => {
-    if (!active || isSimulating) return;
+    if (isSimulating) return;
 
     let cancelled = false;
 
@@ -64,7 +79,7 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [active, isSimulating]);
+  }, [isSimulating]);
 
   const handleToggleSimulation = () => {
     if (isSimulating) {
@@ -107,9 +122,11 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
     });
   }, [orders, pages, pageSize, pendingFilter]);
 
-  const pendingCount = useMemo(() => {
-    return orders.filter((o) => o.status === 'Pendiente').length;
+  const pendingOrderIds = useMemo(() => {
+    return orders.filter((o) => o.status === 'Pendiente').map((o) => o.id);
   }, [orders]);
+
+  const soundAlert = useNewOrderAlert(pendingOrderIds);
 
   const handlePageChange = (status: string, newPage: number) => {
     setPages((prev) => ({ ...prev, [status]: newPage }));
@@ -176,14 +193,40 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
             {isSimulating ? 'Salir de Simulación' : 'Simular 55 Pedidos'}
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-gray-500">Pendientes de aceptar:</span>
-            <span className={`text-xs font-bold px-2.5 py-1 rounded-full ${pendingCount > 0 ? 'bg-amber-100 text-amber-800' : 'bg-gray-100 text-gray-600'}`}>
-              {pendingCount}
-            </span>
-          </div>
+          <button
+            type="button"
+            onClick={soundAlert.toggleEnabled}
+            disabled={!soundAlert.audioSupported}
+            aria-pressed={soundAlert.enabled}
+            aria-label={soundAlert.enabled ? 'Silenciar alerta de nuevos pedidos' : 'Activar alerta de nuevos pedidos'}
+            title={soundAlert.enabled ? 'Silenciar alerta de nuevos pedidos' : 'Activar alerta de nuevos pedidos'}
+            className={`flex items-center justify-center w-8 h-8 rounded-xl border transition disabled:opacity-40 ${
+              soundAlert.enabled ? 'bg-white border-gray-200 text-gray-800 hover:bg-gray-100' : 'bg-red-50 border-red-200 text-red-700 hover:bg-red-100'
+            }`}
+          >
+            <SpeakerIcon muted={!soundAlert.enabled} />
+          </button>
         </div>
       </div>
+
+      {!soundAlert.audioSupported && (
+        <div className="rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm">
+          Este navegador no permite reproducir la alerta sonora de nuevos pedidos. Usá una versión actualizada de Chrome, Edge, Firefox o Safari.
+        </div>
+      )}
+
+      {soundAlert.audioSupported && soundAlert.enabled && soundAlert.audioBlocked && (
+        <div role="alert" className="rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+          <span>El navegador bloqueó el sonido hasta que interactúes con la página. Habilitalo para escuchar la alerta de nuevos pedidos.</span>
+          <button
+            type="button"
+            onClick={soundAlert.unlockAudio}
+            className="shrink-0 bg-amber-600 hover:bg-amber-700 text-white text-xs font-bold px-3 py-1.5 rounded-xl transition"
+          >
+            Habilitar sonido
+          </button>
+        </div>
+      )}
 
       {error && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
