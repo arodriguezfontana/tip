@@ -21,7 +21,8 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
   const parsedMinutes = Number(estimatedMinutesInput);
-  const isValidMinutes = estimatedMinutesInput.trim() !== '' && Number.isInteger(parsedMinutes) && parsedMinutes > 0;
+  
+  const isValidMinutes = estimatedMinutesInput.trim() === '' || (Number.isInteger(parsedMinutes) && parsedMinutes > 0);
 
   const handleClick = async (newStatus: OrderStatus, estimatedMinutes?: number) => {
     setPending(true);
@@ -69,8 +70,10 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
 
         <div className="text-xs text-gray-500 flex justify-between items-center pt-1 border-t border-gray-50">
           <span>Ítems: {order.item_count}</span>
-          {order.status !== 'Pendiente' && order.estimated_minutes != null && !order.scheduled_for && (
-            <span className="bg-gray-50 px-2 py-0.5 rounded-md font-medium">Demora: {order.estimated_minutes} min</span>
+          {order.estimated_minutes != null && (
+            <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-0.5 rounded-md font-semibold">
+              Estimado: {order.estimated_minutes} min
+            </span>
           )}
         </div>
 
@@ -80,7 +83,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
               type="number"
               min={1}
               step={1}
-              placeholder="Demora estimada (min)"
+              placeholder="Automática (15+ min) o manual"
               value={estimatedMinutesInput}
               onChange={(e) => setEstimatedMinutesInput(e.target.value)}
               className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
@@ -89,7 +92,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
               <button
                 type="button"
                 disabled={pending || !isValidMinutes}
-                onClick={() => handleClick('Confirmado', parsedMinutes)}
+                onClick={() => handleClick('Confirmado', estimatedMinutesInput.trim() === '' ? undefined : parsedMinutes)}
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
               >
                 Confirmar
