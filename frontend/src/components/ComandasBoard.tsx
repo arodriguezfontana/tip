@@ -149,7 +149,7 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
         <div className="flex items-center gap-3">
           <span className={`w-2.5 h-2.5 rounded-full ${isSimulating ? 'bg-purple-500' : 'bg-amber-500'} animate-pulse`}></span>
           <span className="text-sm font-semibold text-gray-800">
-            {isSimulating ? 'Panel de Comandas (Modo Simulación)' : 'Panel de Comandas Activas'}
+            {isSimulating ? 'Panel de Comandas (Modo Simulación)' : 'Panel de Comandas'}
           </span>
         </div>
 
@@ -173,7 +173,7 @@ export function ComandasBoard({ active }: ComandasBoardProps) {
             onClick={handleToggleSimulation}
             className={`text-xs font-medium px-3 py-1.5 rounded-xl transition shadow-xs ${isSimulating ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}
           >
-            {isSimulating ? '✕ Salir de Simulación' : '⚡ Simular 55 Pedidos'}
+            {isSimulating ? 'Salir de Simulación' : 'Simular 55 Pedidos'}
           </button>
 
           <div className="flex items-center gap-2">
