@@ -1,8 +1,17 @@
 import { useEffect, useState } from 'react';
 import type { ReactNode } from 'react';
-import { fetchMe, loginRequest } from '@/services/authService';
-import type { Me } from '@/services/authService';
+import {
+  fetchMe,
+  loginRequest,
+  refreshAdminToken,
+  registerRequest,
+  updateCustomerProfile,
+} from '@/services/authService';
+import type { CustomerProfileData, LoginResponse, Me, RegisterData } from '@/services/authService';
 import { AuthContext } from '@/context/auth-context';
+
+/** Cada cuánto se renueva el token del admin mientras el panel está abierto. */
+const ADMIN_TOKEN_RENEW_MS = 12 * 60 * 60 * 1000;
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [user, setUser] = useState<Me | null>(null);
@@ -20,10 +29,44 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .finally(() => setIsLoading(false));
   }, []);
 
-  const login = async (email: string, password: string) => {
-    const data = await loginRequest(email, password);
+  // Renovación de la sesión del admin: al cargar y periódicamente, para que no se cierre mientras se usa.
+  const isAdmin = user?.role === 'ADMIN';
+  useEffect(() => {
+    if (!isAdmin) return;
+    let cancelled = false;
+
+    const renew = () => {
+      refreshAdminToken()
+        .then((data) => {
+          if (!cancelled) localStorage.setItem('token', data.access_token);
+        })
+        .catch(() => {
+          // Si falla (por ejemplo, sin conexión) se reintenta en la próxima renovación.
+        });
+    };
+
+    renew();
+    const intervalId = setInterval(renew, ADMIN_TOKEN_RENEW_MS);
+    return () => {
+      cancelled = true;
+      clearInterval(intervalId);
+    };
+  }, [isAdmin]);
+
+  const startSession = async (data: LoginResponse): Promise<Me> => {
     localStorage.setItem('token', data.access_token);
-    setUser(await fetchMe());
+    const me = await fetchMe();
+    setUser(me);
+    return me;
+  };
+
+  const login = async (email: string, password: string) => startSession(await loginRequest(email, password));
+
+  const register = async (data: RegisterData) => startSession(await registerRequest(data));
+
+  const updateProfile = async (data: CustomerProfileData) => {
+    const updated = await updateCustomerProfile(data);
+    setUser((prev) => (prev ? { ...prev, ...updated } : prev));
   };
 
   const logout = () => {
@@ -32,7 +75,19 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   };
 
   return (
-    <AuthContext.Provider value={{ user, isLoading, isAuthenticated: !!user, login, logout }}>
+    <AuthContext.Provider
+      value={{
+        user,
+        isLoading,
+        isAuthenticated: !!user,
+        isAdmin,
+        isCustomer: user?.role === 'CUSTOMER',
+        login,
+        register,
+        updateProfile,
+        logout,
+      }}
+    >
       {children}
     </AuthContext.Provider>
   );

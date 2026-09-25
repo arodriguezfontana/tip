@@ -3,7 +3,7 @@ import { Navigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 
 export function ProtectedRoute({ children }: { children: ReactNode }) {
-  const { isAuthenticated, isLoading } = useAuth();
+  const { isAdmin, isLoading } = useAuth();
 
   if (isLoading) {
     return (
@@ -13,7 +13,8 @@ export function ProtectedRoute({ children }: { children: ReactNode }) {
     );
   }
 
-  if (!isAuthenticated) {
+  // El panel es exclusivo para administradores: una sesión de cliente no alcanza.
+  if (!isAdmin) {
     return <Navigate to="/login" replace />;
   }
 

@@ -1,11 +1,15 @@
 import { createContext } from 'react';
-import type { Me } from '@/services/authService';
+import type { CustomerProfileData, Me, RegisterData } from '@/services/authService';
 
 export interface AuthContextValue {
   user: Me | null;
   isLoading: boolean;
   isAuthenticated: boolean;
-  login: (email: string, password: string) => Promise<void>;
+  isAdmin: boolean;
+  isCustomer: boolean;
+  login: (email: string, password: string) => Promise<Me>;
+  register: (data: RegisterData) => Promise<Me>;
+  updateProfile: (data: CustomerProfileData) => Promise<void>;
   logout: () => void;
 }
 

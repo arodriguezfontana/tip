@@ -7,7 +7,7 @@ import type { ApiErrorResponse } from '@/services/api';
 import backgroundLogin from '@/assets/background_login.webp';
 
 export default function LoginPage() {
-  const { login, isAuthenticated } = useAuth();
+  const { login, logout, isAdmin } = useAuth();
   const navigate = useNavigate();
   const location = useLocation();
 
@@ -16,7 +16,7 @@ export default function LoginPage() {
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
 
-  if (isAuthenticated) {
+  if (isAdmin) {
     const redirectTo = (location.state as { from?: string } | null)?.from ?? '/admin';
     return <Navigate to={redirectTo} replace />;
   }
@@ -26,7 +26,12 @@ export default function LoginPage() {
     setError(null);
     setIsSubmitting(true);
     try {
-      await login(email, password);
+      const me = await login(email, password);
+      if (me.role !== 'ADMIN') {
+        logout();
+        setError('Esta cuenta no tiene acceso al panel de administración.');
+        return;
+      }
       navigate('/admin', { replace: true });
     } catch (err) {
       const apiError = err as ApiErrorResponse;

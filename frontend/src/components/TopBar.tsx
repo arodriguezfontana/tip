@@ -1,10 +1,14 @@
+import type { ReactNode } from 'react';
+
 interface TopBarProps {
   onToggleMenu?: () => void;
   menuOpen?: boolean;
   onLogout?: () => void;
+  /** Acciones extra alineadas a la derecha (por ejemplo, la cuenta del cliente en la web). */
+  actions?: ReactNode;
 }
 
-export function TopBar({ onToggleMenu, menuOpen, onLogout }: TopBarProps) {
+export function TopBar({ onToggleMenu, menuOpen, onLogout, actions }: TopBarProps) {
   return (
     <header className="w-full bg-black text-white py-4 relative">
       <h1 className="text-center text-3xl font-bebas uppercase tracking-widest">RestoIT</h1>
@@ -40,6 +44,10 @@ export function TopBar({ onToggleMenu, menuOpen, onLogout }: TopBarProps) {
         >
           Cerrar sesión
         </button>
+      )}
+
+      {actions && (
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 flex items-center gap-2">{actions}</div>
       )}
     </header>
   );

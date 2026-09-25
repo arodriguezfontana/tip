@@ -6,10 +6,10 @@ from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, s
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session, joinedload
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
 from app.modules.order import Order
-from app.modules.user import User
+from app.modules.user import ROLE_CUSTOMER, User
 from app.schemas.order_schemas import (
     OrderResponse,
     OrderStatusUpdate,
@@ -54,7 +54,7 @@ def list_orders(
     date_to: datetime | None = Query(None, description="Fecha/hora máxima (inclusive) de creación del pedido."),
     status: list[str] | None = Query(None, description="Filtra por uno o más estados del pedido."),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> list[OrderResponse]:
     """Lista los pedidos registrados, opcionalmente filtrados por rango de fechas y/o estado."""
     query = db.query(Order).options(joinedload(Order.items))
@@ -71,14 +71,21 @@ def list_orders(
     return [_to_response(order) for order in orders]
 
 @router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
-def create_order_from_web(payload: WebOrderCreate, db: Session = Depends(get_db)) -> WebOrderCreatedResponse:
+def create_order_from_web(
+    payload: WebOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> WebOrderCreatedResponse:
     """Endpoint público: registra un pedido hecho desde la web del cliente.
 
     Valida que los productos existan, estén disponibles y que las cantidades sean válidas;
     los precios se toman de la base de datos. El pedido queda 'Pendiente' igual que los del bot.
+    Se puede pedir como invitado; si el cliente tiene la sesión iniciada, el pedido queda asociado
+    a su cuenta (los datos de contacto son siempre los enviados en el pedido).
     """
+    customer = current_user if current_user is not None and current_user.role == ROLE_CUSTOMER else None
     try:
-        order = create_web_order(db, payload)
+        order = create_web_order(db, payload, customer=customer)
     except InvalidOrderError as exc:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except SQLAlchemyError:
@@ -117,7 +124,7 @@ def update_order_status(
     status_update: OrderStatusUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Actualiza el estado de un pedido, validando que la transición sea válida."""
     order = db.query(Order).options(joinedload(Order.items)).filter(Order.id == order_id).first()

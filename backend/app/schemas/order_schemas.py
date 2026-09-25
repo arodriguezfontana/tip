@@ -2,6 +2,8 @@ from datetime import datetime
 from typing import Literal, Optional
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.schemas.common import PHONE_PATTERN
+
 OrderStatusLiteral = Literal[
     "Pendiente", "Confirmado", "En Camino", "Listo para Retirar", "Finalizado", "Rechazado"
 ]
@@ -45,7 +47,7 @@ class WebOrderCreate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     customer_name: str = Field(..., min_length=1, max_length=150)
-    customer_phone: str = Field(..., min_length=6, max_length=30, pattern=r"^\+?[0-9\s\-()]+$")
+    customer_phone: str = Field(..., min_length=6, max_length=30, pattern=PHONE_PATTERN)
     delivery_method: DeliveryMethodLiteral
     shipping_address: str | None = Field(None, max_length=255)
     notes: str | None = Field(None, max_length=500)

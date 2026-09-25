@@ -1,29 +1,33 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useCart } from '@/hooks/useCart';
+import { useAuth } from '@/hooks/useAuth';
 import { createWebOrder } from '@/services/orderService';
+import { PHONE_PATTERN, getErrorMessage } from '@/utils/customerValidation';
+import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated } from '@/types/order';
 
-const PHONE_PATTERN = /^\+?[0-9\s()-]{6,30}$/;
-
-function getErrorMessage(err: unknown): string {
-  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
-    return err.message;
-  }
-  return 'No pudimos registrar tu pedido. Por favor, intentá nuevamente.';
-}
-
+/**
+ * Formulario de datos del pedido. Si el cliente tiene la sesión iniciada, arranca autocompletado
+ * con los datos de su cuenta (quien lo usa lo remonta con `key` al cambiar la sesión). Los datos
+ * se pueden modificar libremente para este pedido sin alterar los guardados en la cuenta.
+ */
 export function CheckoutForm({
   onSubmitSuccess,
+  onRequestAuth,
 }: {
   onSubmitSuccess: (order: WebOrderCreated, form: CheckoutFormData) => void;
+  onRequestAuth: (mode: CustomerAuthMode) => void;
 }) {
   const { items } = useCart();
+  const { user, isCustomer } = useAuth();
+  const profile = isCustomer ? user : null;
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(profile?.full_name ?? '');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(profile?.address ?? '');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<CheckoutFormErrors>({});
   const [submitting, setSubmitting] = useState(false);
@@ -68,7 +72,7 @@ export function CheckoutForm({
       });
       onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes });
     } catch (err) {
-      setSubmitError(getErrorMessage(err));
+      setSubmitError(getErrorMessage(err, 'No pudimos registrar tu pedido. Por favor, intentá nuevamente.'));
     } finally {
       setSubmitting(false);
     }
@@ -82,6 +86,40 @@ export function CheckoutForm({
         <p className="text-sm text-gray-500">Agregá productos al carrito para continuar.</p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {profile ? (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
+              Completamos tus datos desde tu cuenta. Podés modificarlos para este pedido sin cambiar tu{' '}
+              <Link to="/perfil" className="font-semibold underline hover:no-underline">
+                perfil
+              </Link>
+              .
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
+              <p>
+                <button
+                  type="button"
+                  onClick={() => onRequestAuth('login')}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Iniciá sesión
+                </button>{' '}
+                o{' '}
+                <button
+                  type="button"
+                  onClick={() => onRequestAuth('register')}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  creá una cuenta
+                </button>{' '}
+                para completar tus datos automáticamente.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                También podés completar el formulario y pedir como invitado.
+              </p>
+            </div>
+          )}
+
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
               Nombre

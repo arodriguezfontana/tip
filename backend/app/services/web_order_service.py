@@ -4,6 +4,7 @@ from sqlalchemy.orm import Session
 
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
+from app.modules.user import User
 from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, WebOrderCreate
 
 PICKUP_ADDRESS = "Retiro en el local"
@@ -21,7 +22,7 @@ def _merge_quantities(payload: WebOrderCreate) -> dict[int, int]:
     return quantities
 
 
-def create_web_order(db: Session, payload: WebOrderCreate) -> Order:
+def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None = None) -> Order:
     quantities = _merge_quantities(payload)
 
     products = db.query(Product).filter(Product.id.in_(quantities.keys())).all()
@@ -55,6 +56,7 @@ def create_web_order(db: Session, payload: WebOrderCreate) -> Order:
         delivery_method=payload.delivery_method,
         status="Pendiente",
         source="web",
+        customer_id=customer.id if customer is not None else None,
         total_amount=sum(products_by_id[product_id].price * qty for product_id, qty in quantities.items()),
     )
     order.items = [

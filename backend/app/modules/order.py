@@ -24,6 +24,7 @@ class Order(Base):
     status = Column(String(50), nullable=False, default="Pendiente")
     delivery_method = Column(String(20), nullable=False, server_default="domicilio")
     telegram_chat_id = Column(String(32), nullable=True)
+    customer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     source = Column(String(20), nullable=False, default="bot", server_default="bot")
     customer_phone = Column(String(30), nullable=True)
     notes = Column(Text, nullable=True)

@@ -4,7 +4,11 @@ import { ProductCard } from '@/components/ProductCard';
 import { CartSummary } from '@/components/CartSummary';
 import { CheckoutForm } from '@/components/CheckoutForm';
 import { OrderSuccess } from '@/components/OrderSuccess';
+import { CustomerAccountActions } from '@/components/CustomerAccountActions';
+import { CustomerAuthModal } from '@/components/CustomerAuthModal';
+import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { useCart } from '@/hooks/useCart';
+import { useAuth } from '@/hooks/useAuth';
 import { fetchMenuProducts } from '@/services/menuService';
 import { groupByCategory } from '@/utils/productGrouping';
 import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
@@ -16,6 +20,8 @@ interface SubmittedOrder {
 
 export default function MenuPage() {
   const { clearCart } = useCart();
+  const { user, isCustomer } = useAuth();
+  const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
@@ -64,7 +70,7 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopBar />
+      <TopBar actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />} />
       <main className="flex-1 px-4 py-10">
         {submittedOrder ? (
           <OrderSuccess order={submittedOrder.order} form={submittedOrder.form} onNewOrder={handleNewOrder} />
@@ -116,12 +122,19 @@ export default function MenuPage() {
             <div className="lg:col-span-1">
               <div className="lg:sticky lg:top-6">
                 <CartSummary />
-                <CheckoutForm onSubmitSuccess={handleOrderCreated} />
+                {/* Se remonta al iniciar/cerrar sesión para autocompletar con los datos de la cuenta. */}
+                <CheckoutForm
+                  key={isCustomer && user ? `customer-${user.id}` : 'guest'}
+                  onSubmitSuccess={handleOrderCreated}
+                  onRequestAuth={setAuthModalMode}
+                />
               </div>
             </div>
           </div>
         )}
       </main>
+
+      {authModalMode && <CustomerAuthModal initialMode={authModalMode} onClose={() => setAuthModalMode(null)} />}
     </div>
   );
 }
