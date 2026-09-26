@@ -1,4 +1,5 @@
-"""Lógica de negocio para registrar los pedidos generados desde la web del cliente."""
+"""Lógica de negocio para registrar pedidos cargados con productos del menú: los que hace el
+cliente desde la web y los que carga el personal en el mostrador para clientes presenciales."""
 
 from sqlalchemy.orm import Session
 
@@ -6,6 +7,7 @@ from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.modules.user import User
 from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, WebOrderCreate
+from app.services.order_service import calcular_demora_inteligente
 
 PICKUP_ADDRESS = "Retiro en el local"
 
@@ -22,7 +24,8 @@ def _merge_quantities(payload: WebOrderCreate) -> dict[int, int]:
     return quantities
 
 
-def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None = None) -> Order:
+def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
+    """Valida el pedido contra el menú actual y arma la orden (sin persistirla) con precios de la base."""
     quantities = _merge_quantities(payload)
 
     products = db.query(Product).filter(Product.id.in_(quantities.keys())).all()
@@ -55,15 +58,17 @@ def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None
         notes=payload.notes or None,
         delivery_method=payload.delivery_method,
         status="Pendiente",
-        source="web",
-        customer_id=customer.id if customer is not None else None,
+        source=source,
         total_amount=sum(products_by_id[product_id].price * qty for product_id, qty in quantities.items()),
     )
     order.items = [
         OrderItem(product_id=product_id, quantity=qty, unit_price=products_by_id[product_id].price)
         for product_id, qty in quantities.items()
     ]
+    return order
 
+
+def _persist(db: Session, order: Order) -> Order:
     db.add(order)
     try:
         db.commit()
@@ -72,3 +77,22 @@ def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None
         raise
     db.refresh(order)
     return order
+
+
+def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None = None) -> Order:
+    """Pedido hecho por el cliente desde la web: queda 'Pendiente' hasta que el local lo acepte."""
+    order = _build_order(db, payload, source="web")
+    order.customer_id = customer.id if customer is not None else None
+    return _persist(db, order)
+
+
+def create_counter_order(db: Session, payload: WebOrderCreate) -> Order:
+    """Pedido presencial cargado por el personal en el mostrador.
+
+    Como lo registra el propio local, entra directamente 'Confirmado' con la demora estimada
+    automática, sin pasar por la aceptación (ni disparar la alerta de pedidos pendientes).
+    """
+    order = _build_order(db, payload, source="mostrador")
+    order.status = "Confirmado"
+    order.estimated_minutes = calcular_demora_inteligente(db, order)
+    return _persist(db, order)

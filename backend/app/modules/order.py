@@ -6,7 +6,7 @@ from app.db.base_class import Base
 
 ORDER_STATUSES = ("Pendiente", "Confirmado", "En Camino", "Listo para Retirar", "Finalizado", "Rechazado")
 DELIVERY_METHODS = ("domicilio", "retiro")
-ORDER_SOURCES = ("bot", "web")
+ORDER_SOURCES = ("bot", "web", "mostrador")
 
 
 class Order(Base):

@@ -86,7 +86,7 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   'Listo para Retirar',
 ];
 
-export type OrderSource = 'bot' | 'web';
+export type OrderSource = 'bot' | 'web' | 'mostrador';
 
 export interface AdminOrder {
   id: number;

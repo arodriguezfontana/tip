@@ -23,7 +23,7 @@ from app.services.order_service import (
     MissingEstimatedMinutesError,
     transition_order_status,
 )
-from app.services.web_order_service import InvalidOrderError, create_web_order
+from app.services.web_order_service import InvalidOrderError, create_counter_order, create_web_order
 
 logger = logging.getLogger(__name__)
 
@@ -70,6 +70,30 @@ def list_orders(
 
     return [_to_response(order) for order in orders]
 
+def _to_created_response(order: Order) -> WebOrderCreatedResponse:
+    return WebOrderCreatedResponse(
+        id=order.id,
+        status=order.status,
+        customer_name=order.customer_name,
+        customer_phone=order.customer_phone,
+        delivery_method=order.delivery_method,
+        shipping_address=order.shipping_address,
+        notes=order.notes,
+        total_amount=order.total_amount,
+        created_at=order.created_at,
+        items=[
+            WebOrderItemResponse(
+                product_id=item.product_id,
+                product_name=item.product.name,
+                quantity=item.quantity,
+                unit_price=item.unit_price,
+                subtotal=item.unit_price * item.quantity,
+            )
+            for item in order.items
+        ],
+    )
+
+
 @router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
 def create_order_from_web(
     payload: WebOrderCreate,
@@ -95,27 +119,31 @@ def create_order_from_web(
             detail="No pudimos registrar tu pedido en este momento. Por favor, intentá nuevamente en unos minutos.",
         )
 
-    return WebOrderCreatedResponse(
-        id=order.id,
-        status=order.status,
-        customer_name=order.customer_name,
-        customer_phone=order.customer_phone,
-        delivery_method=order.delivery_method,
-        shipping_address=order.shipping_address,
-        notes=order.notes,
-        total_amount=order.total_amount,
-        created_at=order.created_at,
-        items=[
-            WebOrderItemResponse(
-                product_id=item.product_id,
-                product_name=item.product.name,
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                subtotal=item.unit_price * item.quantity,
-            )
-            for item in order.items
-        ],
-    )
+    return _to_created_response(order)
+
+
+@router.post("/counter", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
+def create_order_from_counter(
+    payload: WebOrderCreate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> WebOrderCreatedResponse:
+    """Registra un pedido presencial cargado por el personal desde el panel.
+
+    Aplica las mismas validaciones que los pedidos web y entra directamente 'Confirmado'.
+    """
+    try:
+        order = create_counter_order(db, payload)
+    except InvalidOrderError as exc:
+        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    except SQLAlchemyError:
+        logger.exception("Error al guardar un pedido presencial.")
+        raise HTTPException(
+            status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail="No se pudo registrar el pedido en este momento. Intentá nuevamente.",
+        )
+
+    return _to_created_response(order)
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)

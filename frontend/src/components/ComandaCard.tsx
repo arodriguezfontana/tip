@@ -4,6 +4,12 @@ import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed } from '@/utils/elapsedTime';
 
+const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
+  web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
+  bot: { label: 'Bot', className: 'bg-sky-50 text-sky-700 border border-sky-200' },
+  mostrador: { label: 'Mostrador', className: 'bg-orange-50 text-orange-700 border border-orange-200' },
+};
+
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
   domicilio: 'A domicilio',
   retiro: 'Retiro en local',
@@ -41,10 +47,10 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
             <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
             <span
               className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
-                order.source === 'web' ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-sky-50 text-sky-700 border border-sky-200'
+                (SOURCE_BADGE[order.source] ?? SOURCE_BADGE.bot).className
               }`}
             >
-              {order.source === 'web' ? 'Web' : 'Bot'}
+              {(SOURCE_BADGE[order.source] ?? SOURCE_BADGE.bot).label}
             </span>
           </div>
           <span

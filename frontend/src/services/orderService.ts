@@ -33,6 +33,12 @@ export async function updateOrderStatus(
   return data;
 }
 
+/** Pedido presencial cargado por el personal desde el panel (entra directamente confirmado). */
+export async function createCounterOrder(payload: WebOrderPayload): Promise<WebOrderCreated> {
+  const { data } = await api.post<WebOrderCreated>('/orders/counter', payload);
+  return data;
+}
+
 export async function createWebOrder(payload: WebOrderPayload): Promise<WebOrderCreated> {
   const { data } = await api.post<WebOrderCreated>('/orders/web', payload);
   return data;

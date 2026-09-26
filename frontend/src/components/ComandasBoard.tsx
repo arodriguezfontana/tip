@@ -36,7 +36,12 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-export function ComandasBoard() {
+interface ComandasBoardProps {
+  /** Acceso rápido a la sección para cargar pedidos presenciales. */
+  onTakeOrder?: () => void;
+}
+
+export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -171,6 +176,17 @@ export function ComandasBoard() {
         </div>
 
         <div className="flex items-center gap-4">
+          {onTakeOrder && (
+            <button
+              type="button"
+              onClick={onTakeOrder}
+              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition shadow-xs"
+            >
+              <span className="text-sm leading-none">+</span>
+              Tomar pedido
+            </button>
+          )}
+
           <div className="flex items-center gap-2 bg-gray-50 px-3 py-1.5 rounded-xl border border-gray-200">
             <span className="text-xs text-gray-500 font-medium">Ver:</span>
             {[3, 5, 7].map((size) => (
