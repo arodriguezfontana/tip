@@ -1,41 +1,79 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
 import { CartSummary } from '@/components/CartSummary';
 import { CheckoutForm } from '@/components/CheckoutForm';
 import { OrderSuccess } from '@/components/OrderSuccess';
+import { CustomerAccountActions } from '@/components/CustomerAccountActions';
+import { CustomerAuthModal } from '@/components/CustomerAuthModal';
+import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { useCart } from '@/hooks/useCart';
-import { mockProducts, groupByCategory } from '@/data/mockProducts';
-import type { CartItem, CheckoutFormData } from '@/types/order';
+import { useAuth } from '@/hooks/useAuth';
+import { fetchMenuProducts } from '@/services/menuService';
+import { groupByCategory } from '@/utils/productGrouping';
+import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
 
 interface SubmittedOrder {
-  items: CartItem[];
+  order: WebOrderCreated;
   form: CheckoutFormData;
-  total: number;
 }
 
 export default function MenuPage() {
-  const { items, total, clearCart } = useCart();
+  const { clearCart } = useCart();
+  const { user, isCustomer } = useAuth();
+  const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
+  const [products, setProducts] = useState<Product[]>([]);
+  const [loadingProducts, setLoadingProducts] = useState(true);
+  const [productsError, setProductsError] = useState<string | null>(null);
 
-  const productGroups = groupByCategory(mockProducts);
+  const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchMenuProducts()
+      .then((data) => {
+        if (!cancelled) setProducts(data);
+      })
+      .catch((err) => {
+        if (cancelled) return;
+        const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
+        setProductsError(message || 'No pudimos cargar el menú.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoadingProducts(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [reloadKey]);
+
+  const loadProducts = () => {
+    setLoadingProducts(true);
+    setProductsError(null);
+    setReloadKey((key) => key + 1);
+  };
+
+  const productGroups = groupByCategory(products);
+
+  const handleOrderCreated = (order: WebOrderCreated, form: CheckoutFormData) => {
+    setSubmittedOrder({ order, form });
+    clearCart();
+  };
 
   const handleNewOrder = () => {
-    clearCart();
     setSubmittedOrder(null);
+    loadProducts();
   };
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopBar />
+      <TopBar actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />} />
       <main className="flex-1 px-4 py-10">
         {submittedOrder ? (
-          <OrderSuccess
-            items={submittedOrder.items}
-            form={submittedOrder.form}
-            total={submittedOrder.total}
-            onNewOrder={handleNewOrder}
-          />
+          <OrderSuccess order={submittedOrder.order} form={submittedOrder.form} onNewOrder={handleNewOrder} />
         ) : (
           <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-8">
@@ -45,6 +83,29 @@ export default function MenuPage() {
                   Elegí tus productos favoritos y armá tu pedido.
                 </p>
               </div>
+
+              {loadingProducts && products.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-12">Cargando menú...</p>
+              )}
+
+              {productsError && (
+                <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm flex items-center justify-between gap-3">
+                  <span>{productsError}</span>
+                  <button
+                    type="button"
+                    onClick={loadProducts}
+                    className="shrink-0 font-semibold underline hover:no-underline"
+                  >
+                    Reintentar
+                  </button>
+                </div>
+              )}
+
+              {!loadingProducts && !productsError && products.length === 0 && (
+                <p className="text-sm text-gray-500 text-center py-12">
+                  No hay productos disponibles en este momento.
+                </p>
+              )}
 
               {productGroups.map((group) => (
                 <section key={group.category.id}>
@@ -61,14 +122,19 @@ export default function MenuPage() {
             <div className="lg:col-span-1">
               <div className="lg:sticky lg:top-6">
                 <CartSummary />
+                {/* Se remonta al iniciar/cerrar sesión para autocompletar con los datos de la cuenta. */}
                 <CheckoutForm
-                  onSubmitSuccess={(form) => setSubmittedOrder({ items, form, total })}
+                  key={isCustomer && user ? `customer-${user.id}` : 'guest'}
+                  onSubmitSuccess={handleOrderCreated}
+                  onRequestAuth={setAuthModalMode}
                 />
               </div>
             </div>
           </div>
         )}
       </main>
+
+      {authModalMode && <CustomerAuthModal initialMode={authModalMode} onClose={() => setAuthModalMode(null)} />}
     </div>
   );
 }

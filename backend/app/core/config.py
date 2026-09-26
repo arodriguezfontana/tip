@@ -19,6 +19,8 @@ class Settings(BaseSettings):
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
     ACCESS_TOKEN_EXPIRE_MINUTES: int = 60
+    # La sesión del admin dura 30 días y el panel la renueva sola mientras está abierto.
+    ADMIN_ACCESS_TOKEN_EXPIRE_MINUTES: int = 60 * 24 * 30
 
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str

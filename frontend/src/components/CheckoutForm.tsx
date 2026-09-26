@@ -1,21 +1,37 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Link } from 'react-router-dom';
 import { useCart } from '@/hooks/useCart';
-import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod } from '@/types/order';
+import { useAuth } from '@/hooks/useAuth';
+import { createWebOrder } from '@/services/orderService';
+import { PHONE_PATTERN, getErrorMessage } from '@/utils/customerValidation';
+import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
+import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated } from '@/types/order';
 
+/**
+ * Formulario de datos del pedido. Si el cliente tiene la sesión iniciada, arranca autocompletado
+ * con los datos de su cuenta (quien lo usa lo remonta con `key` al cambiar la sesión). Los datos
+ * se pueden modificar libremente para este pedido sin alterar los guardados en la cuenta.
+ */
 export function CheckoutForm({
   onSubmitSuccess,
+  onRequestAuth,
 }: {
-  onSubmitSuccess: (form: CheckoutFormData) => void;
+  onSubmitSuccess: (order: WebOrderCreated, form: CheckoutFormData) => void;
+  onRequestAuth: (mode: CustomerAuthMode) => void;
 }) {
   const { items } = useCart();
+  const { user, isCustomer } = useAuth();
+  const profile = isCustomer ? user : null;
 
-  const [name, setName] = useState('');
-  const [phone, setPhone] = useState('');
+  const [name, setName] = useState(profile?.full_name ?? '');
+  const [phone, setPhone] = useState(profile?.phone ?? '');
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('domicilio');
-  const [address, setAddress] = useState('');
+  const [address, setAddress] = useState(profile?.address ?? '');
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<CheckoutFormErrors>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [submitError, setSubmitError] = useState<string | null>(null);
 
   const validate = (): CheckoutFormErrors => {
     const nextErrors: CheckoutFormErrors = {};
@@ -24,6 +40,8 @@ export function CheckoutForm({
     }
     if (!phone.trim()) {
       nextErrors.phone = 'Ingresá tu número de teléfono.';
+    } else if (!PHONE_PATTERN.test(phone.trim())) {
+      nextErrors.phone = 'Ingresá un teléfono válido (solo números, espacios, guiones o +).';
     }
     if (deliveryMethod === 'domicilio' && !address.trim()) {
       nextErrors.address = 'Ingresá la dirección de entrega.';
@@ -31,14 +49,33 @@ export function CheckoutForm({
     return nextErrors;
   };
 
-  const handleSubmit = (event: FormEvent) => {
+  const handleSubmit = async (event: FormEvent) => {
     event.preventDefault();
+    if (submitting) return;
+
     const nextErrors = validate();
     setErrors(nextErrors);
+    setSubmitError(null);
     if (Object.keys(nextErrors).length > 0) {
       return;
     }
-    onSubmitSuccess({ name, phone, deliveryMethod, address, notes });
+
+    setSubmitting(true);
+    try {
+      const order = await createWebOrder({
+        customer_name: name.trim(),
+        customer_phone: phone.trim(),
+        delivery_method: deliveryMethod,
+        shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
+        notes: notes.trim() || null,
+        items: items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+      });
+      onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes });
+    } catch (err) {
+      setSubmitError(getErrorMessage(err, 'No pudimos registrar tu pedido. Por favor, intentá nuevamente.'));
+    } finally {
+      setSubmitting(false);
+    }
   };
 
   return (
@@ -49,6 +86,40 @@ export function CheckoutForm({
         <p className="text-sm text-gray-500">Agregá productos al carrito para continuar.</p>
       ) : (
         <form onSubmit={handleSubmit} className="space-y-4">
+          {profile ? (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
+              Completamos tus datos desde tu cuenta. Podés modificarlos para este pedido sin cambiar tu{' '}
+              <Link to="/perfil" className="font-semibold underline hover:no-underline">
+                perfil
+              </Link>
+              .
+            </div>
+          ) : (
+            <div className="rounded-xl bg-gray-50 border border-gray-200 px-4 py-3 text-sm text-gray-700">
+              <p>
+                <button
+                  type="button"
+                  onClick={() => onRequestAuth('login')}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  Iniciá sesión
+                </button>{' '}
+                o{' '}
+                <button
+                  type="button"
+                  onClick={() => onRequestAuth('register')}
+                  className="font-semibold underline hover:no-underline"
+                >
+                  creá una cuenta
+                </button>{' '}
+                para completar tus datos automáticamente.
+              </p>
+              <p className="text-xs text-gray-500 mt-1">
+                También podés completar el formulario y pedir como invitado.
+              </p>
+            </div>
+          )}
+
           <div>
             <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
               Nombre
@@ -130,11 +201,18 @@ export function CheckoutForm({
             />
           </div>
 
+          {submitError && (
+            <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
+              {submitError}
+            </div>
+          )}
+
           <button
             type="submit"
-            className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition"
+            disabled={submitting}
+            className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
           >
-            Confirmar pedido
+            {submitting ? 'Enviando pedido...' : 'Confirmar pedido'}
           </button>
         </form>
       )}

@@ -68,6 +68,10 @@ api.interceptors.response.use(
         errorResponse.message = serverMessage || 'El recurso solicitado no fue encontrado.';
         break;
 
+      case 422:
+        errorResponse.message = 'Algunos datos enviados no son válidos. Revisalos e intentá nuevamente.';
+        break;
+
       case 500:
         errorResponse.message = 'Error interno del servidor. Por favor, intenta más tarde.';
         break;

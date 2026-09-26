@@ -3,7 +3,7 @@ from typing import Dict, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_user
+from app.api.deps import get_current_admin
 from app.db.session import get_db
 from app.modules.order import Order
 from app.modules.user import User
@@ -30,7 +30,7 @@ def get_status_distribution(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> StatusDistributionResponse:
     """Devuelve la distribución de pedidos por su estado."""
     orders = _filter_orders_by_date(db, date_from, date_to)
@@ -49,7 +49,7 @@ def get_top_products(
     date_to: datetime | None = Query(None),
     limit: int = Query(5),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> List[TopProductResponse]:
     """Calcula el top de productos más vendidos a partir de los ítems de las órdenes."""
     orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]
@@ -95,7 +95,7 @@ def get_best_selling_day(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_user),
+    current_user: User = Depends(get_current_admin),
 ) -> BestSellingDayResponse:
     """Calcula y devuelve el día de la semana con mayor volumen de ventas."""
     orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]

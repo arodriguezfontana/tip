@@ -1,6 +1,7 @@
-export type ViewKey = 'comandas' | 'historial' | 'ingresos' | 'estadisticas';
+export type ViewKey = 'tomar-pedido' | 'comandas' | 'historial' | 'ingresos' | 'estadisticas';
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
+  { key: 'tomar-pedido', label: 'Tomar pedido' },
   { key: 'comandas', label: 'Comandas' },
   { key: 'historial', label: 'Historial' },
   { key: 'ingresos', label: 'Ingresos' },
