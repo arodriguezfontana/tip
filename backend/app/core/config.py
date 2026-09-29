@@ -25,6 +25,9 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str
 
+    # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
+    RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

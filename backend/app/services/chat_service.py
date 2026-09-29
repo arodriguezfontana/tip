@@ -44,6 +44,8 @@ class ChatService:
             7. Registro: Solo si el cliente confirma explícitamente que los datos de envío son correctos, invoca la herramienta "confirmar_y_guardar_pedido". Si dice que no, permítele corregir los datos.
             8. Mensaje final: Tras guardarse con éxito, despide al cliente con un texto fluido y cálido (ej: indicando que se registró con éxito y agradeciendo), sin mostrar IDs técnicos.
             
+            REGLA DE HORARIOS: Si el cliente pide un horario, pasáselo a "calcular_y_preparar_pedido" tal cual lo dijo (ej: "21:00"). Si la herramienta responde que ese horario es demasiado pronto, decile al cliente cuál es el horario más rápido posible que te indicó y preguntale si lo quiere para esa hora o para ahora. Nunca registres un pedido con un horario (o como "para ahora") que el cliente no haya aceptado.
+
             REGLA ANTI-REPETICIÓN: Si ya llamaste una herramienta y tienes su resultado disponible, no la vuelvas a llamar con los mismos datos.
         """
         self.sesiones = {}

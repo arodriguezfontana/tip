@@ -1,16 +1,69 @@
 """Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta."""
 
-from datetime import datetime, timedelta, timezone
+from datetime import datetime, time, timedelta, timezone
 import json
 import logging
 import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolArg
+from sqlalchemy.orm import Session
+from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
+from app.services.order_service import calcular_demora_actual
 
 logger = logging.getLogger(__name__)
+
+# Margen para no rechazar al confirmar un horario que era válido cuando se le propuso al cliente
+# y quedó apenas por debajo del mínimo por el tiempo que pasó en la conversación.
+TOLERANCIA_CONFIRMACION_MINUTOS = 5
+
+_PATRON_HORA = re.compile(r"(\d{1,2})(?:\s*[:.h]?\s*(\d{2}))?", re.IGNORECASE)
+
+
+def _parsear_hora(hora_str: str) -> time | None:
+    """Interpreta horarios como '21', '21:30', '21.30hs', '21h30' o '2130'."""
+    match = _PATRON_HORA.search(hora_str)
+    if not match:
+        return None
+    horas, minutos = int(match.group(1)), int(match.group(2) or 0)
+    if horas > 23 or minutos > 59:
+        return None
+    return time(horas, minutos)
+
+
+def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
+    redondeado = momento.replace(second=0, microsecond=0)
+    return redondeado if redondeado == momento else redondeado + timedelta(minutes=1)
+
+
+def _evaluar_hora_programada(
+    db: Session, hora_str: str | None, tolerancia_minutos: int = 0
+) -> tuple[datetime | None, str | None]:
+    """Interpreta la hora pedida en la zona horaria del local y verifica que se llegue a preparar.
+
+    Devuelve el horario programado (None si el pedido es para ahora) o, si no se puede cumplir,
+    el mensaje a transmitirle al cliente.
+    """
+    if not hora_str or not re.search(r"\d", hora_str):
+        return None, None
+
+    hora = _parsear_hora(hora_str)
+    if hora is None:
+        return None, f"No entendí el horario '{hora_str}'. ¿Me lo indicás como HH:MM (por ejemplo, 21:30)?"
+
+    ahora = ahora_local()
+    demora = calcular_demora_actual(db)
+    horario_mas_temprano = _redondear_al_minuto_siguiente(ahora + timedelta(minutes=demora))
+    solicitado = datetime.combine(ahora.date(), hora, tzinfo=ahora.tzinfo)
+
+    if solicitado + timedelta(minutes=tolerancia_minutos) < horario_mas_temprano:
+        return None, (
+            f"Con la demora actual (unos {demora} minutos), lo más rápido que podemos tener tu pedido "
+            f"es a las {horario_mas_temprano:%H:%M}. ¿Querés programarlo para esa hora o preferís pedirlo para ahora?"
+        )
+    return solicitado, None
 
 
 @tool
@@ -81,14 +134,16 @@ def calcular_y_preparar_pedido(
         falta_direccion = not es_retiro and not shipping_address
         faltan_datos = metodo_entrega is None or not customer_name or falta_direccion
 
+        horario_programado, aviso_horario = _evaluar_hora_programada(db, hora_programada)
+
         resultado_json = {
             "items": items_validados,
             "total": total_general,
             "cliente": customer_name,
             "direccion": "Retiro en el local" if es_retiro else shipping_address,
             "metodo_entrega": metodo_entrega,
-            "hora_programada": hora_programada,
-            "faltan_datos": faltan_datos,
+            "hora_programada": f"{horario_programado:%H:%M}" if horario_programado else None,
+            "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
         texto_respuesta = "Queremos confirmar tu pedido:\n" + "\n".join(resumen_lineas) + f"\n\nTotal: ${total_general:,.2f}"
@@ -102,10 +157,14 @@ def calcular_y_preparar_pedido(
             if falta_direccion:
                 faltantes.append("tu dirección de envío")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
+            if aviso_horario:
+                texto_respuesta += f"\n\n{aviso_horario}"
+        elif aviso_horario:
+            texto_respuesta = aviso_horario
         else:
            destino = "retirar en el local" if es_retiro else f"envío a domicilio en {shipping_address}"
-           tiempo_str = f"para las {hora_programada}" if hora_programada else "para ahora"
-            
+           tiempo_str = f"para las {horario_programado:%H:%M}" if horario_programado else "para ahora"
+
            texto_respuesta = (
                 f"Perfecto, {customer_name}. Vamos a {destino}, {tiempo_str}. "
                 f"¿Están bien estos datos para confirmar el pedido?"
@@ -148,28 +207,11 @@ def confirmar_y_guardar_pedido(
         if not cliente or (not es_retiro and not direccion):
             return "Faltan datos obligatorios (nombre o dirección) para registrar la orden."
 
-        scheduled_dt = None
-        hora_str = datos.get("hora_programada")
-        mensaje_aviso_demora = ""
-
-        if hora_str:
-            try:
-                ahora = datetime.now(timezone.utc)
-                hora_limpia = hora_str.replace("hs", "").strip()
-                parsed_time = datetime.strptime(hora_limpia, "%H:%M" if ":" in hora_limpia else "%H%M").time()
-                
-                candidate_dt = datetime.combine(ahora.date(), parsed_time).replace(tzinfo=timezone.utc)
-                
-                DEMORA_MINIMA_MINUTOS = 25
-                tiempo_minimo_permitido = ahora + timedelta(minutes=DEMORA_MINIMA_MINUTOS)
-
-                if candidate_dt < tiempo_minimo_permitido:
-                    scheduled_dt = None
-                    mensaje_aviso_demora = f" (Nota: Como el horario solicitado era muy pronto, se procesó como pedido inmediato)."
-                else:
-                    scheduled_dt = candidate_dt
-            except Exception:
-                logger.warning("No se pudo parsear la hora programada: %s", hora_str)
+        scheduled_dt, aviso_horario = _evaluar_hora_programada(
+            db, datos.get("hora_programada"), tolerancia_minutos=TOLERANCIA_CONFIRMACION_MINUTOS
+        )
+        if aviso_horario:
+            return f"El pedido NO se registró todavía. {aviso_horario}"
 
         nueva_orden = Order(
             customer_name=cliente,
@@ -178,7 +220,7 @@ def confirmar_y_guardar_pedido(
             status="Pendiente",
             delivery_method=delivery_method,
             telegram_chat_id=telegram_chat_id,
-            scheduled_for=scheduled_dt,
+            scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
         )
         db.add(nueva_orden)
         db.flush()
@@ -196,8 +238,8 @@ def confirmar_y_guardar_pedido(
 
         db.commit()
         
-        horario_texto = f" programado para las {hora_str}" if scheduled_dt else ""
-        return f"¡Listo {datos.get('cliente', '')}! Registramos tu pedido con éxito{horario_texto}.{mensaje_aviso_demora} Muchas gracias por elegirnos."
+        horario_texto = f" programado para las {scheduled_dt:%H:%M}" if scheduled_dt else ""
+        return f"¡Listo {datos.get('cliente', '')}! Registramos tu pedido con éxito{horario_texto}. Muchas gracias por elegirnos."
     except Exception as e:
         db.rollback()
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)

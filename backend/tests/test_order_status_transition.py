@@ -31,12 +31,15 @@ def test_pendiente_to_confirmado_succeeds(client, db_session):
     assert response.json()["estimated_minutes"] == 30
 
 
-def test_confirmar_sin_estimated_minutes_is_rejected(client, db_session):
+def test_confirmar_sin_estimated_minutes_calcula_la_demora(client, db_session):
+    _create_order(db_session, status="Confirmado")
+    _create_order(db_session, status="Confirmado")
     order = _create_order(db_session)
 
     response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["estimated_minutes"] == 15 + 2 * 3
 
 
 @pytest.mark.parametrize("estimated_minutes", [0, -5])

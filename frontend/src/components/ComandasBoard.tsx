@@ -102,6 +102,9 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
         .filter((order) => order.status === status)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
+      // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
+      const totalCount = allOrdersForStatus.length;
+
       if (status === 'Pendiente') {
         if (pendingFilter === 'ahora') {
           allOrdersForStatus = allOrdersForStatus.filter((o) => !o.scheduled_for);
@@ -120,7 +123,7 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       return {
         status,
         orders: paginatedOrders,
-        totalCount: allOrdersForStatus.length,
+        totalCount,
         currentPage: safePage,
         totalPages,
       };

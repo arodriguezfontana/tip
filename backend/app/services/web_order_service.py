@@ -7,7 +7,7 @@ from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.modules.user import User
 from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, WebOrderCreate
-from app.services.order_service import calcular_demora_inteligente
+from app.services.order_service import calcular_demora_actual
 
 PICKUP_ADDRESS = "Retiro en el local"
 
@@ -94,5 +94,5 @@ def create_counter_order(db: Session, payload: WebOrderCreate) -> Order:
     """
     order = _build_order(db, payload, source="mostrador")
     order.status = "Confirmado"
-    order.estimated_minutes = calcular_demora_inteligente(db, order)
+    order.estimated_minutes = calcular_demora_actual(db)
     return _persist(db, order)
