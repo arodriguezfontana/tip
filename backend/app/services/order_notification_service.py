@@ -1,14 +1,25 @@
 """Notificaciones proactivas al cliente por Telegram ante cambios de estado del pedido."""
 
 import logging
+from datetime import timezone
 
+from app.core.time import RESTAURANT_TZ
 from app.modules.order import Order
 from app.services.telegram_service import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
 
+def _horario_programado(order: Order) -> str:
+    programado = order.scheduled_for
+    if programado.tzinfo is None:  # la base lo guarda en UTC
+        programado = programado.replace(tzinfo=timezone.utc)
+    return f"{programado.astimezone(RESTAURANT_TZ):%H:%M}"
+
+
 def build_status_message(order: Order, new_status: str) -> str | None:
+    if new_status == "Confirmado" and order.scheduled_for is not None:
+        return f"¡Tu pedido #{order.id} fue aceptado! ✅\nLo vamos a tener listo para las {_horario_programado(order)}."
     if new_status == "Confirmado":
         return (
             f"¡Tu pedido #{order.id} fue aceptado! ✅\n"

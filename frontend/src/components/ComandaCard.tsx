@@ -2,12 +2,19 @@ import { useState } from 'react';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
-import { ALERT_THRESHOLD_MS, formatElapsed } from '@/utils/elapsedTime';
+import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
+import type { DelayLevel } from '@/utils/elapsedTime';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
   bot: { label: 'Bot', className: 'bg-sky-50 text-sky-700 border border-sky-200' },
   mostrador: { label: 'Mostrador', className: 'bg-orange-50 text-orange-700 border border-orange-200' },
+};
+
+const DELAY_BADGE_CLASS: Record<DelayLevel, string> = {
+  'on-time': 'bg-green-100 text-green-700',
+  warning: 'bg-amber-100 text-amber-800',
+  late: 'bg-red-100 text-red-700',
 };
 
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
@@ -24,8 +31,15 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
+  const isScheduled = order.scheduled_for != null;
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
+  const delayLevel = getDelayLevel(order, new Date(order.created_at).getTime() + elapsedMs);
+  const elapsedBadgeClass = isOverdue
+    ? 'bg-red-100 text-red-700 animate-pulse'
+    : delayLevel
+      ? DELAY_BADGE_CLASS[delayLevel]
+      : 'bg-gray-100 text-gray-600';
   const parsedMinutes = Number(estimatedMinutesInput);
   
   const isValidMinutes = estimatedMinutesInput.trim() === '' || (Number.isInteger(parsedMinutes) && parsedMinutes > 0);
@@ -53,11 +67,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
               {(SOURCE_BADGE[order.source] ?? SOURCE_BADGE.bot).label}
             </span>
           </div>
-          <span
-            className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${
-              isOverdue ? 'bg-red-100 text-red-700 animate-pulse' : 'bg-gray-100 text-gray-600'
-            }`}
-          >
+          <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full ${elapsedBadgeClass}`}>
             {formatElapsed(elapsedMs)}
           </span>
         </div>
@@ -65,49 +75,49 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         <div className="text-sm space-y-1">
           <p className="font-medium text-gray-900">{order.customer_name}</p>
           <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
-          {order.customer_phone && <p className="text-xs text-gray-500">Tel: {order.customer_phone}</p>}
-          {order.notes && <p className="text-xs text-gray-600 italic break-words">“{order.notes}”</p>}
+          <p className="text-xs text-gray-500">Tel: {order.customer_phone || '—'}</p>
+          <p className={`text-xs break-words ${order.notes ? 'text-gray-600 italic' : 'text-gray-400'}`}>
+            {order.notes ? `“${order.notes}”` : 'Sin observaciones'}
+          </p>
         </div>
 
-        <div className="flex flex-wrap items-center justify-between gap-2 text-xs">
+        <div className="flex flex-wrap items-center gap-2 text-xs">
           {order.scheduled_for ? (
-            <div className="flex items-center gap-1.5 bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl font-semibold">
-              <span>{new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}</span>
-            </div>
-          ) : (
-            <div className="flex items-center gap-1.5 bg-blue-50 border border-blue-200 text-blue-700 px-2.5 py-1 rounded-xl font-semibold">
-              <span>Para ahora</span>
-            </div>
-          )}
-
-          <span className="font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
-        </div>
-
-        <div className="text-xs text-gray-500 flex justify-between items-center pt-1 border-t border-gray-50">
-          <span>Ítems: {order.item_count}</span>
-          {order.estimated_minutes != null && (
-            <span className="bg-purple-50 text-purple-800 border border-purple-200 px-2.5 py-0.5 rounded-md font-semibold">
-              Estimado: {order.estimated_minutes} min
+            <span className="bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl font-semibold">
+              {new Date(order.scheduled_for).toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', hour12: false, timeZone: 'America/Argentina/Buenos_Aires' })}
             </span>
+          ) : (
+            order.estimated_minutes != null && (
+              <span className="bg-purple-50 border border-purple-200 text-purple-800 px-2.5 py-1 rounded-xl font-semibold">
+                Estimado: {order.estimated_minutes} min
+              </span>
+            )
           )}
+
+          <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
         </div>
 
         {order.status === 'Pendiente' && (
           <div className="space-y-2 pt-2 border-t border-gray-50">
-            <input
-              type="number"
-              min={1}
-              step={1}
-              placeholder="Automática (15+ min) o manual"
-              value={estimatedMinutesInput}
-              onChange={(e) => setEstimatedMinutesInput(e.target.value)}
-              className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
-            />
+            {/* Los programados se entregan en su horario: no llevan demora estimada. */}
+            {!isScheduled && (
+              <input
+                type="number"
+                min={1}
+                step={1}
+                placeholder="Automática (15+ min) o manual"
+                value={estimatedMinutesInput}
+                onChange={(e) => setEstimatedMinutesInput(e.target.value)}
+                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
+              />
+            )}
             <div className="flex gap-2">
               <button
                 type="button"
                 disabled={pending || !isValidMinutes}
-                onClick={() => handleClick('Confirmado', estimatedMinutesInput.trim() === '' ? undefined : parsedMinutes)}
+                onClick={() =>
+                  handleClick('Confirmado', isScheduled || estimatedMinutesInput.trim() === '' ? undefined : parsedMinutes)
+                }
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
               >
                 Confirmar

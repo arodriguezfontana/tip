@@ -26,8 +26,8 @@ export function StatsSection() {
   });
 
   return (
-    <div className="space-y-6">
-      <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6">
+    <div className="flex flex-col gap-6 lg:h-full">
+      <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6">
         <div>
           <h3 className="text-lg font-bold text-gray-900">Panel de Rendimiento y Ventas</h3>
           <p className="text-xs text-gray-500 mt-0.5">Filtrado dinámico por período</p>
@@ -50,7 +50,7 @@ export function StatsSection() {
       </div>
 
       {preset === 'custom' && (
-        <div className="flex items-center gap-2 bg-white p-4 rounded-2xl shadow-md">
+        <div className="shrink-0 flex items-center gap-2 bg-white p-4 rounded-2xl shadow-md">
           <input
             type="date"
             value={customFrom}
@@ -70,10 +70,10 @@ export function StatsSection() {
       {loading ? (
         <p className="text-sm text-gray-500 text-center py-8">Cargando métricas y estadísticas...</p>
       ) : error ? (
-        <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
+        <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
       ) : (
-        <div className="space-y-6">
-          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+        <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
+          <div className="shrink-0 grid grid-cols-1 md:grid-cols-2 gap-6">
             <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col justify-between">
               <div>
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Día más rentable</p>
@@ -105,14 +105,14 @@ export function StatsSection() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-md p-6">
-            <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Top Productos más Vendidos</p>
+          <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-0">
+            <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Top Productos más Vendidos</p>
             {topProducts.length === 0 ? (
               <p className="text-sm text-gray-500">No hay productos vendidos registrados en este período.</p>
             ) : (
-              <div className="overflow-x-auto">
+              <div className="overflow-auto lg:min-h-0">
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0">
                     <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       <th className="px-4 py-2">Producto</th>
                       <th className="px-4 py-2 text-right">Cantidad Vendida</th>

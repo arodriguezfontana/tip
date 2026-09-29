@@ -75,7 +75,7 @@ export function HistorialView() {
   );
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 lg:h-full">
       <DateRangeFilter
         preset={preset}
         customFrom={customFrom}
@@ -85,7 +85,7 @@ export function HistorialView() {
         onCustomToChange={setCustomTo}
       />
 
-      <div className="bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
+      <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dinero facturado</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalRevenue)}</p>
@@ -96,17 +96,17 @@ export function HistorialView() {
         </div>
       </div>
 
-      {error && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+      {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading ? (
         <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
       ) : orders.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
       ) : (
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-          <div className="overflow-x-auto">
+        <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+          <div className="overflow-auto lg:min-h-0">
             <table className="w-full text-sm">
-              <thead>
+              <thead className="sticky top-0">
                 <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                   <th className="px-4 py-3">ID</th>
                   <th className="px-4 py-3">Fecha</th>

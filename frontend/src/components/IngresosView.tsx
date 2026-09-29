@@ -66,7 +66,7 @@ export function IngresosView() {
   const revenueGroups = useMemo(() => groupOrdersByPeriod(facturedOrders, groupBy), [facturedOrders, groupBy]);
 
   return (
-    <div className="space-y-4">
+    <div className="flex flex-col gap-4 lg:h-full">
       <DateRangeFilter
         preset={preset}
         customFrom={customFrom}
@@ -76,7 +76,7 @@ export function IngresosView() {
         onCustomToChange={setCustomTo}
       />
 
-      <div className="bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
+      <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
         <div>
           <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dinero facturado</p>
           <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalRevenue)}</p>
@@ -87,13 +87,13 @@ export function IngresosView() {
         </div>
       </div>
 
-      {error && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+      {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading ? (
         <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
       ) : (
-        <div className="space-y-4">
-          <div>
+        <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
+          <div className="shrink-0">
             <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
               Agrupar por
             </span>
@@ -118,10 +118,10 @@ export function IngresosView() {
           {revenueGroups.length === 0 ? (
             <p className="text-sm text-gray-500 text-center py-8">No hay ingresos en el rango seleccionado.</p>
           ) : (
-            <div className="bg-white rounded-2xl shadow-md overflow-hidden">
-              <div className="overflow-x-auto">
+            <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+              <div className="overflow-auto lg:min-h-0">
                 <table className="w-full text-sm">
-                  <thead>
+                  <thead className="sticky top-0">
                     <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                       <th className="px-4 py-3">Período</th>
                       <th className="px-4 py-3 text-right">Pedidos</th>

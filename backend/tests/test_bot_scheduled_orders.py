@@ -45,7 +45,7 @@ def _agregar_pedidos(db_session, status: str, cantidad: int):
     db_session.commit()
 
 
-def _datos_pedido(muzza, hora_programada):
+def _datos_pedido(muzza, hora_programada=None, **extra):
     return json.dumps({
         "items": [{"product_id": muzza.id, "quantity": 1, "unit_price": muzza.price}],
         "total": muzza.price,
@@ -53,6 +53,8 @@ def _datos_pedido(muzza, hora_programada):
         "direccion": "Retiro en el local",
         "metodo_entrega": "retiro",
         "hora_programada": hora_programada,
+        "telefono": "11 4444-5555",
+        **extra,
     })
 
 
@@ -93,6 +95,7 @@ def test_horario_anterior_a_la_demora_informa_el_horario_mas_rapido(db_session, 
         respuesta = json.loads(calcular_y_preparar_pedido.invoke({
             "items_solicitados": "1 Pizza Muzzarella",
             "customer_name": "Paula",
+            "customer_phone": "11 4444-5555",
             "metodo_entrega": "retiro",
             "hora_programada": "21:00",
         }))
@@ -117,6 +120,7 @@ def test_horario_valido_se_confirma_con_hora_normalizada(db_session, muzza):
         respuesta = json.loads(calcular_y_preparar_pedido.invoke({
             "items_solicitados": "1 Pizza Muzzarella",
             "customer_name": "Paula",
+            "customer_phone": "11 4444-5555",
             "metodo_entrega": "retiro",
             "hora_programada": "21.30hs",
         }))
@@ -124,3 +128,68 @@ def test_horario_valido_se_confirma_con_hora_normalizada(db_session, muzza):
     assert respuesta["datos_temporales"]["hora_programada"] == "21:30"
     assert respuesta["datos_temporales"]["faltan_datos"] is False
     assert "para las 21:30" in respuesta["mensaje_para_usuario"]
+
+
+def test_resumen_final_muestra_productos_y_datos_de_entrega(db_session, muzza):
+    with _fijar_hora_local(17):
+        respuesta = json.loads(calcular_y_preparar_pedido.invoke({
+            "items_solicitados": "2 Pizza Muzzarella",
+            "customer_name": "Paula",
+            "customer_phone": "11 4444-5555",
+            "metodo_entrega": "domicilio",
+            "shipping_address": "Belgrano 95",
+            "hora_programada": "21:00",
+            "observaciones": "Sin cebolla",
+        }))
+
+    resumen = respuesta["mensaje_para_usuario"]
+    for esperado in (
+        "Pizza Muzzarella (x2) $17,000.00",
+        "Total: $17,000.00",
+        "Nombre: Paula",
+        "Teléfono: 11 4444-5555",
+        "Envío a domicilio: Belgrano 95",
+        "Horario: para las 21:00",
+        "Observaciones: Sin cebolla",
+        "¿Está todo bien para confirmar el pedido?",
+    ):
+        assert esperado in resumen
+
+
+def test_bot_guarda_telefono_y_observaciones(db_session, muzza):
+    resultado = confirmar_y_guardar_pedido.invoke(
+        {"datos_pedido_json": _datos_pedido(muzza, observaciones="  Sin cebolla, timbre 2B ")}
+    )
+
+    assert "Listo" in resultado
+    assert "Todavía no está confirmado" in resultado
+    order = db_session.query(Order).one()
+    assert order.customer_phone == "11 4444-5555"
+    assert order.notes == "Sin cebolla, timbre 2B"
+
+
+def test_bot_no_registra_pedido_sin_telefono(db_session, muzza):
+    resultado = confirmar_y_guardar_pedido.invoke({"datos_pedido_json": _datos_pedido(muzza, telefono=None)})
+
+    assert "teléfono" in resultado
+    assert db_session.query(Order).count() == 0
+
+
+def test_resumen_pide_telefono_y_muestra_observaciones(db_session, muzza):
+    sin_telefono = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Pizza Muzzarella",
+        "customer_name": "Paula",
+        "metodo_entrega": "retiro",
+    }))
+    assert sin_telefono["datos_temporales"]["faltan_datos"] is True
+    assert "teléfono" in sin_telefono["mensaje_para_usuario"]
+
+    completo = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Pizza Muzzarella",
+        "customer_name": "Paula",
+        "customer_phone": "11 4444-5555",
+        "metodo_entrega": "retiro",
+        "observaciones": "Sin cebolla",
+    }))
+    assert completo["datos_temporales"]["observaciones"] == "Sin cebolla"
+    assert "Sin cebolla" in completo["mensaje_para_usuario"]

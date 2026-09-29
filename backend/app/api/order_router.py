@@ -21,6 +21,7 @@ from app.services.order_notification_service import notify_order_status_change
 from app.services.order_service import (
     InvalidTransitionError,
     MissingEstimatedMinutesError,
+    ScheduledOrderEstimateError,
     transition_order_status,
 )
 from app.services.web_order_service import InvalidOrderError, create_counter_order, create_web_order
@@ -164,7 +165,7 @@ def update_order_status(
         order = transition_order_status(db, order, status_update.status, status_update.estimated_minutes)
     except InvalidTransitionError as exc:
         raise HTTPException(status_code=409, detail=str(exc))
-    except MissingEstimatedMinutesError as exc:
+    except (MissingEstimatedMinutesError, ScheduledOrderEstimateError) as exc:
         raise HTTPException(status_code=400, detail=str(exc))
 
     background_tasks.add_task(notify_order_status_change, order, status_update.status)

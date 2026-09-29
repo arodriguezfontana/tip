@@ -11,6 +11,7 @@ from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
+from app.schemas.common import PHONE_PATTERN
 from app.services.order_service import calcular_demora_actual
 
 logger = logging.getLogger(__name__)
@@ -18,6 +19,11 @@ logger = logging.getLogger(__name__)
 # Margen para no rechazar al confirmar un horario que era válido cuando se le propuso al cliente
 # y quedó apenas por debajo del mínimo por el tiempo que pasó en la conversación.
 TOLERANCIA_CONFIRMACION_MINUTOS = 5
+
+MAX_LARGO_OBSERVACIONES = 500
+
+# Frase del mensaje de éxito de confirmar_y_guardar_pedido: el chat la usa para saber que el pedido se registró.
+MARCA_PEDIDO_REGISTRADO = "Recibimos tu pedido"
 
 _PATRON_HORA = re.compile(r"(\d{1,2})(?:\s*[:.h]?\s*(\d{2}))?", re.IGNORECASE)
 
@@ -31,6 +37,16 @@ def _parsear_hora(hora_str: str) -> time | None:
     if horas > 23 or minutos > 59:
         return None
     return time(horas, minutos)
+
+
+def _telefono_valido(telefono: str | None) -> bool:
+    """Mismo criterio que los pedidos de la web y del mostrador."""
+    return bool(telefono) and 6 <= len(telefono) <= 30 and re.match(PHONE_PATTERN, telefono) is not None
+
+
+def _limpiar_observaciones(observaciones: str | None) -> str | None:
+    texto = (observaciones or "").strip()
+    return texto[:MAX_LARGO_OBSERVACIONES] or None
 
 
 def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
@@ -70,11 +86,24 @@ def _evaluar_hora_programada(
 def calcular_y_preparar_pedido(
     items_solicitados: str,
     customer_name: str | None = None,
+    customer_phone: str | None = None,
     shipping_address: str | None = None,
     metodo_entrega: str | None = None,
     hora_programada: str | None = None,
+    observaciones: str | None = None,
 ) -> str:
     """Calcula de forma exacta el total de un pedido consultando los precios reales.
+
+    Args:
+        items_solicitados: Los productos y cantidades pedidos (ej: "2 Pizza Muzzarella, 1 Coca-Cola").
+        customer_name: Nombre del cliente.
+        customer_phone: Teléfono de contacto del cliente.
+        shipping_address: Dirección de envío (solo para envíos a domicilio).
+        metodo_entrega: "retiro" o "domicilio".
+        hora_programada: Hora para la que se programa el pedido (ej: "21:00"); vacío si es para ahora.
+        observaciones: Aclaraciones del cliente sobre la comida o la entrega (ej: "sin cebolla",
+            "timbre 2B", "paga con $20000"). Incluí cualquier aclaración de este tipo que el cliente
+            haya mencionado en cualquier momento de la conversación, aunque no se la hayas preguntado.
     """
     db = SessionLocal()
     try:
@@ -123,6 +152,7 @@ def calcular_y_preparar_pedido(
             resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
             items_validados.append({
                 "product_id": producto.id,
+                "nombre": producto.name,
                 "quantity": cantidad,
                 "unit_price": producto.price
             })
@@ -132,7 +162,10 @@ def calcular_y_preparar_pedido(
 
         es_retiro = metodo_entrega == "retiro"
         falta_direccion = not es_retiro and not shipping_address
-        faltan_datos = metodo_entrega is None or not customer_name or falta_direccion
+        telefono = (customer_phone or "").strip()
+        falta_telefono = not _telefono_valido(telefono)
+        notas = _limpiar_observaciones(observaciones)
+        faltan_datos = metodo_entrega is None or not customer_name or falta_telefono or falta_direccion
 
         horario_programado, aviso_horario = _evaluar_hora_programada(db, hora_programada)
 
@@ -140,9 +173,11 @@ def calcular_y_preparar_pedido(
             "items": items_validados,
             "total": total_general,
             "cliente": customer_name,
+            "telefono": telefono or None,
             "direccion": "Retiro en el local" if es_retiro else shipping_address,
             "metodo_entrega": metodo_entrega,
             "hora_programada": f"{horario_programado:%H:%M}" if horario_programado else None,
+            "observaciones": notas,
             "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
@@ -154,6 +189,8 @@ def calcular_y_preparar_pedido(
                 faltantes.append("si retirás por el local o te lo enviamos a domicilio")
             if not customer_name:
                 faltantes.append("tu nombre")
+            if falta_telefono:
+                faltantes.append("un teléfono de contacto válido" if telefono else "un teléfono de contacto")
             if falta_direccion:
                 faltantes.append("tu dirección de envío")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
@@ -162,13 +199,24 @@ def calcular_y_preparar_pedido(
         elif aviso_horario:
             texto_respuesta = aviso_horario
         else:
-           destino = "retirar en el local" if es_retiro else f"envío a domicilio en {shipping_address}"
-           tiempo_str = f"para las {horario_programado:%H:%M}" if horario_programado else "para ahora"
-
-           texto_respuesta = (
-                f"Perfecto, {customer_name}. Vamos a {destino}, {tiempo_str}. "
-                f"¿Están bien estos datos para confirmar el pedido?"
-            )
+            entrega = "Retiro en el local" if es_retiro else f"Envío a domicilio: {shipping_address}"
+            horario = f"para las {horario_programado:%H:%M}" if horario_programado else "para ahora"
+            texto_respuesta = "\n".join([
+                "📝 Resumen de tu pedido",
+                "",
+                "🛒 Productos:",
+                *resumen_lineas,
+                f"💰 Total: ${total_general:,.2f}",
+                "",
+                "🚚 Entrega:",
+                f"- Nombre: {customer_name}",
+                f"- Teléfono: {telefono}",
+                f"- {entrega}",
+                f"- Horario: {horario}",
+                f"- Observaciones: {notas or 'sin observaciones'}",
+                "",
+                "¿Está todo bien para confirmar el pedido?",
+            ])
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
     except Exception as e:
@@ -203,9 +251,12 @@ def confirmar_y_guardar_pedido(
 
         cliente = datos.get("cliente") or datos.get("customer_name") or "Cliente"
         direccion = datos.get("direccion") or datos.get("shipping_address")
-        
+        telefono = str(datos.get("telefono") or datos.get("customer_phone") or "").strip()
+
         if not cliente or (not es_retiro and not direccion):
             return "Faltan datos obligatorios (nombre o dirección) para registrar la orden."
+        if not _telefono_valido(telefono):
+            return "El pedido NO se registró todavía: falta un teléfono de contacto válido del cliente."
 
         scheduled_dt, aviso_horario = _evaluar_hora_programada(
             db, datos.get("hora_programada"), tolerancia_minutos=TOLERANCIA_CONFIRMACION_MINUTOS
@@ -216,6 +267,8 @@ def confirmar_y_guardar_pedido(
         nueva_orden = Order(
             customer_name=cliente,
             shipping_address="Retiro en el local" if es_retiro else (direccion or "Sin especificar"),
+            customer_phone=telefono,
+            notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
             total_amount=float(datos.get("total", 0)),
             status="Pendiente",
             delivery_method=delivery_method,
@@ -238,8 +291,13 @@ def confirmar_y_guardar_pedido(
 
         db.commit()
         
-        horario_texto = f" programado para las {scheduled_dt:%H:%M}" if scheduled_dt else ""
-        return f"¡Listo {datos.get('cliente', '')}! Registramos tu pedido con éxito{horario_texto}. Muchas gracias por elegirnos."
+        horario_texto = f" para las {scheduled_dt:%H:%M}" if scheduled_dt else ""
+        return (
+            f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
+            "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
+            "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
+            "¡Muchas gracias por elegirnos!"
+        )
     except Exception as e:
         db.rollback()
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)

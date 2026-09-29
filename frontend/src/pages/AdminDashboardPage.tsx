@@ -21,17 +21,19 @@ export default function AdminDashboardPage() {
     navigate('/login', { replace: true });
   };
 
+  // En pantallas anchas el panel ocupa exactamente el alto de la pantalla: la página no scrollea,
+  // cada sección scrollea internamente sus listas y tablas.
   return (
-    <div className="min-h-screen bg-gray-50 flex flex-col">
+    <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-gray-50 flex flex-col">
       <TopBar onToggleMenu={() => setMenuOpen((prev) => !prev)} menuOpen={menuOpen} onLogout={handleLogout} />
-      <main className="flex-1 px-4 py-10">
-        <div className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto space-y-6`}>
+      <main className="flex-1 px-4 py-6 lg:min-h-0">
+        <div className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto lg:h-full`}>
           {/* Montado siempre para no perder un pedido a medio cargar al cambiar de sección. */}
-          <div hidden={activeView !== 'tomar-pedido'}>
+          <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
           </div>
           {/* Siempre montado para que el sondeo y la alerta sonora sigan activos en las otras vistas. */}
-          <div hidden={activeView !== 'comandas'}>
+          <div hidden={activeView !== 'comandas'} className="lg:h-full">
             <ComandasBoard onTakeOrder={() => setActiveView('tomar-pedido')} />
           </div>
           {activeView === 'historial' && <HistorialView />}

@@ -26,6 +26,11 @@ class MissingEstimatedMinutesError(Exception):
         super().__init__("Debe indicar un tiempo estimado de demora al confirmar el pedido.")
 
 
+class ScheduledOrderEstimateError(Exception):
+    def __init__(self):
+        super().__init__("Los pedidos programados se entregan en su horario y no llevan demora estimada.")
+
+
 DEMORA_MINIMA_MINUTOS = 15
 MINUTOS_POR_PEDIDO_EN_PROCESO = 3
 
@@ -44,9 +49,12 @@ def transition_order_status(
     if new_status not in allowed:
         raise InvalidTransitionError(order.status, new_status)
 
-    if new_status == "Confirmado":
-        if estimated_minutes is None:
-            estimated_minutes = calcular_demora_actual(db)
+    if order.scheduled_for is not None:
+        # Los programados se entregan en su horario: no llevan demora estimada.
+        if estimated_minutes is not None:
+            raise ScheduledOrderEstimateError()
+    elif new_status == "Confirmado" and estimated_minutes is None:
+        estimated_minutes = calcular_demora_actual(db)
 
     order.status = new_status
     if estimated_minutes is not None:
