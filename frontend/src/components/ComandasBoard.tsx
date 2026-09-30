@@ -102,6 +102,9 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
         .filter((order) => order.status === status)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
 
+      // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
+      const totalCount = allOrdersForStatus.length;
+
       if (status === 'Pendiente') {
         if (pendingFilter === 'ahora') {
           allOrdersForStatus = allOrdersForStatus.filter((o) => !o.scheduled_for);
@@ -120,7 +123,7 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       return {
         status,
         orders: paginatedOrders,
-        totalCount: allOrdersForStatus.length,
+        totalCount,
         currentPage: safePage,
         totalPages,
       };
@@ -166,8 +169,8 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
   };
 
   return (
-    <div className="space-y-4">
-      <div className="flex flex-wrap items-center justify-between bg-white px-5 py-3 rounded-2xl shadow-xs border border-gray-100 gap-3">
+    <div className="flex flex-col gap-4 lg:h-full">
+      <div className="shrink-0 flex flex-wrap items-center justify-between bg-white px-5 py-3 rounded-2xl shadow-xs border border-gray-100 gap-3">
         <div className="flex items-center gap-3">
           <span className={`w-2.5 h-2.5 rounded-full ${isSimulating ? 'bg-purple-500' : 'bg-amber-500'} animate-pulse`}></span>
           <span className="text-sm font-semibold text-gray-800">
@@ -226,13 +229,13 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       </div>
 
       {!soundAlert.audioSupported && (
-        <div className="rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm">
+        <div className="shrink-0 rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm">
           Este navegador no permite reproducir la alerta sonora de nuevos pedidos. Usá una versión actualizada de Chrome, Edge, Firefox o Safari.
         </div>
       )}
 
       {soundAlert.audioSupported && soundAlert.enabled && soundAlert.audioBlocked && (
-        <div role="alert" className="rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
+        <div role="alert" className="shrink-0 rounded-xl bg-amber-50 text-amber-800 px-4 py-3 text-sm flex flex-wrap items-center justify-between gap-3">
           <span>El navegador bloqueó el sonido hasta que interactúes con la página. Habilitalo para escuchar la alerta de nuevos pedidos.</span>
           <button
             type="button"
@@ -244,15 +247,15 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
         </div>
       )}
 
-      {error && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+      {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading && orders.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-12">Cargando comandas...</p>
       ) : (
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 items-start">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
           {columns.map((column) => (
-            <div key={column.status} className="bg-gray-50/50 rounded-2xl p-3 border border-gray-100 flex flex-col">
-              <div className="flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-2">
+            <div key={column.status} className="bg-gray-50/50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
+              <div className="shrink-0 flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700">{COLUMN_LABELS[column.status]}</h3>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${column.status === 'Pendiente' && column.totalCount > 0 ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-800'}`}>
                   {column.totalCount}
@@ -260,7 +263,7 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
               </div>
 
               {column.status === 'Pendiente' && (
-                <div className="flex bg-gray-200/70 p-0.5 rounded-xl mb-3 text-[11px] font-medium">
+                <div className="shrink-0 flex bg-gray-200/70 p-0.5 rounded-xl mb-3 text-[11px] font-medium">
                   <button
                     type="button"
                     onClick={() => { setPendingFilter('ahora'); setPages((prev) => ({ ...prev, Pendiente: 1 })); }}
@@ -278,7 +281,7 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
                 </div>
               )}
 
-              <div className="space-y-3 min-h-[220px]">
+              <div className="space-y-3 min-h-[220px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {column.orders.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-12">Sin pedidos</p>
                 ) : (
@@ -289,7 +292,7 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
               </div>
 
               {column.totalPages > 1 && (
-                <div className="flex items-center justify-between pt-3 mt-3 border-t border-gray-200/60 px-1 text-xs">
+                <div className="shrink-0 flex items-center justify-between pt-3 mt-3 border-t border-gray-200/60 px-1 text-xs">
                   <button
                     type="button"
                     disabled={column.currentPage === 1}

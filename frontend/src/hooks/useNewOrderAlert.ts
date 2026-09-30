@@ -39,6 +39,15 @@ export function useNewOrderAlert(pendingOrderIds: number[]) {
   const hasPending = pendingKey !== '';
   const knownIdsRef = useRef<Set<string> | null>(null);
 
+  // Silenciar (o activar) en una pestaña aplica también a las otras que tengan el panel abierto.
+  useEffect(() => {
+    const handleStorage = (event: StorageEvent) => {
+      if (event.key === STORAGE_KEY || event.key === null) setEnabled(readEnabledPreference());
+    };
+    window.addEventListener('storage', handleStorage);
+    return () => window.removeEventListener('storage', handleStorage);
+  }, []);
+
   // Repetición: arranca (sonando de inmediato) cuando aparecen pendientes y corta cuando no queda ninguno.
   useEffect(() => {
     if (!enabled || !hasPending) return;

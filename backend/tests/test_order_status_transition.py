@@ -1,8 +1,11 @@
+from datetime import datetime, timezone
+
 import pytest
 
 from app.api.deps import get_current_user
 from app.main import app
 from app.modules.order import Order
+from app.services.order_notification_service import build_status_message
 
 
 def _create_order(db_session, status="Pendiente", delivery_method="domicilio"):
@@ -31,12 +34,15 @@ def test_pendiente_to_confirmado_succeeds(client, db_session):
     assert response.json()["estimated_minutes"] == 30
 
 
-def test_confirmar_sin_estimated_minutes_is_rejected(client, db_session):
+def test_confirmar_sin_estimated_minutes_calcula_la_demora(client, db_session):
+    _create_order(db_session, status="Confirmado")
+    _create_order(db_session, status="Confirmado")
     order = _create_order(db_session)
 
     response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
 
-    assert response.status_code == 400
+    assert response.status_code == 200
+    assert response.json()["estimated_minutes"] == 15 + 2 * 3
 
 
 @pytest.mark.parametrize("estimated_minutes", [0, -5])
@@ -134,3 +140,41 @@ def test_requires_authentication(client, db_session):
     response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
 
     assert response.status_code == 401
+
+
+def _create_scheduled_order(db_session):
+    order = _create_order(db_session)
+    order.scheduled_for = datetime(2026, 9, 30, 0, 0, tzinfo=timezone.utc)  # 21:00 en Argentina
+    db_session.commit()
+    return order
+
+
+def test_confirmar_programado_no_asigna_demora(client, db_session):
+    order = _create_scheduled_order(db_session)
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado"})
+
+    assert response.status_code == 200
+    assert response.json()["estimated_minutes"] is None
+
+
+def test_programado_no_acepta_demora_manual(client, db_session):
+    order = _create_scheduled_order(db_session)
+
+    response = client.patch(
+        f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado", "estimated_minutes": 30}
+    )
+
+    assert response.status_code == 400
+    db_session.refresh(order)
+    assert order.status == "Pendiente"
+    assert order.estimated_minutes is None
+
+
+def test_aviso_de_confirmacion_de_programado_indica_el_horario(db_session):
+    order = _create_scheduled_order(db_session)
+
+    mensaje = build_status_message(order, "Confirmado")
+
+    assert "21:00" in mensaje
+    assert "Tiempo estimado" not in mensaje

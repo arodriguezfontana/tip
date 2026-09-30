@@ -4,3 +4,31 @@
 @theme {
   --font-bebas: 'Bebas Neue', sans-serif;
 }
+
+/* Barras de scroll finas y siempre visibles. */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-track,
+::-webkit-scrollbar-corner {
+  background: transparent;
+}
+
+::-webkit-scrollbar-thumb {
+  background-color: rgb(0 0 0 / 0.25);
+  border-radius: 9999px;
+}
+
+::-webkit-scrollbar-thumb:hover {
+  background-color: rgb(0 0 0 / 0.4);
+}
+
+/* Firefox no soporta los pseudo-elementos ::-webkit-scrollbar. */
+@supports (-moz-appearance: none) {
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: rgb(0 0 0 / 0.25) transparent;
+  }
+}

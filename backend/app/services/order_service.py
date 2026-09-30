@@ -26,17 +26,21 @@ class MissingEstimatedMinutesError(Exception):
         super().__init__("Debe indicar un tiempo estimado de demora al confirmar el pedido.")
 
 
-def calcular_demora_inteligente(db: Session, order: Order) -> int:
-    """Calcula la demora estimada con 15 minutos de base y carga en cocina."""
-    pedidos_en_cola = db.query(Order).filter(Order.status.in_(["Pendiente", "Confirmado"])).count()
-    
-    tiempo_base = 15 + (pedidos_en_cola * 3)
-    
-    items_count = len(order.items) if order.items else 1
-    tiempo_items = items_count * 2
-    
-    demora_sugerida = min(tiempo_base + tiempo_items, 90)
-    return max(demora_sugerida, 15)
+class ScheduledOrderEstimateError(Exception):
+    def __init__(self):
+        super().__init__("Los pedidos programados se entregan en su horario y no llevan demora estimada.")
+
+
+DEMORA_MINIMA_MINUTOS = 15
+MINUTOS_POR_PEDIDO_EN_PROCESO = 3
+
+
+def calcular_demora_actual(db: Session) -> int:
+    """Demora estimada para un pedido nuevo: 15 minutos de base más 3 por cada pedido en proceso
+    (confirmado pero todavía no despachado ni listo para retirar)."""
+    pedidos_en_proceso = db.query(Order).filter(Order.status == "Confirmado").count()
+    return DEMORA_MINIMA_MINUTOS + pedidos_en_proceso * MINUTOS_POR_PEDIDO_EN_PROCESO
+
 
 def transition_order_status(
     db: Session, order: Order, new_status: str, estimated_minutes: int | None = None
@@ -45,9 +49,12 @@ def transition_order_status(
     if new_status not in allowed:
         raise InvalidTransitionError(order.status, new_status)
 
-    if new_status == "Confirmado":
-        if estimated_minutes is None:
-            estimated_minutes = calcular_demora_inteligente(db, order)
+    if order.scheduled_for is not None:
+        # Los programados se entregan en su horario: no llevan demora estimada.
+        if estimated_minutes is not None:
+            raise ScheduledOrderEstimateError()
+    elif new_status == "Confirmado" and estimated_minutes is None:
+        estimated_minutes = calcular_demora_actual(db)
 
     order.status = new_status
     if estimated_minutes is not None:

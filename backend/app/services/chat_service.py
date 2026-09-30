@@ -1,10 +1,12 @@
 import asyncio
 import logging
+import time
 
-from langchain_core.messages import HumanMessage, SystemMessage, ToolMessage
+from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.core.config import settings
-from app.services.tools.menu_tools import consultar_productos
+from app.services.chat_memory import SesionChat
+from app.services.tools.menu_tools import obtener_menu_actual
 from app.services.tools.order_tools import calcular_y_preparar_pedido, confirmar_y_guardar_pedido
 
 logger = logging.getLogger(__name__)
@@ -16,14 +18,13 @@ MENSAJE_FALLBACK_LOOP = "Disculpá, tardé un poquito más de la cuenta en proce
 
 class ChatService:
 
-    def __init__(self):
-        self.llm = ChatGoogleGenerativeAI(
+    def __init__(self, llm=None):
+        self.llm = llm or ChatGoogleGenerativeAI(
             model="gemini-3.5-flash-lite",
             google_api_key=settings.GOOGLE_API_KEY,
             temperature=0.2,
         )
         self.herramientas = [
-            consultar_productos,
             calcular_y_preparar_pedido,
             confirmar_y_guardar_pedido,
         ]
@@ -36,43 +37,65 @@ class ChatService:
 
             FLUJO OBLIGATORIO DE CONVERSACIÓN:
             1. Saludo inicial: Cuando el cliente salude, dale la bienvenida y preguntale amablemente si querés ver el menú o si prefiere hacer un pedido directamente. (NO uses herramientas en el saludo inicial, solo saluda y pregunta).
-            2. Menú: Si el cliente pide ver el menú, usa obligatoriamente la herramienta "consultar_productos" y preséntaselo limpio (nombre, precio y categoría, sin descripciones largas), preguntándole qué desea llevar.
+            2. Menú: Si el cliente pide ver el menú, presentale el MENÚ ACTUAL que está al final de estas instrucciones, limpio (nombre, precio y categoría), preguntándole qué desea llevar. Nunca ofrezcas productos que no estén en ese menú.
             3. Selección de ítems: Cuando el cliente indique qué quiere comer, usa la herramienta "calcular_y_preparar_pedido" pasando los ítems y cantidades. Muestra el detalle de cada producto con su cantidad, subtotal y el precio total general.
             4. Primera confirmación (Productos): Pregunta claramente si el pedido de productos es correcto. Si dice que no, ajusta. Si dice que sí, pasa al siguiente paso.
-            5. Datos de entrega y horario: Pídele su nombre, si retira por el local o si es envío a domicilio (con dirección). Pregúntale también si desea programar el pedido para una hora en particular o si es para ahora.
-            6. Segunda confirmación (Datos de envío): Una vez que te dé esos datos, muéstrale un breve resumen exclusivo de los datos de entrega (nombre, método, dirección y horario) y pregúntale: "¿Están bien estos datos?".
-            7. Registro: Solo si el cliente confirma explícitamente que los datos de envío son correctos, invoca la herramienta "confirmar_y_guardar_pedido". Si dice que no, permítele corregir los datos.
-            8. Mensaje final: Tras guardarse con éxito, despide al cliente con un texto fluido y cálido (ej: indicando que se registró con éxito y agradeciendo), sin mostrar IDs técnicos.
+            5. Datos de entrega y horario: Pídele su nombre, un teléfono de contacto, si retira por el local o si es envío a domicilio (con dirección) y si desea programar el pedido para una hora en particular o si es para ahora. Preguntale también si quiere agregar alguna observación (ej: sin cebolla, timbre, con cuánto paga).
+            6. Segunda confirmación (Resumen completo): Una vez que te dé esos datos, volvé a usar "calcular_y_preparar_pedido" con los productos y todos los datos de entrega: el sistema le muestra al cliente el resumen completo (productos, total y datos de entrega) para que revise todo.
+            7. Registro: Solo si el cliente confirma explícitamente que el resumen es correcto, invoca la herramienta "confirmar_y_guardar_pedido". Si dice que no, permítele corregir los datos.
+            8. Después del registro: Nunca le digas al cliente que el pedido está confirmado o aceptado: queda pendiente hasta que el local lo revise y le avise por este chat.
             
+            REGLA DE HORARIOS: Si el cliente pide un horario, pasáselo a "calcular_y_preparar_pedido" tal cual lo dijo (ej: "21:00"). Si la herramienta responde que ese horario es demasiado pronto, decile al cliente cuál es el horario más rápido posible que te indicó y preguntale si lo quiere para esa hora o para ahora. Nunca registres un pedido con un horario (o como "para ahora") que el cliente no haya aceptado.
+
+            REGLA DE OBSERVACIONES: Si en cualquier momento de la conversación el cliente menciona una aclaración importante sobre la comida o la entrega (ej: "sin cebolla", "bien cocida", "es alérgico al maní", "tocar timbre 2B", "pago con $20000"), incluila en "observaciones" aunque no se la hayas preguntado, y no se la vuelvas a pedir.
+
             REGLA ANTI-REPETICIÓN: Si ya llamaste una herramienta y tienes su resultado disponible, no la vuelvas a llamar con los mismos datos.
         """
-        self.sesiones = {}
+        self.sesiones: dict[str, SesionChat] = {}
+
+    def _mensajes_para_el_modelo(self, sesion: SesionChat, menu: str) -> list:
+        # La memoria se recalcula en cada llamada: puede cambiar a mitad de turno tras usar una herramienta.
+        instrucciones = f"{self.system_prompt}\n\nMENÚ ACTUAL:\n{menu}{sesion.texto_memoria()}"
+        return [SystemMessage(content=instrucciones), *sesion.historial]
 
     async def obtener_respuesta(self, mensaje_usuario: str, session_id: str) -> str:
-        if session_id not in self.sesiones:
-            self.sesiones[session_id] = [
-                SystemMessage(content=self.system_prompt)
-            ]
+        sesion = self.sesiones.setdefault(session_id, SesionChat())
+        sesion.iniciar_turno(mensaje_usuario)
+        try:
+            return await self._responder(sesion, session_id)
+        finally:
+            sesion.finalizar_turno()
 
-        historial = self.sesiones[session_id]
-        historial.append(HumanMessage(content=mensaje_usuario))
+    async def _llamar_al_modelo(self, sesion: SesionChat, menu: str, session_id: str) -> AIMessage:
+        inicio = time.perf_counter()
+        respuesta = await asyncio.wait_for(
+            self.llm_con_herramientas.ainvoke(self._mensajes_para_el_modelo(sesion, menu)),
+            timeout=LLM_TIMEOUT_SECONDS,
+        )
+        uso = respuesta.usage_metadata or {}
+        logger.info(
+            "Gemini respondió en %.1f s (tokens: %s de entrada, %s de salida) en sesión %s",
+            time.perf_counter() - inicio,
+            uso.get("input_tokens", "?"),
+            uso.get("output_tokens", "?"),
+            session_id,
+        )
+        return respuesta
 
+    async def _responder(self, sesion: SesionChat, session_id: str) -> str:
+        historial = sesion.historial
+        menu = obtener_menu_actual()
         respuesta_ia = None
         try:
             for _ in range(MAX_TOOL_ITERATIONS):
-                respuesta_ia = await asyncio.wait_for(
-                    self.llm_con_herramientas.ainvoke(historial),
-                    timeout=LLM_TIMEOUT_SECONDS,
-                )
+                respuesta_ia = await self._llamar_al_modelo(sesion, menu, session_id)
                 historial.append(respuesta_ia)
 
                 if not respuesta_ia.tool_calls:
                     break
 
+                respuesta_directa = None
                 for tool_call in respuesta_ia.tool_calls:
-                    logger.info(
-                        "Tool call: %s(%s) en sesión %s", tool_call["name"], tool_call["args"], session_id
-                    )
                     herramienta = self.herramientas_por_nombre.get(tool_call["name"])
                     if herramienta is None:
                         logger.warning(
@@ -87,11 +110,28 @@ class ChatService:
                             args = tool_call["args"]
                             if tool_call["name"] == "confirmar_y_guardar_pedido":
                                 args = {**args, "telegram_chat_id": session_id}
+                            inicio = time.perf_counter()
                             resultado = await herramienta.ainvoke(args)
+                            logger.info(
+                                "Herramienta %s(%s) ejecutada en %.0f ms en sesión %s",
+                                tool_call["name"],
+                                tool_call["args"],
+                                (time.perf_counter() - inicio) * 1000,
+                                session_id,
+                            )
+                            directa = sesion.registrar_resultado_herramienta(tool_call["name"], str(resultado))
+                            if directa:
+                                respuesta_directa = directa
                         except Exception:
                             logger.exception("Error ejecutando la herramienta %s", tool_call["name"])
                             resultado = "Ocurrió un error consultando la información."
                     historial.append(ToolMessage(content=str(resultado), tool_call_id=tool_call["id"]))
+
+                if respuesta_directa:
+                    # El resumen para confirmar o el aviso de pedido registrado ya están listos para el
+                    # cliente: se mandan tal cual, sin otra llamada a Gemini que pueda recortarlos.
+                    historial.append(AIMessage(content=respuesta_directa))
+                    return respuesta_directa
             else:
                 logger.warning(
                     "Se agotó MAX_TOOL_ITERATIONS (%d) en la sesión %s sin respuesta final.",
