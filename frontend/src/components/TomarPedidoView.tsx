@@ -1,8 +1,10 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { CategoryIcon } from '@/components/CategoryIcon';
+import { lookupClientByPhone } from '@/services/clientService';
 import { fetchMenuProducts } from '@/services/menuService';
 import { createCounterOrder } from '@/services/orderService';
+import type { Client } from '@/types/client';
 import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import type { CartItem, DeliveryMethod, Product } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
@@ -14,12 +16,19 @@ const ALL_CATEGORIES = 'all';
 const INPUT_CLASS =
   'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black';
 
+/** Espera tras la última tecla del teléfono antes de buscar al cliente. */
+const CLIENT_LOOKUP_DEBOUNCE_MS = 400;
+
 interface CustomerFormErrors {
   name?: string;
   phone?: string;
   address?: string;
   items?: string;
 }
+
+type ClientLookup =
+  | { status: 'idle' | 'searching' | 'new' | 'error' }
+  | { status: 'found'; client: Client };
 
 export function TomarPedidoView() {
   // Catálogo
@@ -41,10 +50,15 @@ export function TomarPedidoView() {
   const [notes, setNotes] = useState('');
   const [errors, setErrors] = useState<CustomerFormErrors>({});
 
+  // Búsqueda del cliente por teléfono
+  const [clientLookup, setClientLookup] = useState<ClientLookup>({ status: 'idle' });
+  // Últimos valores autocompletados: solo se pisan campos vacíos o que el usuario no editó.
+  const autofilledRef = useRef({ name: '', address: '' });
+
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
-  const nameInputRef = useRef<HTMLInputElement>(null);
+  const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -64,6 +78,54 @@ export function TomarPedidoView() {
       cancelled = true;
     };
   }, [reloadKey]);
+
+  // Busca al cliente por teléfono y autocompleta nombre y dirección. Nunca bloquea la carga:
+  // si la búsqueda falla o tarda, el usuario sigue completando los campos a mano.
+  useEffect(() => {
+    const trimmedPhone = phone.trim();
+    if (!PHONE_PATTERN.test(trimmedPhone)) return;
+
+    const controller = new AbortController();
+    const timer = setTimeout(() => {
+      setClientLookup({ status: 'searching' });
+      lookupClientByPhone(trimmedPhone, controller.signal)
+        .then((client) => {
+          if (controller.signal.aborted) return;
+          const previous = autofilledRef.current;
+          const isUntouched = (current: string, autofilled: string) => !current.trim() || current === autofilled;
+
+          if (client) {
+            const clientAddress = client.address ?? '';
+            autofilledRef.current = { name: client.full_name, address: clientAddress };
+            setName((current) => (isUntouched(current, previous.name) ? client.full_name : current));
+            if (clientAddress) {
+              setAddress((current) => (isUntouched(current, previous.address) ? clientAddress : current));
+            }
+            setClientLookup({ status: 'found', client });
+          } else {
+            // Teléfono nuevo: se quitan los datos autocompletados de otro cliente que no se editaron.
+            autofilledRef.current = { name: '', address: '' };
+            if (previous.name) setName((current) => (current === previous.name ? '' : current));
+            if (previous.address) setAddress((current) => (current === previous.address ? '' : current));
+            setClientLookup({ status: 'new' });
+          }
+        })
+        .catch(() => {
+          if (!controller.signal.aborted) setClientLookup({ status: 'error' });
+        });
+    }, CLIENT_LOOKUP_DEBOUNCE_MS);
+
+    return () => {
+      clearTimeout(timer);
+      controller.abort();
+    };
+  }, [phone]);
+
+  const foundClient = clientLookup.status === 'found' ? clientLookup.client : null;
+  const clientDataChanged =
+    foundClient !== null &&
+    ((name.trim() !== '' && name.trim() !== foundClient.full_name) ||
+      (deliveryMethod === 'domicilio' && address.trim() !== '' && address.trim() !== (foundClient.address ?? '')));
 
   const reloadProducts = () => {
     setLoadingProducts(true);
@@ -132,6 +194,8 @@ export function TomarPedidoView() {
     setNotes('');
     setErrors({});
     setSubmitError(null);
+    setClientLookup({ status: 'idle' });
+    autofilledRef.current = { name: '', address: '' };
   };
 
   const validate = (): CustomerFormErrors => {
@@ -171,7 +235,7 @@ export function TomarPedidoView() {
       });
       resetOrder();
       setLastOrderId(order.id);
-      nameInputRef.current?.focus();
+      phoneInputRef.current?.focus();
     } catch (err) {
       setSubmitError(getErrorMessage(err, 'No se pudo registrar el pedido. Intentá nuevamente.'));
     } finally {
@@ -195,33 +259,57 @@ export function TomarPedidoView() {
         <legend className="sr-only">Datos del cliente</legend>
         <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-3">Datos del cliente</h2>
         <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-4">
-            <label htmlFor="tp-name" className="block text-xs font-medium text-gray-600 mb-1">
-              Nombre *
-            </label>
-            <input
-              id="tp-name"
-              ref={nameInputRef}
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={INPUT_CLASS}
-            />
-            {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
-          </div>
-
           <div className="md:col-span-3">
             <label htmlFor="tp-phone" className="block text-xs font-medium text-gray-600 mb-1">
               Teléfono *
             </label>
             <input
               id="tp-phone"
+              ref={phoneInputRef}
               type="tel"
               value={phone}
-              onChange={(e) => setPhone(e.target.value)}
+              onChange={(e) => {
+                setPhone(e.target.value);
+                setClientLookup({ status: 'idle' });
+              }}
+              aria-describedby="tp-phone-status"
               className={INPUT_CLASS}
             />
-            {errors.phone && <p className="text-xs text-red-600 mt-1">{errors.phone}</p>}
+            {errors.phone ? (
+              <p className="text-xs text-red-600 mt-1">{errors.phone}</p>
+            ) : (
+              <p id="tp-phone-status" aria-live="polite" className="text-xs mt-1 min-h-4">
+                {clientLookup.status === 'searching' && <span className="text-gray-500">Buscando cliente…</span>}
+                {clientLookup.status === 'found' && (
+                  <span className="text-green-700">✓ Cliente registrado: datos completados.</span>
+                )}
+                {clientLookup.status === 'new' && (
+                  <span className="text-gray-500">Cliente nuevo: se registrará al confirmar.</span>
+                )}
+                {clientLookup.status === 'error' && (
+                  <span className="text-amber-700">No se pudo buscar el cliente. Completá los datos a mano.</span>
+                )}
+              </p>
+            )}
+          </div>
+
+          <div className="md:col-span-4">
+            <label htmlFor="tp-name" className="block text-xs font-medium text-gray-600 mb-1">
+              Nombre *
+            </label>
+            <input
+              id="tp-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              className={INPUT_CLASS}
+            />
+            {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
+            {clientDataChanged && (
+              <p className="text-xs text-blue-700 mt-1">
+                Modificaste los datos del cliente: se actualizarán al confirmar el pedido.
+              </p>
+            )}
           </div>
 
           <div className="md:col-span-5">

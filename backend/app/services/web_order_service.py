@@ -1,13 +1,19 @@
 """Lógica de negocio para registrar pedidos cargados con productos del menú: los que hace el
 cliente desde la web y los que carga el personal en el mostrador para clientes presenciales."""
 
+import logging
+
+from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.modules.user import User
 from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, WebOrderCreate
+from app.services.client_service import upsert_client
 from app.services.order_service import calcular_demora_actual
+
+logger = logging.getLogger(__name__)
 
 PICKUP_ADDRESS = "Retiro en el local"
 
@@ -91,8 +97,27 @@ def create_counter_order(db: Session, payload: WebOrderCreate) -> Order:
 
     Como lo registra el propio local, entra directamente 'Confirmado' con la demora estimada
     automática, sin pasar por la aceptación (ni disparar la alerta de pedidos pendientes).
+    Además registra (o actualiza) al cliente en la agenda del local para autocompletar sus
+    próximos pedidos.
     """
     order = _build_order(db, payload, source="mostrador")
     order.status = "Confirmado"
     order.estimated_minutes = calcular_demora_actual(db)
-    return _persist(db, order)
+    order = _persist(db, order)
+    _register_client(db, payload)
+    return order
+
+
+def _register_client(db: Session, payload: WebOrderCreate) -> None:
+    """Guarda los datos del cliente del pedido en la agenda.
+
+    Se hace después de guardar el pedido y sin propagar errores: si la agenda falla, el pedido
+    ya quedó registrado y el flujo de carga no se interrumpe.
+    """
+    address = payload.shipping_address if payload.delivery_method == "domicilio" else None
+    try:
+        upsert_client(db, payload.customer_phone, payload.customer_name, address)
+        db.commit()
+    except SQLAlchemyError:
+        db.rollback()
+        logger.exception("No se pudo registrar al cliente del pedido presencial en la agenda.")
