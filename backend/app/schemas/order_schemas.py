@@ -8,6 +8,7 @@ OrderStatusLiteral = Literal[
     "Pendiente", "Confirmado", "En Camino", "Listo para Retirar", "Finalizado", "Rechazado"
 ]
 DeliveryMethodLiteral = Literal["domicilio", "retiro"]
+PaymentMethodLiteral = Literal["efectivo", "transferencia", "tarjeta"]
 
 MAX_QUANTITY_PER_ITEM = 20
 MAX_ITEMS_PER_ORDER = 30
@@ -60,6 +61,13 @@ class WebOrderCreate(BaseModel):
         return self
 
 
+class CounterOrderCreate(WebOrderCreate):
+    """Pedido presencial: además de los datos del pedido web, el personal registra el pago."""
+
+    payment_method: PaymentMethodLiteral | None = None
+    is_paid: bool = False
+
+
 class WebOrderItemResponse(BaseModel):
     product_id: int
     product_name: str
@@ -79,3 +87,13 @@ class WebOrderCreatedResponse(BaseModel):
     total_amount: float
     created_at: datetime
     items: list[WebOrderItemResponse]
+
+
+class OrderDetailResponse(OrderResponse):
+    """Detalle completo de un pedido para el panel: productos, entrega y facturación."""
+
+    items: list[WebOrderItemResponse]
+    subtotal: float
+    shipping_cost: float
+    payment_method: PaymentMethodLiteral | None
+    is_paid: bool

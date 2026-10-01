@@ -1,8 +1,9 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import { fetchOrders, updateOrderStatus } from '@/services/orderService';
 import { ComandaCard } from '@/components/ComandaCard';
+import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 
@@ -56,6 +57,8 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
   });
 
   const [pendingFilter, setPendingFilter] = useState<'ahora' | 'programados'>('ahora');
+  const [detailOrderId, setDetailOrderId] = useState<number | null>(null);
+  const closeDetail = useCallback(() => setDetailOrderId(null), []);
 
   useEffect(() => {
     if (isSimulating) return;
@@ -129,6 +132,9 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       };
     });
   }, [orders, pages, pageSize, pendingFilter]);
+
+  // Se busca en la lista para que la ventana refleje el estado actualizado por el sondeo.
+  const detailOrder = detailOrderId === null ? null : orders.find((order) => order.id === detailOrderId) ?? null;
 
   const pendingOrderIds = useMemo(() => {
     return orders.filter((o) => o.status === 'Pendiente').map((o) => o.id);
@@ -286,7 +292,12 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
                   <p className="text-xs text-gray-400 text-center py-12">Sin pedidos</p>
                 ) : (
                   column.orders.map((order) => (
-                    <ComandaCard key={order.id} order={order} onStatusChange={handleStatusChange} />
+                    <ComandaCard
+                      key={order.id}
+                      order={order}
+                      onStatusChange={handleStatusChange}
+                      onOpenDetail={(selected) => setDetailOrderId(selected.id)}
+                    />
                   ))
                 )}
               </div>
@@ -317,6 +328,10 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
             </div>
           ))}
         </div>
+      )}
+
+      {detailOrder && (
+        <OrderDetailModal key={detailOrder.id} order={detailOrder} simulated={isSimulating} onClose={closeDetail} />
       )}
     </div>
   );

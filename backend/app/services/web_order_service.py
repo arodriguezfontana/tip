@@ -9,7 +9,7 @@ from sqlalchemy.orm import Session
 from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.modules.user import User
-from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, WebOrderCreate
+from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, CounterOrderCreate, WebOrderCreate
 from app.services.client_service import upsert_client
 from app.services.order_service import calcular_demora_actual
 
@@ -92,7 +92,7 @@ def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None
     return _persist(db, order)
 
 
-def create_counter_order(db: Session, payload: WebOrderCreate) -> Order:
+def create_counter_order(db: Session, payload: CounterOrderCreate) -> Order:
     """Pedido presencial cargado por el personal en el mostrador.
 
     Como lo registra el propio local, entra directamente 'Confirmado' con la demora estimada
@@ -103,6 +103,8 @@ def create_counter_order(db: Session, payload: WebOrderCreate) -> Order:
     order = _build_order(db, payload, source="mostrador")
     order.status = "Confirmado"
     order.estimated_minutes = calcular_demora_actual(db)
+    order.payment_method = payload.payment_method
+    order.is_paid = payload.is_paid
     order = _persist(db, order)
     _register_client(db, payload)
     return order

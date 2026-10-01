@@ -1,5 +1,12 @@
 import { api } from './api';
-import type { AdminOrder, OrderStatus, WebOrderCreated, WebOrderPayload } from '@/types/order';
+import type {
+  AdminOrder,
+  CounterOrderPayload,
+  OrderDetail,
+  OrderStatus,
+  WebOrderCreated,
+  WebOrderPayload,
+} from '@/types/order';
 
 export interface FetchOrdersParams {
   dateFrom?: Date;
@@ -21,6 +28,11 @@ export async function fetchOrders(params: FetchOrdersParams = {}): Promise<Admin
   return data;
 }
 
+export async function fetchOrderDetail(orderId: number, signal?: AbortSignal): Promise<OrderDetail> {
+  const { data } = await api.get<OrderDetail>(`/orders/${orderId}`, { signal });
+  return data;
+}
+
 export async function updateOrderStatus(
   orderId: number,
   status: OrderStatus,
@@ -34,7 +46,7 @@ export async function updateOrderStatus(
 }
 
 /** Pedido presencial cargado por el personal desde el panel (entra directamente confirmado). */
-export async function createCounterOrder(payload: WebOrderPayload): Promise<WebOrderCreated> {
+export async function createCounterOrder(payload: CounterOrderPayload): Promise<WebOrderCreated> {
   const { data } = await api.post<WebOrderCreated>('/orders/counter', payload);
   return data;
 }

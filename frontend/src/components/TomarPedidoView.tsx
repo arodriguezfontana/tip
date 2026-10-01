@@ -5,8 +5,8 @@ import { lookupClientByPhone } from '@/services/clientService';
 import { fetchMenuProducts } from '@/services/menuService';
 import { createCounterOrder } from '@/services/orderService';
 import type { Client } from '@/types/client';
-import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
-import type { CartItem, DeliveryMethod, Product } from '@/types/order';
+import { MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
+import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { groupByCategory } from '@/utils/productGrouping';
 import { PHONE_PATTERN, getErrorMessage } from '@/utils/customerValidation';
@@ -48,6 +48,8 @@ export function TomarPedidoView() {
   const [deliveryMethod, setDeliveryMethod] = useState<DeliveryMethod>('retiro');
   const [address, setAddress] = useState('');
   const [notes, setNotes] = useState('');
+  const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
+  const [isPaid, setIsPaid] = useState(false);
   const [errors, setErrors] = useState<CustomerFormErrors>({});
 
   // Búsqueda del cliente por teléfono
@@ -192,6 +194,8 @@ export function TomarPedidoView() {
     setDeliveryMethod('retiro');
     setAddress('');
     setNotes('');
+    setPaymentMethod(null);
+    setIsPaid(false);
     setErrors({});
     setSubmitError(null);
     setClientLookup({ status: 'idle' });
@@ -231,6 +235,8 @@ export function TomarPedidoView() {
         delivery_method: deliveryMethod,
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
+        payment_method: paymentMethod,
+        is_paid: isPaid,
         items: lines.map((line) => ({ product_id: line.product.id, quantity: line.quantity })),
       });
       resetOrder();
@@ -531,7 +537,36 @@ export function TomarPedidoView() {
 
           {errors.items && <p className="text-xs text-red-600 mt-2">{errors.items}</p>}
 
-          <div className="mt-4 pt-4 border-t border-gray-200 space-y-1">
+          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-3">
+            <div className="flex flex-1 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
+              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((method) => (
+                <button
+                  key={method}
+                  type="button"
+                  role="radio"
+                  aria-checked={paymentMethod === method}
+                  // Un segundo clic lo deja sin especificar.
+                  onClick={() => setPaymentMethod((current) => (current === method ? null : method))}
+                  className={`flex-1 py-1.5 font-medium transition ${
+                    paymentMethod === method ? 'bg-black text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                  }`}
+                >
+                  {PAYMENT_METHOD_LABEL[method]}
+                </button>
+              ))}
+            </div>
+            <label className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-gray-700 cursor-pointer select-none">
+              <input
+                type="checkbox"
+                checked={isPaid}
+                onChange={(e) => setIsPaid(e.target.checked)}
+                className="w-4 h-4 accent-black"
+              />
+              Ya abonado
+            </label>
+          </div>
+
+          <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
             <div className="flex justify-between text-xs text-gray-500">
               <span>
                 Unidades: {units} · Productos: {lines.length}
