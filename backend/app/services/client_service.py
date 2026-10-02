@@ -38,3 +38,27 @@ def upsert_client(db: Session, phone: str, full_name: str, address: str | None) 
     if address:
         client.address = address
     return client
+
+
+def get_clients_paginated(
+    db: Session, search: str | None = None, page: int = 1, per_page: int = 20
+) -> tuple[list[Client], int]:
+    """Obtiene el listado paginado de clientes, ordenados por los más recientes, con opción de búsqueda."""
+    query = db.query(Client)
+
+    if search:
+        search_filter = f"%{search.strip()}%"
+        query = query.filter(
+            (Client.full_name.ilike(search_filter)) | (Client.phone.ilike(search_filter))
+        )
+
+    total = query.count()
+    
+    clients = (
+        query.order_by(Client.created_at.desc(), Client.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return clients, total
