@@ -62,3 +62,23 @@ def get_clients_paginated(
     )
 
     return clients, total
+
+
+def update_client(db: Session, client_id: int, full_name: str, phone: str, address: str | None) -> Client | None:
+    """Actualiza los datos de un cliente de la agenda validando unicidad de teléfono."""
+    normalized_phone = normalize_phone(phone)
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        return None
+
+    existing = db.query(Client).filter(Client.phone == normalized_phone, Client.id != client_id).first()
+    if existing:
+        raise ValueError("El número de teléfono ya está registrado por otro cliente.")
+
+    client.full_name = full_name.strip()
+    client.phone = normalized_phone
+    client.address = address.strip() if address else None
+    
+    db.commit()
+    db.refresh(client)
+    return client

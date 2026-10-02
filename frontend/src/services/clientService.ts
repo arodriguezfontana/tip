@@ -31,3 +31,12 @@ export async function fetchClients(params?: ClientQueryParams): Promise<ClientPa
   });
   return data;
 }
+
+/** Actualiza la información de un cliente de la agenda. */
+export async function updateClient(
+  id: number,
+  data: { full_name: string; phone: string; address?: string | null }
+): Promise<Client> {
+  const response = await api.put<Client>(`/clients/${id}`, data);
+  return response.data;
+}

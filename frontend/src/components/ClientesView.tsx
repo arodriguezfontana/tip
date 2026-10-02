@@ -1,5 +1,6 @@
 import { useEffect, useState, useCallback } from 'react';
-import { fetchClients } from '@/services/clientService';
+import { fetchClients, updateClient } from '@/services/clientService';
+import { ClientEditModal } from '@/components/ClientEditModal';
 import type { Client } from '@/types/client';
 
 export function ClientesView() {
@@ -11,17 +12,18 @@ export function ClientesView() {
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
   
   const [page, setPage] = useState<number>(1);
-  const [perPage, setPerPage] = useState<number>(10); // Por defecto en 10
+  const [perPage, setPerPage] = useState<number>(10);
   const [totalPages, setTotalPages] = useState<number>(1);
   const [total, setTotal] = useState<number>(0);
 
-  // Efecto para debounce de búsqueda en tiempo real
+  const [editingClient, setEditingClient] = useState<Client | null>(null);
+  const [toastMessage, setToastMessage] = useState<string | null>(null);
+
   useEffect(() => {
     const timer = setTimeout(() => {
       setDebouncedSearch(search);
-      setPage(1); // Reiniciar a la primera página al buscar
+      setPage(1);
     }, 300);
-
     return () => clearTimeout(timer);
   }, [search]);
 
@@ -48,8 +50,23 @@ export function ClientesView() {
     loadClients();
   }, [loadClients]);
 
+  const handleSaveClient = async (id: number, data: { full_name: string; phone: string; address: string | null }) => {
+    await updateClient(id, data);
+    setToastMessage('Los datos del cliente se actualizaron exitosamente.');
+    setTimeout(() => setToastMessage(null), 4000);
+
+    setEditingClient(null);
+    loadClients();
+  };
+
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4">
+    <div className="space-y-6 max-w-7xl mx-auto p-4 relative">
+      {toastMessage && (
+        <div className="fixed top-5 right-5 z-50 bg-green-50 text-green-800 border border-green-200 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition">
+          {toastMessage}
+        </div>
+      )}
+
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>
           <h1 className="text-lg font-bold text-gray-900">Clientes</h1>
@@ -105,7 +122,8 @@ export function ClientesView() {
                   <th className="py-3 px-5">Nombre del Cliente</th>
                   <th className="py-3 px-5">Teléfono</th>
                   <th className="py-3 px-5">Dirección</th>
-                  <th className="py-3 px-5 text-right">Registrado</th>
+                  <th className="py-3 px-5">Registrado</th>
+                  <th className="py-3 px-5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
@@ -114,8 +132,18 @@ export function ClientesView() {
                     <td className="py-3.5 px-5 font-semibold text-gray-900">{client.full_name}</td>
                     <td className="py-3.5 px-5 text-gray-600">{client.phone}</td>
                     <td className="py-3.5 px-5 text-gray-600">{client.address || <span className="text-gray-400 italic">Sin dirección</span>}</td>
-                    <td className="py-3.5 px-5 text-right text-gray-400">
-                      {new Date(client.created_at).toLocaleDateString()}
+                    <td className="py-3.5 px-5 text-gray-400">{new Date(client.created_at).toLocaleDateString()}</td>
+                    <td className="py-3.5 px-5 text-right">
+                      <button
+                        type="button"
+                        onClick={() => setEditingClient(client)}
+                        className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-700 transition"
+                        title="Editar cliente"
+                      >
+                        <svg className="w-4 h-4 inline-block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
+                        </svg>
+                      </button>
                     </td>
                   </tr>
                 ))}
@@ -148,6 +176,14 @@ export function ClientesView() {
           </div>
         )}
       </div>
+
+      {editingClient && (
+        <ClientEditModal
+          client={editingClient}
+          onClose={() => setEditingClient(null)}
+          onSave={handleSaveClient}
+        />
+      )}
     </div>
   );
 }
