@@ -1,10 +1,11 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import type { AdminOrder } from '@/types/order';
 import { fetchOrders } from '@/services/orderService';
 import { formatCurrency } from '@/utils/currency';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { OrderDetailModal } from '@/components/OrderDetailModal';
 
 function statusBadgeClasses(status: string): string {
   const normalized = status.trim().toLowerCase();
@@ -33,6 +34,8 @@ export function HistorialView() {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
+  const closeDetail = useCallback(() => setDetailOrder(null), []);
 
   const range = useMemo(
     () =>
@@ -117,8 +120,20 @@ export function HistorialView() {
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {orders.map((order) => (
-                  <tr key={order.id} className="hover:bg-gray-50">
-                    <td className="px-4 py-3 font-medium text-gray-900">#{order.id}</td>
+                  <tr key={order.id} onClick={() => setDetailOrder(order)} className="hover:bg-gray-50 cursor-pointer">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDetailOrder(order);
+                        }}
+                        aria-label={`Ver detalle del pedido #${order.id}`}
+                        className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                      >
+                        #{order.id}
+                      </button>
+                    </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
                     <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900">
@@ -136,6 +151,8 @@ export function HistorialView() {
           </div>
         </div>
       )}
+
+      {detailOrder && <OrderDetailModal key={detailOrder.id} order={detailOrder} onClose={closeDetail} />}
     </div>
   );
 }

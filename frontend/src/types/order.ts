@@ -22,6 +22,14 @@ export interface CartItem {
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
 
+export type PaymentMethod = 'efectivo' | 'transferencia' | 'tarjeta';
+
+export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
+  efectivo: 'Efectivo',
+  transferencia: 'Transferencia',
+  tarjeta: 'Tarjeta',
+};
+
 export interface CheckoutFormData {
   name: string;
   phone: string;
@@ -42,6 +50,12 @@ export interface WebOrderPayload {
   shipping_address: string | null;
   notes: string | null;
   items: WebOrderItemPayload[];
+}
+
+/** Pedido presencial: el personal registra además cómo paga el cliente. */
+export interface CounterOrderPayload extends WebOrderPayload {
+  payment_method: PaymentMethod | null;
+  is_paid: boolean;
 }
 
 export interface WebOrderItem {
@@ -102,4 +116,13 @@ export interface AdminOrder {
   scheduled_for: string | null;
   created_at: string;
   item_count: number;
+}
+
+/** Detalle completo de un pedido para el panel (productos, entrega y facturación). */
+export interface OrderDetail extends AdminOrder {
+  items: WebOrderItem[];
+  subtotal: number;
+  shipping_cost: number;
+  payment_method: PaymentMethod | null;
+  is_paid: boolean;
 }

@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import type { MouseEvent } from 'react';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
@@ -25,9 +26,14 @@ const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
 interface ComandaCardProps {
   order: AdminOrder;
   onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
+  /** Abre la ventana con el detalle completo del pedido. */
+  onOpenDetail?: (order: AdminOrder) => void;
 }
 
-export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
+/** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
+const stopPropagation = (event: MouseEvent) => event.stopPropagation();
+
+export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
@@ -54,11 +60,28 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
   };
 
   return (
-    <div className={`bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}>
+    <div
+      onClick={onOpenDetail ? () => onOpenDetail(order) : undefined}
+      className={`bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
+    >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
+            {onOpenDetail ? (
+              <button
+                type="button"
+                onClick={(event) => {
+                  event.stopPropagation();
+                  onOpenDetail(order);
+                }}
+                aria-label={`Ver detalle del pedido #${order.id}`}
+                className="font-bold text-gray-900 text-sm rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+              >
+                #{order.id}
+              </button>
+            ) : (
+              <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
+            )}
             <span
               className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
                 (SOURCE_BADGE[order.source] ?? SOURCE_BADGE.bot).className
@@ -98,7 +121,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         </div>
 
         {order.status === 'Pendiente' && (
-          <div className="space-y-2 pt-2 border-t border-gray-50">
+          <div className="space-y-2 pt-2 border-t border-gray-50" onClick={stopPropagation}>
             {/* Los programados se entregan en su horario: no llevan demora estimada. */}
             {!isScheduled && (
               <input
@@ -135,7 +158,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         )}
 
         {order.status === 'Confirmado' && (
-          <div className="pt-2 border-t border-gray-50">
+          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}
@@ -148,7 +171,7 @@ export function ComandaCard({ order, onStatusChange }: ComandaCardProps) {
         )}
 
         {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
-          <div className="pt-2 border-t border-gray-50">
+          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}

@@ -8,9 +8,11 @@ from sqlalchemy.orm import Session, joinedload
 
 from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
-from app.modules.order import Order
+from app.modules.order import Order, OrderItem
 from app.modules.user import ROLE_CUSTOMER, User
 from app.schemas.order_schemas import (
+    CounterOrderCreate,
+    OrderDetailResponse,
     OrderResponse,
     OrderStatusUpdate,
     WebOrderCreate,
@@ -71,6 +73,19 @@ def list_orders(
 
     return [_to_response(order) for order in orders]
 
+def _to_item_responses(order: Order) -> list[WebOrderItemResponse]:
+    return [
+        WebOrderItemResponse(
+            product_id=item.product_id,
+            product_name=item.product.name,
+            quantity=item.quantity,
+            unit_price=item.unit_price,
+            subtotal=item.unit_price * item.quantity,
+        )
+        for item in order.items
+    ]
+
+
 def _to_created_response(order: Order) -> WebOrderCreatedResponse:
     return WebOrderCreatedResponse(
         id=order.id,
@@ -82,16 +97,7 @@ def _to_created_response(order: Order) -> WebOrderCreatedResponse:
         notes=order.notes,
         total_amount=order.total_amount,
         created_at=order.created_at,
-        items=[
-            WebOrderItemResponse(
-                product_id=item.product_id,
-                product_name=item.product.name,
-                quantity=item.quantity,
-                unit_price=item.unit_price,
-                subtotal=item.unit_price * item.quantity,
-            )
-            for item in order.items
-        ],
+        items=_to_item_responses(order),
     )
 
 
@@ -125,7 +131,7 @@ def create_order_from_web(
 
 @router.post("/counter", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
 def create_order_from_counter(
-    payload: WebOrderCreate,
+    payload: CounterOrderCreate,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> WebOrderCreatedResponse:
@@ -145,6 +151,33 @@ def create_order_from_counter(
         )
 
     return _to_created_response(order)
+
+
+@router.get("/{order_id}", response_model=OrderDetailResponse)
+def get_order_detail(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderDetailResponse:
+    """Detalle completo de un pedido: productos, datos del cliente y de la entrega, y facturación."""
+    order = (
+        db.query(Order)
+        .options(joinedload(Order.items).joinedload(OrderItem.product))
+        .filter(Order.id == order_id)
+        .first()
+    )
+    if not order:
+        raise HTTPException(status_code=404, detail="Pedido no encontrado")
+
+    items = _to_item_responses(order)
+    return OrderDetailResponse(
+        **_to_response(order).model_dump(),
+        items=items,
+        subtotal=sum(item.subtotal for item in items),
+        shipping_cost=order.shipping_cost or 0,
+        payment_method=order.payment_method,
+        is_paid=bool(order.is_paid),
+    )
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)
