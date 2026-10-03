@@ -48,6 +48,30 @@ async def send_telegram_message(chat_id: int, texto: str) -> None:
         logger.error("Error al enviar mensaje a Telegram: %s", e)
 
 
+async def register_webhook() -> None:
+    """Apunta el webhook del bot a PUBLIC_URL. Si falla, la API levanta igual."""
+    if not settings.PUBLIC_URL or not settings.TELEGRAM_TOKEN:
+        logger.info("PUBLIC_URL no configurada: no se registra el webhook de Telegram.")
+        return
+
+    base_url = settings.PUBLIC_URL.strip().rstrip("/")
+    if not base_url.startswith(("http://", "https://")):
+        base_url = f"https://{base_url}"
+    webhook_url = f"{base_url}{settings.API_V1_STR}/telegram/webhook"
+    payload = {"url": webhook_url}
+    if settings.TELEGRAM_WEBHOOK_SECRET:
+        payload["secret_token"] = settings.TELEGRAM_WEBHOOK_SECRET
+
+    url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/setWebhook"
+    try:
+        async with httpx.AsyncClient(timeout=10.0) as cliente:
+            response = await cliente.post(url, json=payload)
+            response.raise_for_status()
+        logger.info("Webhook de Telegram registrado en %s", webhook_url)
+    except httpx.HTTPError as e:
+        logger.error("No se pudo registrar el webhook de Telegram: %s", e)
+
+
 async def send_typing_action(chat_id: int) -> None:
     """Muestra "escribiendo..." en el chat. Si falla no pasa nada: es solo un indicador visual."""
     if not settings.TELEGRAM_TOKEN:
