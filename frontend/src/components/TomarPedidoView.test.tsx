@@ -153,7 +153,7 @@ describe('TomarPedidoView', () => {
   });
 
   it('autocompleta los datos de un cliente registrado y avisa si se modifican', async () => {
-    clients.lookupClientByPhone.mockResolvedValue({ id: 1, phone: '1144445555', full_name: 'Paula Gómez', address: 'Belgrano 95' });
+    clients.lookupClientByPhone.mockResolvedValue({ id: 1, phone: '1144445555', full_name: 'Paula Gómez', address: 'Belgrano 95', created_at: '2026-10-01T12:00:00Z' });
     const user = await renderView();
 
     await user.click(screen.getByRole('radio', { name: 'Envío a domicilio' }));
@@ -171,7 +171,7 @@ describe('TomarPedidoView', () => {
   });
 
   it('no pisa un nombre que el empleado ya escribió', async () => {
-    clients.lookupClientByPhone.mockResolvedValue({ id: 1, phone: '1144445555', full_name: 'Paula Gómez', address: null });
+    clients.lookupClientByPhone.mockResolvedValue({ id: 1, phone: '1144445555', full_name: 'Paula Gómez', address: null, created_at: '2026-10-01T12:00:00Z' });
     const user = await renderView();
 
     await user.type(screen.getByLabelText('Nombre *'), 'Pau');

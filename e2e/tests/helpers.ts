@@ -115,8 +115,7 @@ export async function goToSection(page: Page, section: string) {
   const openMenu = page.getByRole('button', { name: 'Abrir menú' });
   if (await openMenu.isVisible()) await openMenu.click();
   await page.getByRole('navigation').getByRole('button', { name: section }).click();
-  // El menú lateral queda abierto tapando la barra superior: se cierra con su propia cruz.
-  await page.locator('aside').getByRole('button', { name: 'Cerrar menú' }).click();
+  // Al elegir una sección el menú lateral se cierra solo.
   await expect(page.locator('aside')).toHaveAttribute('aria-hidden', 'true');
 }
 

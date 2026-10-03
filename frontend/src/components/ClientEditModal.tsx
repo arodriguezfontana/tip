@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import type { Client } from '@/types/client';
+import { getErrorMessage } from '@/utils/customerValidation';
 
 const INPUT_CLASS =
   'w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black';
@@ -35,8 +36,8 @@ export function ClientEditModal({ client, onClose, onSave }: ClientEditModalProp
         phone: phone.trim(),
         address: address.trim() || null,
       });
-    } catch (err: any) {
-      setFormError(err?.response?.data?.detail || 'No se pudo actualizar el cliente.');
+    } catch (err) {
+      setFormError(getErrorMessage(err, 'No se pudo actualizar el cliente.'));
       setSaving(false);
     }
   };

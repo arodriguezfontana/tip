@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import * as clientService from '@/services/clientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
@@ -22,6 +23,7 @@ beforeEach(() => {
   vi.mocked(statsService.fetchStatusDistribution).mockResolvedValue({});
   vi.mocked(statsService.fetchTopProducts).mockResolvedValue([]);
   vi.mocked(statsService.fetchBestSellingDay).mockResolvedValue({ best_selling_day: null, total_revenue: null });
+  vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
 });
 
 function renderDashboard(auth = fakeAuth(ADMIN)) {
@@ -35,10 +37,10 @@ function renderDashboard(auth = fakeAuth(ADMIN)) {
 }
 
 async function goTo(user: ReturnType<typeof userEvent.setup>, section: string) {
-  // El menú lateral queda abierto después de elegir una sección.
-  const openMenu = screen.queryByRole('button', { name: 'Abrir menú' });
-  if (openMenu) await user.click(openMenu);
+  await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
   await user.click(screen.getByRole('button', { name: section }));
+  // Al elegir una sección el menú lateral se cierra solo.
+  expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute('aria-expanded', 'false');
 }
 
 describe('AdminDashboardPage', () => {
@@ -61,6 +63,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Tomar pedido');
     expect(screen.getByRole('heading', { name: 'Datos del cliente' })).toBeVisible();
+
+    await goTo(user, 'Clientes');
+    expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {
