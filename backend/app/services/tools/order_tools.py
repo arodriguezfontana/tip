@@ -49,6 +49,35 @@ def _limpiar_observaciones(observaciones: str | None) -> str | None:
     return texto[:MAX_LARGO_OBSERVACIONES] or None
 
 
+def _items_con_precios_de_la_base(db: Session, items: list) -> tuple[list[OrderItem], float] | str:
+    """Arma los ítems del pedido con los precios actuales de la base, sin confiar en los que mande el modelo.
+
+    Devuelve los ítems y el total, o el motivo por el que el pedido no se puede registrar.
+    """
+    cantidades: dict[int, int] = {}
+    try:
+        for item in items:
+            product_id, cantidad = int(item["product_id"]), int(item.get("quantity") or 1)
+            if cantidad < 1:
+                return "Hay una cantidad inválida en el pedido."
+            cantidades[product_id] = cantidades.get(product_id, 0) + cantidad
+    except (KeyError, TypeError, ValueError, AttributeError):
+        return "No pude identificar los productos del pedido."
+    if not cantidades:
+        return "El pedido no tiene productos."
+
+    productos = {p.id: p for p in db.query(Product).filter(Product.id.in_(cantidades.keys())).all()}
+    if any(pid not in productos or not productos[pid].is_active for pid in cantidades):
+        return "Algunos productos del pedido ya no están disponibles en el menú."
+
+    order_items = [
+        OrderItem(product_id=pid, quantity=cantidad, unit_price=productos[pid].price)
+        for pid, cantidad in cantidades.items()
+    ]
+    total = sum(item.unit_price * item.quantity for item in order_items)
+    return order_items, total
+
+
 def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
     redondeado = momento.replace(second=0, microsecond=0)
     return redondeado if redondeado == momento else redondeado + timedelta(minutes=1)
@@ -264,31 +293,25 @@ def confirmar_y_guardar_pedido(
         if aviso_horario:
             return f"El pedido NO se registró todavía. {aviso_horario}"
 
+        # Los precios y el total salen siempre de la base: nunca de lo que haya armado el modelo.
+        items_y_total = _items_con_precios_de_la_base(db, datos.get("items") or [])
+        if isinstance(items_y_total, str):
+            return f"El pedido NO se registró todavía. {items_y_total}"
+        order_items, total = items_y_total
+
         nueva_orden = Order(
             customer_name=cliente,
             shipping_address="Retiro en el local" if es_retiro else (direccion or "Sin especificar"),
             customer_phone=telefono,
             notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
-            total_amount=float(datos.get("total", 0)),
+            total_amount=total,
             status="Pendiente",
             delivery_method=delivery_method,
             telegram_chat_id=telegram_chat_id,
             scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
         )
+        nueva_orden.items = order_items
         db.add(nueva_orden)
-        db.flush()
-
-        items_data = datos.get("items", [])
-        for item in items_data:
-            db.add(
-                OrderItem(
-                    order_id=nueva_orden.id,
-                    product_id=item["product_id"],
-                    quantity=item["quantity"],
-                    unit_price=item["unit_price"]
-                )
-            )
-
         db.commit()
         
         horario_texto = f" para las {scheduled_dt:%H:%M}" if scheduled_dt else ""

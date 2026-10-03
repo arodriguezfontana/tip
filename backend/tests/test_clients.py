@@ -1,25 +1,12 @@
 from unittest.mock import patch
 
-import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.modules.client import Client
-from app.modules.menu import Category, Product
 from app.modules.order import Order
 
 COUNTER_URL = "/api/v1/orders/counter"
 LOOKUP_URL = "/api/v1/clients/lookup"
-
-
-@pytest.fixture()
-def muzza(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    product = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    db_session.add(product)
-    db_session.commit()
-    return product
 
 
 def _payload(product, **overrides):

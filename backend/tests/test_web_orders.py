@@ -1,41 +1,8 @@
 import pytest
-from fastapi.testclient import TestClient
 
-from app.db.session import get_db
-from app.main import app
-from app.modules.menu import Category, Product
 from app.modules.order import Order, OrderItem
 
 WEB_ORDERS_URL = "/api/v1/orders/web"
-
-
-@pytest.fixture()
-def public_client(db_session):
-    """Cliente sin usuario autenticado: el endpoint de pedidos web y el menú son públicos."""
-
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-@pytest.fixture()
-def products(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    muzza = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    coca = Product(name="Coca-Cola 500ml", price=2500.0, category_id=category.id, dietary_restrictions=[])
-    agotada = Product(
-        name="Pizza Agotada", price=9000.0, category_id=category.id, dietary_restrictions=[], is_active=False
-    )
-    db_session.add_all([muzza, coca, agotada])
-    db_session.commit()
-    return {"muzza": muzza, "coca": coca, "agotada": agotada}
 
 
 def _payload(items, **overrides):

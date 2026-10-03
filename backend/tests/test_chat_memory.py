@@ -6,7 +6,6 @@ from unittest.mock import patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.modules.menu import Category, Product
 from app.modules.order import Order
 from app.services import chat_memory
 from app.services.chat_service import ChatService
@@ -43,17 +42,6 @@ def tools_session(db_session):
     with patch("app.services.tools.order_tools.SessionLocal", TestingSessionLocal), \
          patch("app.services.tools.menu_tools.SessionLocal", TestingSessionLocal):
         yield
-
-
-@pytest.fixture()
-def muzza(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    product = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    db_session.add(product)
-    db_session.commit()
-    return product
 
 
 @pytest.fixture()

@@ -2,7 +2,7 @@ import { useEffect, useState } from 'react';
 import type { StatsParams, TopProduct } from '@/types/stats';
 import { fetchStatusDistribution, fetchTopProducts, fetchBestSellingDay } from '@/services/statsService';
 
-export function useStats(params: StatsParams = {}) {
+export function useStats({ dateFrom, dateTo }: StatsParams = {}) {
   const [statusDistribution, setStatusDistribution] = useState<Record<string, number>>({});
   const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
   const [bestDay, setBestDay] = useState<{ best_selling_day: string | null; total_revenue: number | null }>({
@@ -18,6 +18,7 @@ export function useStats(params: StatsParams = {}) {
     async function loadStats() {
       setLoading(true);
       setError(null);
+      const params = { dateFrom, dateTo };
       try {
         const [statusData, topData, bestDayData] = await Promise.all([
           fetchStatusDistribution(params),
@@ -46,7 +47,7 @@ export function useStats(params: StatsParams = {}) {
     return () => {
       cancelled = true;
     };
-  }, [params.dateFrom, params.dateTo]);
+  }, [dateFrom, dateTo]);
 
   return { statusDistribution, topProducts, bestDay, loading, error };
 }
