@@ -1,4 +1,5 @@
 import logging
+from contextlib import asynccontextmanager
 
 from fastapi import Depends, FastAPI, APIRouter
 from fastapi.middleware.cors import CORSMiddleware
@@ -13,12 +14,21 @@ from app.api import menu_router
 from app.api import order_router
 from app.api import telegram_router
 from app.api import stats_router  # Corregido el path relativo de importación
+from app.services.telegram_service import register_webhook
 
 logging.basicConfig(level=logging.INFO)
+
+
+@asynccontextmanager
+async def lifespan(_: FastAPI):
+    await register_webhook()
+    yield
+
 
 app = FastAPI(
     title=settings.PROJECT_NAME,
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
+    lifespan=lifespan,
 )
 
 origins = [
