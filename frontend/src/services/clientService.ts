@@ -1,6 +1,6 @@
 import { api } from './api';
 import type { ApiErrorResponse } from './api';
-import type { Client } from '@/types/client';
+import type { Client, ClientPaginatedResponse, ClientQueryParams } from '@/types/client';
 
 /** La búsqueda es solo una ayuda: si tarda más que esto se abandona y se carga a mano. */
 const LOOKUP_TIMEOUT_MS = 3000;
@@ -22,4 +22,21 @@ export async function lookupClientByPhone(phone: string, signal?: AbortSignal): 
     if (isNotFound(err)) return null;
     throw err;
   }
+}
+
+/** Obtiene el listado paginado de clientes con filtros opcionales de búsqueda. */
+export async function fetchClients(params?: ClientQueryParams): Promise<ClientPaginatedResponse> {
+  const { data } = await api.get<ClientPaginatedResponse>('/clients', {
+    params,
+  });
+  return data;
+}
+
+/** Actualiza la información de un cliente de la agenda. */
+export async function updateClient(
+  id: number,
+  data: { full_name: string; phone: string; address?: string | null }
+): Promise<Client> {
+  const response = await api.put<Client>(`/clients/${id}`, data);
+  return response.data;
 }

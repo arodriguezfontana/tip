@@ -38,3 +38,47 @@ def upsert_client(db: Session, phone: str, full_name: str, address: str | None) 
     if address:
         client.address = address
     return client
+
+
+def get_clients_paginated(
+    db: Session, search: str | None = None, page: int = 1, per_page: int = 20
+) -> tuple[list[Client], int]:
+    """Obtiene el listado paginado de clientes, ordenados por los más recientes, con opción de búsqueda."""
+    query = db.query(Client)
+
+    if search:
+        search_filter = f"%{search.strip()}%"
+        query = query.filter(
+            (Client.full_name.ilike(search_filter)) | (Client.phone.ilike(search_filter))
+        )
+
+    total = query.count()
+    
+    clients = (
+        query.order_by(Client.created_at.desc(), Client.id.desc())
+        .offset((page - 1) * per_page)
+        .limit(per_page)
+        .all()
+    )
+
+    return clients, total
+
+
+def update_client(db: Session, client_id: int, full_name: str, phone: str, address: str | None) -> Client | None:
+    """Actualiza los datos de un cliente de la agenda validando unicidad de teléfono."""
+    normalized_phone = normalize_phone(phone)
+    client = db.query(Client).filter(Client.id == client_id).first()
+    if not client:
+        return None
+
+    existing = db.query(Client).filter(Client.phone == normalized_phone, Client.id != client_id).first()
+    if existing:
+        raise ValueError("El número de teléfono ya está registrado por otro cliente.")
+
+    client.full_name = full_name.strip()
+    client.phone = normalized_phone
+    client.address = address.strip() if address else None
+    
+    db.commit()
+    db.refresh(client)
+    return client
