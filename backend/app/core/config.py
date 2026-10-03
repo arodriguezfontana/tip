@@ -15,6 +15,9 @@ class Settings(BaseSettings):
     TELEGRAM_TOKEN: str
     GOOGLE_API_KEY: str
     TELEGRAM_WEBHOOK_SECRET: str = ""
+    # URL pública fija del backend (ej. el dominio estático de ngrok). Si está, el webhook
+    # de Telegram se registra solo al levantar la API.
+    PUBLIC_URL: str = ""
 
     JWT_SECRET_KEY: str
     JWT_ALGORITHM: str = "HS256"
