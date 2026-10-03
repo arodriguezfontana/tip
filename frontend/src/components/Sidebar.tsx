@@ -1,4 +1,4 @@
-export type ViewKey = 'tomar-pedido' | 'comandas' | 'historial' | 'ingresos' | 'estadisticas';
+export type ViewKey = 'tomar-pedido' | 'comandas' | 'historial' | 'ingresos' | 'estadisticas' | 'clientes';
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: 'tomar-pedido', label: 'Tomar pedido' },
@@ -6,6 +6,7 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: 'historial', label: 'Historial' },
   { key: 'ingresos', label: 'Ingresos' },
   { key: 'estadisticas', label: 'Estadísticas' },
+  { key: 'clientes', label: 'Clientes' },
 ];
 
 interface SidebarProps {

@@ -9,6 +9,7 @@ import { HistorialView } from '@/components/HistorialView';
 import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
+import { ClientesView } from '@/components/ClientesView';
 
 export default function AdminDashboardPage() {
   const { logout } = useAuth();
@@ -21,24 +22,21 @@ export default function AdminDashboardPage() {
     navigate('/login', { replace: true });
   };
 
-  // En pantallas anchas el panel ocupa exactamente el alto de la pantalla: la página no scrollea,
-  // cada sección scrollea internamente sus listas y tablas.
   return (
     <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-gray-50 flex flex-col">
       <TopBar onToggleMenu={() => setMenuOpen((prev) => !prev)} menuOpen={menuOpen} onLogout={handleLogout} />
       <main className="flex-1 px-4 py-6 lg:min-h-0">
         <div className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto lg:h-full`}>
-          {/* Montado siempre para no perder un pedido a medio cargar al cambiar de sección. */}
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
           </div>
-          {/* Siempre montado para que el sondeo y la alerta sonora sigan activos en las otras vistas. */}
           <div hidden={activeView !== 'comandas'} className="lg:h-full">
             <ComandasBoard onTakeOrder={() => setActiveView('tomar-pedido')} />
           </div>
           {activeView === 'historial' && <HistorialView />}
           {activeView === 'ingresos' && <IngresosView />}
           {activeView === 'estadisticas' && <StatsSection />}
+          {activeView === 'clientes' && <ClientesView />}
         </div>
       </main>
 
@@ -46,7 +44,10 @@ export default function AdminDashboardPage() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         activeView={activeView}
-        onSelect={(view) => setActiveView(view)}
+        onSelect={(view) => {
+          setActiveView(view);
+          setMenuOpen(false);
+        }}
       />
     </div>
   );
