@@ -1,11 +1,9 @@
-
-
 # RestoIT
 
 Plataforma de gestión de locales gastronomicos unificada e inteligente que automatice la toma de pedidos a través de canales digitales y conversacionales 24/7, eliminando los errores humanos en el cálculo de cuentas y acelerando la atención sin requerir más personal. Al centralizar todas las comandas en tiempo real en un panel administrativo ordenado por sectores de preparación y respaldado por un módulo de análisis de datos, el comerciante logra reducir sus costos operativos, optimizar las compras de materias primas y obtener un control financiero absoluto para maximizar la rentabilidad y escalabilidad de su negocio.
 
 <p align="center">
-  <img src="images/restoit-logo.jpeg" alt="RestoIT Logo" width="200"/>
+  <img width="1254" height="1254" alt="RestoIT logo" src="https://github.com/user-attachments/assets/53d5f98c-6ee0-45d5-90cf-28bb1f008d67" />
 </p>
 
 ---
