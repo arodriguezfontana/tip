@@ -5,7 +5,6 @@ from unittest.mock import patch
 import pytest
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.menu import Category, Product
 from app.modules.order import Order
 from app.services.order_service import calcular_demora_actual
 from app.services.tools.order_tools import (
@@ -21,17 +20,6 @@ def tools_session(db_session):
     """Las tools abren su propia sesión: las apuntamos a la base de test."""
     with patch("app.services.tools.order_tools.SessionLocal", TestingSessionLocal):
         yield
-
-
-@pytest.fixture()
-def muzza(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    product = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    db_session.add(product)
-    db_session.commit()
-    return product
 
 
 def _fijar_hora_local(hora: int, minuto: int = 0):

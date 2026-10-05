@@ -1,21 +1,6 @@
-import pytest
-
-from app.modules.menu import Category, Product
 from app.modules.order import Order, OrderItem
 
 COUNTER_URL = "/api/v1/orders/counter"
-
-
-@pytest.fixture()
-def products(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    muzza = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    coca = Product(name="Coca-Cola 500ml", price=2500.0, category_id=category.id, dietary_restrictions=[])
-    db_session.add_all([muzza, coca])
-    db_session.commit()
-    return {"muzza": muzza, "coca": coca}
 
 
 def _counter_payload(products, **overrides):

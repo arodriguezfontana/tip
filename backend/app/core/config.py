@@ -4,6 +4,8 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TIP"
     API_V1_STR: str = "/api/v1"
+    # Orígenes del frontend habilitados (CORS). Por variable de entorno se pasa como lista JSON.
+    CORS_ORIGINS: list[str] = ["http://localhost:5173", "http://127.0.0.1:5173"]
 
     POSTGRES_SERVER: str = "localhost"
     POSTGRES_PORT: int = 5432

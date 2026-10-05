@@ -1,0 +1,176 @@
+name: CI
+
+on:
+  push:
+    branches: [main, dev]
+  pull_request:
+    branches: [main, dev]
+  workflow_dispatch:
+
+# Si llega un push nuevo a la misma rama, se cancela la corrida anterior.
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+
+env:
+  # Misma versión que la imagen de Docker del backend.
+  PYTHON_VERSION: "3.10"
+  NODE_VERSION: "24"
+
+jobs:
+  backend:
+    name: Backend · tests y migraciones
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: backend
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tip_test
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      # Valores de prueba: el CI nunca habla con Telegram ni con Gemini.
+      TELEGRAM_TOKEN: ci-telegram-token
+      GOOGLE_API_KEY: ci-google-api-key
+      JWT_SECRET_KEY: ci-jwt-secret-key-con-largo-suficiente
+      ADMIN_EMAIL: admin@restoit.com
+      ADMIN_PASSWORD: ci-admin-password
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - name: Instalar dependencias
+        run: pip install -r requirements-dev.txt
+
+      - name: Migraciones (aplicar, verificar contra los modelos y revertir)
+        env:
+          DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tip_migrations
+        run: |
+          python -c "import sqlalchemy as sa; e = sa.create_engine('postgresql://postgres:postgres@localhost:5432/postgres', isolation_level='AUTOCOMMIT'); e.connect().execute(sa.text('CREATE DATABASE tip_migrations'))"
+          alembic upgrade head
+          alembic check
+          alembic downgrade base
+          alembic upgrade head
+
+      - name: Tests (PostgreSQL)
+        env:
+          TEST_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tip_test
+        run: pytest --cov=app --cov-report=term --cov-report=xml
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: backend-coverage
+          path: backend/coverage.xml
+          if-no-files-found: ignore
+
+  frontend:
+    name: Frontend · lint, tipos y tests
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+
+      - name: Instalar dependencias
+        run: npm ci
+
+      - name: Lint
+        run: npm run lint
+
+      - name: Tests
+        run: npm run test:coverage
+
+      - name: Build (incluye el chequeo de tipos)
+        run: npm run build
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        with:
+          name: frontend-coverage
+          path: frontend/coverage
+          if-no-files-found: ignore
+
+  e2e:
+    name: E2E · Playwright
+    runs-on: ubuntu-latest
+    needs: [backend, frontend]
+    services:
+      postgres:
+        image: postgres:15-alpine
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: tip_e2e
+        ports: ["5432:5432"]
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgresql://postgres:postgres@localhost:5432/tip_e2e
+      E2E_PYTHON: python
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+          cache-dependency-path: backend/requirements*.txt
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: ${{ env.NODE_VERSION }}
+          cache: npm
+          cache-dependency-path: |
+            frontend/package-lock.json
+            e2e/package-lock.json
+
+      - name: Instalar dependencias
+        run: |
+          pip install -r backend/requirements.txt
+          npm ci --prefix frontend
+          npm ci --prefix e2e
+
+      - name: Instalar Chromium
+        working-directory: e2e
+        run: npx playwright install --with-deps chromium
+
+      - name: Tests e2e
+        working-directory: e2e
+        run: npx playwright test
+
+      - uses: actions/upload-artifact@v7
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 14

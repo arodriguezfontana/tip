@@ -1,4 +1,4 @@
-import { useEffect, useState, useCallback } from 'react';
+import { useEffect, useState } from 'react';
 import { fetchClients, updateClient } from '@/services/clientService';
 import { ClientEditModal } from '@/components/ClientEditModal';
 import type { Client } from '@/types/client';
@@ -27,28 +27,32 @@ export function ClientesView() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  const loadClients = useCallback(async () => {
-    setLoading(true);
-    try {
-      const response = await fetchClients({
-        search: debouncedSearch || undefined,
-        page,
-        per_page: perPage,
-      });
-      setClients(response.items);
-      setTotal(response.total);
-      setTotalPages(response.total_pages);
-      setError(null);
-    } catch {
-      setError('No se pudo cargar el listado de clientes.');
-    } finally {
-      setLoading(false);
-    }
-  }, [debouncedSearch, page, perPage]);
+  // Se incrementa para volver a pedir el listado (por ejemplo, después de editar un cliente).
+  const [reloadKey, setReloadKey] = useState(0);
 
   useEffect(() => {
-    loadClients();
-  }, [loadClients]);
+    let cancelled = false;
+
+    fetchClients({ search: debouncedSearch || undefined, page, per_page: perPage })
+      .then((response) => {
+        // Se descarta la respuesta si mientras tanto cambió la búsqueda o la página.
+        if (cancelled) return;
+        setClients(response.items);
+        setTotal(response.total);
+        setTotalPages(response.total_pages);
+        setError(null);
+      })
+      .catch(() => {
+        if (!cancelled) setError('No se pudo cargar el listado de clientes.');
+      })
+      .finally(() => {
+        if (!cancelled) setLoading(false);
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [debouncedSearch, page, perPage, reloadKey]);
 
   const handleSaveClient = async (id: number, data: { full_name: string; phone: string; address: string | null }) => {
     await updateClient(id, data);
@@ -56,7 +60,7 @@ export function ClientesView() {
     setTimeout(() => setToastMessage(null), 4000);
 
     setEditingClient(null);
-    loadClients();
+    setReloadKey((key) => key + 1);
   };
 
   return (

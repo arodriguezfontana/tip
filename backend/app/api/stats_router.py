@@ -1,9 +1,10 @@
-from datetime import datetime
+from datetime import datetime, timezone
 from typing import Dict, List
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
+from app.core.time import RESTAURANT_TZ
 from app.db.session import get_db
 from app.modules.order import Order
 from app.modules.user import User
@@ -107,7 +108,11 @@ def get_best_selling_day(
 
     sales_per_day: Dict[str, float] = {}
     for order in orders:
-        day_name = python_days_map[order.created_at.weekday()]
+        # El día se cuenta en la hora del local: un pedido del lunes a las 22 hs es del lunes, no del martes en UTC.
+        created_at = order.created_at
+        if created_at.tzinfo is None:  # SQLite no conserva la zona horaria; la base guarda UTC
+            created_at = created_at.replace(tzinfo=timezone.utc)
+        day_name = python_days_map[created_at.astimezone(RESTAURANT_TZ).weekday()]
         sales_per_day[day_name] = sales_per_day.get(day_name, 0.0) + order.total_amount
 
     if not sales_per_day:

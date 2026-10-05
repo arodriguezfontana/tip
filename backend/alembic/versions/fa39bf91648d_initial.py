@@ -126,6 +126,7 @@ def downgrade() -> None:
     op.drop_table('products')
     op.drop_index(op.f('ix_ingredients_name'), table_name='ingredients')
     op.drop_index(op.f('ix_ingredients_id'), table_name='ingredients')
+    op.drop_table('ingredients')
     op.drop_index(op.f('ix_categories_name'), table_name='categories')
     op.drop_index(op.f('ix_categories_id'), table_name='categories')
     op.drop_table('categories')

@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
@@ -7,14 +7,18 @@ from app.db.session import get_db
 from app.modules.client import Client
 from app.modules.user import User
 from app.schemas.client_schemas import ClientPaginatedResponse, ClientResponse
+from app.schemas.common import PHONE_PATTERN
 from app.services.client_service import find_client_by_phone, get_clients_paginated, update_client
 
 router = APIRouter()
 
 
 class ClientUpdatePayload(BaseModel):
+    model_config = ConfigDict(str_strip_whitespace=True)
+
     full_name: str = Field(..., min_length=1, max_length=150)
-    phone: str = Field(..., min_length=1, max_length=30)
+    # Mismo formato que en los pedidos: un teléfono sin dígitos quedaría vacío al normalizarlo.
+    phone: str = Field(..., min_length=6, max_length=30, pattern=PHONE_PATTERN)
     address: str | None = Field(None, max_length=255)
 
 

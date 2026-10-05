@@ -1,0 +1,17 @@
+{
+  "name": "restoit-e2e",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "playwright test",
+    "test:ui": "playwright test --ui",
+    "report": "playwright show-report",
+    "db:up": "docker run -d --rm --name restoit_e2e_db -p 55432:5432 -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=postgres -e POSTGRES_DB=tip_e2e postgres:15-alpine",
+    "db:down": "docker stop restoit_e2e_db"
+  },
+  "devDependencies": {
+    "@playwright/test": "1.63.0",
+    "@types/node": "^24.13.3",
+    "typescript": "~6.0.2"
+  }
+}

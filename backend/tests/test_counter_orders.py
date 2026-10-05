@@ -1,29 +1,10 @@
 import pytest
-from fastapi.testclient import TestClient
 
 from app.core.security import create_access_token
-from app.db.session import get_db
-from app.main import app
-from app.modules.menu import Category, Product
 from app.modules.order import Order
 from app.modules.user import User
 
 COUNTER_URL = "/api/v1/orders/counter"
-
-
-@pytest.fixture()
-def products(db_session):
-    category = Category(name="Pizzas")
-    db_session.add(category)
-    db_session.flush()
-    muzza = Product(name="Pizza Muzzarella", price=8500.0, category_id=category.id, dietary_restrictions=[])
-    coca = Product(name="Coca-Cola 500ml", price=2500.0, category_id=category.id, dietary_restrictions=[])
-    agotada = Product(
-        name="Pizza Agotada", price=9000.0, category_id=category.id, dietary_restrictions=[], is_active=False
-    )
-    db_session.add_all([muzza, coca, agotada])
-    db_session.commit()
-    return {"muzza": muzza, "coca": coca, "agotada": agotada}
 
 
 def _payload(items, **overrides):
@@ -108,28 +89,16 @@ def test_rechaza_productos_no_disponibles(client, db_session, products):
     assert db_session.query(Order).count() == 0
 
 
-@pytest.fixture()
-def real_auth_client(db_session):
-    def override_get_db():
-        yield db_session
-
-    app.dependency_overrides[get_db] = override_get_db
-    try:
-        yield TestClient(app)
-    finally:
-        app.dependency_overrides.clear()
-
-
-def test_solo_el_personal_del_local_puede_cargar_pedidos_presenciales(real_auth_client, db_session, products):
+def test_solo_el_personal_del_local_puede_cargar_pedidos_presenciales(public_client, db_session, products):
     cliente = User(email="cliente@mail.com", hashed_password="x", role="CUSTOMER", is_active=True)
     db_session.add(cliente)
     db_session.commit()
     token_cliente = create_access_token(subject=str(cliente.id), role="CUSTOMER")
     payload = _payload([{"product_id": products["muzza"].id, "quantity": 1}])
 
-    assert real_auth_client.post(COUNTER_URL, json=payload).status_code == 401
+    assert public_client.post(COUNTER_URL, json=payload).status_code == 401
     assert (
-        real_auth_client.post(COUNTER_URL, json=payload, headers={"Authorization": f"Bearer {token_cliente}"}).status_code
+        public_client.post(COUNTER_URL, json=payload, headers={"Authorization": f"Bearer {token_cliente}"}).status_code
         == 403
     )
     assert db_session.query(Order).count() == 0
