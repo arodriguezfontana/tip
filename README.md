@@ -23,9 +23,9 @@ Plataforma de gestión de locales gastronomicos unificada e inteligente que auto
 - Backend: https://github.com/arodriguezfontana/tip/tree/dev/backend
 - Frontend: https://github.com/arodriguezfontana/tip/tree/dev/frontend
 - Trello: https://trello.com/b/PkdE2JgS/ttip-poc
-- Entregas: 
-* [PoC](https://github.com/arodriguezfontana/tip/wiki/PoC)
-* [Entrega 1](https://github.com/arodriguezfontana/tip/wiki/Entrega-1)
+- Entregas:
+    * [PoC](https://github.com/arodriguezfontana/tip/wiki/PoC)
+    * [Entrega 1](https://github.com/arodriguezfontana/tip/wiki/Entrega-1)
 - Demo:
 
 ### Elevator Pitch
