@@ -19,6 +19,7 @@ from app.schemas.order_schemas import (
     WebOrderCreatedResponse,
     WebOrderItemResponse,
 )
+from app.services.business_hours_service import LocalCerradoError
 from app.services.order_notification_service import notify_order_status_change
 from app.services.order_service import (
     InvalidTransitionError,
@@ -113,10 +114,13 @@ def create_order_from_web(
     los precios se toman de la base de datos. El pedido queda 'Pendiente' igual que los del bot.
     Se puede pedir como invitado; si el cliente tiene la sesión iniciada, el pedido queda asociado
     a su cuenta (los datos de contacto son siempre los enviados en el pedido).
+    Fuera del horario de atención del local responde 409.
     """
     customer = current_user if current_user is not None and current_user.role == ROLE_CUSTOMER else None
     try:
         order = create_web_order(db, payload, customer=customer)
+    except LocalCerradoError as exc:
+        raise HTTPException(status_code=http_status.HTTP_409_CONFLICT, detail=str(exc))
     except InvalidOrderError as exc:
         raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
     except SQLAlchemyError:

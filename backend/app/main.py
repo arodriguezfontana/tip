@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.api import auth_router
+from app.api import business_hours_router
 from app.api import chat_router
 from app.api import client_router
 from app.api import customer_router
@@ -53,6 +54,7 @@ def health_check(db: Session = Depends(get_db)):
         return {"status": "error", "database": f"Error de conexión: {e!s}"}
 
 api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
+api_router.include_router(business_hours_router.router, prefix="/business-hours", tags=["Business hours"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
