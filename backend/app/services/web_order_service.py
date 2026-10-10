@@ -10,6 +10,7 @@ from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.modules.user import User
 from app.schemas.order_schemas import MAX_QUANTITY_PER_ITEM, CounterOrderCreate, WebOrderCreate
+from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 from app.services.order_service import calcular_demora_actual
 
@@ -86,7 +87,11 @@ def _persist(db: Session, order: Order) -> Order:
 
 
 def create_web_order(db: Session, payload: WebOrderCreate, customer: User | None = None) -> Order:
-    """Pedido hecho por el cliente desde la web: queda 'Pendiente' hasta que el local lo acepte."""
+    """Pedido hecho por el cliente desde la web: queda 'Pendiente' hasta que el local lo acepte.
+
+    Solo se aceptan dentro del horario de atención (si no, lanza LocalCerradoError).
+    """
+    verificar_local_abierto(db)
     order = _build_order(db, payload, source="web")
     order.customer_id = customer.id if customer is not None else None
     return _persist(db, order)
