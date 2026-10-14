@@ -79,7 +79,7 @@ def test_pedido_para_retirar_no_borra_la_direccion_guardada(client, db_session, 
 
 
 def test_si_falla_la_agenda_el_pedido_igual_se_registra(client, db_session, muzza):
-    with patch("app.services.web_order_service.upsert_client", side_effect=SQLAlchemyError("caída")):
+    with patch("app.services.order_service.upsert_client", side_effect=SQLAlchemyError("caída")):
         response = client.post(COUNTER_URL, json=_payload(muzza))
 
     assert response.status_code == 201

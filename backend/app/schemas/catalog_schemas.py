@@ -1,7 +1,9 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from app.modules.menu import Category, Product
 from app.schemas.ingredient_schemas import RecipeItemResponse
-from app.schemas.menu_schemas import CategoryResponse
+from app.schemas.menu_schemas import CategoryResponse, product_image_url
+from app.services.catalog_service import ProductData
 
 MAX_PRICE = 10_000_000
 MAX_DIETARY_RESTRICTIONS = 10
@@ -36,6 +38,9 @@ class ProductPayload(BaseModel):
                 limpias.append(restriccion)
         return limpias
 
+    def to_data(self) -> ProductData:
+        return ProductData(**self.model_dump())
+
 
 class AdminProductResponse(BaseModel):
     """Producto tal como lo ve el panel: incluye los no disponibles, los sin categoría y su receta."""
@@ -49,6 +54,23 @@ class AdminProductResponse(BaseModel):
     category: CategoryResponse | None
     image_url: str | None
     recipe: list[RecipeItemResponse]
+
+    @classmethod
+    def from_model(cls, product: Product) -> "AdminProductResponse":
+        return cls(
+            id=product.id,
+            name=product.name,
+            description=product.description,
+            price=product.price,
+            is_active=product.is_active,
+            dietary_restrictions=product.dietary_restrictions or [],
+            category=CategoryResponse.model_validate(product.category) if product.category else None,
+            image_url=product_image_url(product),
+            recipe=sorted(
+                (RecipeItemResponse.from_model(item) for item in product.recipe_items),
+                key=lambda item: item.ingredient_name.lower(),
+            ),
+        )
 
 
 class CategoryPayload(BaseModel):
@@ -74,3 +96,14 @@ class AdminCategoryResponse(BaseModel):
     id: int
     name: str
     products: list[CategoryProductResponse]
+
+    @classmethod
+    def from_model(cls, category: Category) -> "AdminCategoryResponse":
+        return cls(
+            id=category.id,
+            name=category.name,
+            products=[
+                CategoryProductResponse.model_validate(product)
+                for product in sorted(category.products, key=lambda p: p.name.lower())
+            ],
+        )

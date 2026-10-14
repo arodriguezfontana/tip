@@ -8,6 +8,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import get_db
 from app.api import auth_router
+from app.api.errors import register_error_handlers
 from app.api import category_router
 from app.api import chat_router
 from app.api import client_router
@@ -17,7 +18,7 @@ from app.api import menu_router
 from app.api import order_router
 from app.api import product_router
 from app.api import telegram_router
-from app.api import stats_router  # Corregido el path relativo de importación
+from app.api import stats_router
 from app.services.telegram_service import register_webhook
 
 logging.basicConfig(level=logging.INFO)
@@ -34,6 +35,8 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
+
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -65,7 +68,7 @@ api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
-api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])  
+api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
 
 app.include_router(api_router)
 

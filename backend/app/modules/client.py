@@ -1,4 +1,7 @@
+import re
+
 from sqlalchemy import Column, DateTime, Integer, String
+from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
@@ -20,3 +23,38 @@ class Client(Base):
     address = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+
+    @staticmethod
+    def normalize_phone(phone: str) -> str:
+        """Deja solo los dígitos (y el '+' inicial) para comparar teléfonos escritos con distinto formato."""
+        phone = phone.strip()
+        digits = re.sub(r"\D", "", phone)
+        return f"+{digits}" if phone.startswith("+") else digits
+
+    @validates("phone")
+    def _normalize_phone(self, _key: str, phone: str) -> str:
+        return self.normalize_phone(phone)
+
+    @validates("full_name")
+    def _strip_name(self, _key: str, full_name: str) -> str:
+        return full_name.strip()
+
+    @validates("address")
+    def _strip_address(self, _key: str, address: str | None) -> str | None:
+        return (address or "").strip() or None
+
+    def update_details(self, full_name: str, phone: str, address: str | None) -> None:
+        """Edición manual desde el panel: se reemplazan todos los datos."""
+        self.full_name = full_name
+        self.phone = phone
+        self.address = address
+
+    def register_order_contact(self, full_name: str, address: str | None) -> None:
+        """Actualiza el cliente con los datos de su último pedido.
+
+        La dirección solo se pisa cuando viene informada: un pedido para retirar en el local no borra la
+        dirección que ya teníamos guardada.
+        """
+        self.full_name = full_name
+        if address:
+            self.address = address

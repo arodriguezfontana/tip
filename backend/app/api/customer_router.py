@@ -23,4 +23,4 @@ def update_profile(
     current_customer: User = Depends(get_current_customer),
 ) -> User:
     """Actualiza los datos personales que se usan para autocompletar los pedidos."""
-    return update_customer_profile(db, current_customer, payload)
+    return update_customer_profile(db, current_customer, payload.full_name, payload.phone, payload.address)

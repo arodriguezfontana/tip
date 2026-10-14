@@ -1,50 +1,54 @@
-from fastapi import HTTPException, status
+"""Cuentas de usuario: inicio de sesión, registro de clientes de la web y sus datos personales."""
+
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.core.security import hash_password, verify_password
+from app.core.errors import AuthenticationError, ConflictError
+from app.core.security import create_access_token, hash_password, verify_password
+from app.db.session import commit
 from app.modules.user import ROLE_CUSTOMER, User
-from app.schemas.customer_schemas import CustomerProfileUpdate, CustomerRegisterRequest
 
 
 def _find_by_email(db: Session, email: str) -> User | None:
     return db.query(User).filter(func.lower(User.email) == email.strip().lower()).first()
 
 
+def issue_token(user: User) -> str:
+    return create_access_token(subject=str(user.id), role=user.role)
+
+
 def authenticate_user(db: Session, email: str, password: str) -> User:
-    """Valida credenciales. Lanza 401 si son inválidas o el usuario está inactivo."""
+    """Valida las credenciales del usuario y que siga activo."""
     user = _find_by_email(db, email)
     if not user or not verify_password(password, user.hashed_password):
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Credenciales inválidas")
+        raise AuthenticationError("Credenciales inválidas")
     if not user.is_active:
-        raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="Usuario inactivo")
+        raise AuthenticationError("Usuario inactivo")
     return user
 
 
-def register_customer(db: Session, payload: CustomerRegisterRequest) -> User:
-    """Crea la cuenta de un cliente de la web. Lanza 409 si el email ya está registrado."""
-    if _find_by_email(db, payload.email):
-        raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail="Ya existe una cuenta con ese email.")
+def register_customer(
+    db: Session, email: str, password: str, full_name: str, phone: str, address: str
+) -> User:
+    """Crea la cuenta de un cliente de la web. El email no puede estar registrado."""
+    if _find_by_email(db, email):
+        raise ConflictError("Ya existe una cuenta con ese email.")
 
     user = User(
-        email=payload.email.lower(),
-        hashed_password=hash_password(payload.password),
+        email=email.lower(),
+        hashed_password=hash_password(password),
         role=ROLE_CUSTOMER,
         is_active=True,
-        full_name=payload.full_name,
-        phone=payload.phone,
-        address=payload.address,
     )
+    user.update_profile(full_name, phone, address)
     db.add(user)
-    db.commit()
+    commit(db)
     db.refresh(user)
     return user
 
 
-def update_customer_profile(db: Session, customer: User, payload: CustomerProfileUpdate) -> User:
-    customer.full_name = payload.full_name
-    customer.phone = payload.phone
-    customer.address = payload.address
-    db.commit()
+def update_customer_profile(db: Session, customer: User, full_name: str, phone: str, address: str) -> User:
+    customer.update_profile(full_name, phone, address)
+    commit(db)
     db.refresh(customer)
     return customer

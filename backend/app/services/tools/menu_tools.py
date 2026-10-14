@@ -6,10 +6,8 @@ herramienta), así mostrar el menú no requiere una llamada extra a Gemini.
 
 import logging
 
-from sqlalchemy.orm import joinedload
-
 from app.db.session import SessionLocal
-from app.modules.menu import Product
+from app.services.catalog_service import list_available_products
 
 logger = logging.getLogger(__name__)
 
@@ -19,13 +17,7 @@ def obtener_menu_actual() -> str:
     la base: lo que se cambia en el catálogo del panel se refleja en el mensaje siguiente."""
     db = SessionLocal()
     try:
-        productos = (
-            db.query(Product)
-            .options(joinedload(Product.category))
-            .filter(Product.is_available)
-            .order_by(Product.category_id, Product.name)
-            .all()
-        )
+        productos = list_available_products(db)
         if not productos:
             return "No hay productos disponibles en este momento."
         return "\n".join(

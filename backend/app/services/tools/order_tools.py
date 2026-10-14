@@ -1,20 +1,24 @@
-"""Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta."""
+"""Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta.
 
-from datetime import datetime, time, timedelta, timezone
+Son la "capa de entrada" del bot (como los routers para la API): interpretan lo que arma el modelo de
+lenguaje y le devuelven textos para el cliente, pero las reglas del pedido y el acceso a la base quedan en
+los servicios y el modelo, iguales para todos los canales.
+"""
+
+from datetime import datetime, time, timezone
 import json
 import logging
 import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolArg
-from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.modules.menu import Product
-from app.modules.order import Order, OrderItem
+from app.modules.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError
 from app.schemas.common import PHONE_PATTERN
-from app.services.order_service import calcular_demora_actual
-from app.services.web_order_service import PICKUP_ADDRESS, InvalidOrderError, build_order_items
+from app.services.catalog_service import find_available_products_by_name
+from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -51,46 +55,25 @@ def _limpiar_observaciones(observaciones: str | None) -> str | None:
     return texto[:MAX_LARGO_OBSERVACIONES] or None
 
 
-def _items_con_precios_de_la_base(db: Session, items: list) -> tuple[list[OrderItem], float] | str:
-    """Arma los ítems del pedido con los precios actuales de la base, sin confiar en los que mande el modelo.
+def _items_del_modelo(items: list) -> list[tuple[int, int]] | None:
+    """(product_id, cantidad) de cada ítem que armó el modelo, o None si no se pueden interpretar.
 
-    Devuelve los ítems y el total, o el motivo por el que el pedido no se puede registrar.
+    Solo se toman los ids y las cantidades: los precios y el total los calcula siempre el pedido con los
+    de la base, nunca con lo que haya armado el modelo.
     """
-    cantidades: dict[int, int] = {}
     try:
-        for item in items:
-            product_id, cantidad = int(item["product_id"]), int(item.get("quantity") or 1)
-            cantidades[product_id] = cantidades.get(product_id, 0) + cantidad
+        return [(int(item["product_id"]), int(item.get("quantity") or 1)) for item in items]
     except (KeyError, TypeError, ValueError, AttributeError):
-        return "No pude identificar los productos del pedido."
-
-    # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
-    try:
-        return build_order_items(db, cantidades)
-    except InvalidOrderError as exc:
-        return str(exc)
+        return None
 
 
 def _buscar_producto(db: Session, nombre: str) -> Product | list[Product] | None:
-    """Producto disponible que corresponde al nombre que escribió el cliente.
-
-    Si el nombre coincide exacto (sin distinguir mayúsculas) se usa ese. Si no, se buscan los que lo
-    contienen: con uno solo se usa ese y con varios se devuelve la lista para preguntarle cuál quiso,
-    en vez de elegir uno al azar (y cobrarle otro producto).
-    """
-    disponibles = db.query(Product).filter(Product.is_available)
-    exacto = disponibles.filter(func.lower(Product.name) == nombre.lower()).first()
-    if exacto is not None:
-        return exacto
-    candidatos = disponibles.filter(Product.name.ilike(f"%{nombre}%")).order_by(Product.name).all()
+    """Producto que corresponde al nombre que escribió el cliente: uno solo, la lista de candidatos si el
+    nombre es ambiguo (para preguntarle cuál quiso, en vez de elegir uno al azar) o None."""
+    candidatos = find_available_products_by_name(db, nombre)
     if not candidatos:
         return None
     return candidatos[0] if len(candidatos) == 1 else candidatos
-
-
-def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
-    redondeado = momento.replace(second=0, microsecond=0)
-    return redondeado if redondeado == momento else redondeado + timedelta(minutes=1)
 
 
 def _evaluar_hora_programada(
@@ -109,14 +92,13 @@ def _evaluar_hora_programada(
         return None, f"No entendí el horario '{hora_str}'. ¿Me lo indicás como HH:MM (por ejemplo, 21:30)?"
 
     ahora = ahora_local()
-    demora = calcular_demora_actual(db)
-    horario_mas_temprano = _redondear_al_minuto_siguiente(ahora + timedelta(minutes=demora))
     solicitado = datetime.combine(ahora.date(), hora, tzinfo=ahora.tzinfo)
-
-    if solicitado + timedelta(minutes=tolerancia_minutos) < horario_mas_temprano:
+    try:
+        validate_schedule(db, solicitado, now=ahora, tolerance_minutes=tolerancia_minutos)
+    except ScheduleTooEarlyError as exc:
         return None, (
-            f"Con la demora actual (unos {demora} minutos), lo más rápido que podemos tener tu pedido "
-            f"es a las {horario_mas_temprano:%H:%M}. ¿Querés programarlo para esa hora o preferís pedirlo para ahora?"
+            f"Con la demora actual (unos {exc.delay_minutes} minutos), lo más rápido que podemos tener tu pedido "
+            f"es a las {exc.earliest:%H:%M}. ¿Querés programarlo para esa hora o preferís pedirlo para ahora?"
         )
     return solicitado, None
 
@@ -204,7 +186,7 @@ def calcular_y_preparar_pedido(
                 return "Necesito que me aclares algunos productos:\n" + "\n".join(resumen_lineas)
             return "No se pudieron reconocer productos válidos en el menú para tu pedido."
 
-        es_retiro = metodo_entrega == "retiro"
+        es_retiro = metodo_entrega == DeliveryMethod.PICKUP
         falta_direccion = not es_retiro and not shipping_address
         telefono = (customer_phone or "").strip()
         falta_telefono = not _telefono_valido(telefono)
@@ -291,11 +273,10 @@ def confirmar_y_guardar_pedido(
 
         raw_delivery = str(datos.get("metodo_entrega", "domicilio")).lower()
         if "retiro" in raw_delivery or "local" in raw_delivery:
-            delivery_method = "retiro"
+            delivery_method = DeliveryMethod.PICKUP
         else:
-            delivery_method = "domicilio"
-            
-        es_retiro = delivery_method == "retiro"
+            delivery_method = DeliveryMethod.DELIVERY
+        es_retiro = delivery_method == DeliveryMethod.PICKUP
 
         cliente = datos.get("cliente") or datos.get("customer_name") or "Cliente"
         direccion = datos.get("direccion") or datos.get("shipping_address")
@@ -312,27 +293,29 @@ def confirmar_y_guardar_pedido(
         if aviso_horario:
             return f"El pedido NO se registró todavía. {aviso_horario}"
 
-        # Los precios y el total salen siempre de la base: nunca de lo que haya armado el modelo.
-        items_y_total = _items_con_precios_de_la_base(db, datos.get("items") or [])
-        if isinstance(items_y_total, str):
-            return f"El pedido NO se registró todavía. {items_y_total}"
-        order_items, total = items_y_total
+        items = _items_del_modelo(datos.get("items") or [])
+        if items is None:
+            return "El pedido NO se registró todavía. No pude identificar los productos del pedido."
 
-        nueva_orden = Order(
+        pedido = OrderRequest(
             customer_name=cliente,
-            shipping_address=PICKUP_ADDRESS if es_retiro else (direccion or "Sin especificar"),
             customer_phone=telefono,
-            notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
-            total_amount=total,
-            status="Pendiente",
             delivery_method=delivery_method,
-            telegram_chat_id=telegram_chat_id,
-            scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
+            shipping_address=None if es_retiro else direccion,
+            notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
+            items=items,
         )
-        nueva_orden.items = order_items
-        db.add(nueva_orden)
-        db.commit()
-        
+        # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
+        try:
+            create_bot_order(
+                db,
+                pedido,
+                telegram_chat_id=telegram_chat_id,
+                scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
+            )
+        except InvalidOrderError as exc:
+            return f"El pedido NO se registró todavía. {exc}"
+
         horario_texto = f" para las {scheduled_dt:%H:%M}" if scheduled_dt else ""
         return (
             f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
@@ -343,6 +326,6 @@ def confirmar_y_guardar_pedido(
     except Exception as e:
         db.rollback()
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
-        return f"Error al procesar el registro del pedido. Por favor, intentá nuevamente."
+        return "Error al procesar el registro del pedido. Por favor, intentá nuevamente."
     finally:
         db.close()
