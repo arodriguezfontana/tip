@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import * as clientService from '@/services/clientService';
+import * as ingredientService from '@/services/ingredientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
@@ -12,6 +13,7 @@ vi.mock('@/services/orderService');
 vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
+vi.mock('@/services/ingredientService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -24,6 +26,13 @@ beforeEach(() => {
   vi.mocked(statsService.fetchTopProducts).mockResolvedValue([]);
   vi.mocked(statsService.fetchBestSellingDay).mockResolvedValue({ best_selling_day: null, total_revenue: null });
   vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
+  vi.mocked(ingredientService.fetchIngredients).mockResolvedValue([]);
+  vi.mocked(ingredientService.fetchProductsWithRecipes).mockResolvedValue([]);
+  vi.mocked(ingredientService.fetchIngredientConsumption).mockResolvedValue({
+    completed_orders: 0,
+    items: [],
+    products_without_recipe: [],
+  });
 });
 
 function renderDashboard(auth = fakeAuth(ADMIN)) {
@@ -66,6 +75,15 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Clientes');
     expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
+
+    await goTo(user, 'Ingredientes');
+    expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument();
+
+    await goTo(user, 'Productos');
+    expect(await screen.findByRole('heading', { name: 'Productos y recetas' })).toBeInTheDocument();
+
+    await goTo(user, 'Reporte de ingredientes');
+    expect(await screen.findByText('No hay consumo de ingredientes en el rango seleccionado.')).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {

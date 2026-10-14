@@ -10,6 +10,9 @@ import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ClientesView } from '@/components/ClientesView';
+import { IngredientesView } from '@/components/IngredientesView';
+import { ProductosView } from '@/components/ProductosView';
+import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 
 export default function AdminDashboardPage() {
   const { logout } = useAuth();
@@ -36,7 +39,10 @@ export default function AdminDashboardPage() {
           {activeView === 'historial' && <HistorialView />}
           {activeView === 'ingresos' && <IngresosView />}
           {activeView === 'estadisticas' && <StatsSection />}
+          {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
+          {activeView === 'productos' && <ProductosView />}
+          {activeView === 'ingredientes' && <IngredientesView />}
         </div>
       </main>
 
