@@ -5,6 +5,7 @@ conozcan todas las tablas. Se listan en __all__ para que el linter no los tome c
 """
 
 from app.db.base_class import Base
+from app.models.business_hours import BusinessHours
 from app.models.client import Client
 from app.models.menu import Category, Ingredient, Product, ProductImage, ProductIngredient
 from app.models.order import Order, OrderItem
@@ -12,6 +13,7 @@ from app.models.user import User
 
 __all__ = [
     "Base",
+    "BusinessHours",
     "Category",
     "Client",
     "Ingredient",

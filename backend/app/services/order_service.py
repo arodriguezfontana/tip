@@ -14,6 +14,7 @@ from app.models.menu import Product
 from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
 from app.models.user import User
 from app.repositories import order_repository, product_repository
+from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 
 logger = logging.getLogger(__name__)
@@ -114,8 +115,10 @@ def create_web_order(db: Session, request: OrderRequest, user: User | None = Non
     """Pedido hecho desde la web: queda 'Pendiente' hasta que el local lo acepte.
 
     Se puede pedir como invitado. Si quien pide tiene sesión de cliente, el pedido queda asociado a su
-    cuenta (los datos de contacto son siempre los enviados en el pedido).
+    cuenta (los datos de contacto son siempre los enviados en el pedido). Solo se aceptan dentro del
+    horario de atención del local (si no, lanza LocalCerradoError).
     """
+    verificar_local_abierto(db)
     order = _new_order(db, request, OrderSource.WEB)
     order.customer_id = user.id if user is not None and user.is_customer else None
     return _save(db, order)

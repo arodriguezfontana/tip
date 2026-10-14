@@ -12,6 +12,7 @@ import { ClientesView } from '@/components/ClientesView';
 import { CatalogoView } from '@/components/CatalogoView';
 import { IngredientesView } from '@/components/IngredientesView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
+import { HorariosView } from '@/components/HorariosView';
 
 export default function AdminDashboardPage() {
   const { logout } = useAuth();
@@ -41,6 +42,7 @@ export default function AdminDashboardPage() {
           {activeView === 'clientes' && <ClientesView />}
           {activeView === 'productos' && <CatalogoView />}
           {activeView === 'ingredientes' && <IngredientesView />}
+          {activeView === 'horarios' && <HorariosView />}
         </div>
       </main>
 

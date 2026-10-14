@@ -76,9 +76,10 @@ class SesionChat:
         elif nombre == "confirmar_y_guardar_pedido" and MARCA_PEDIDO_REGISTRADO in resultado:
             if self.pedido_en_curso:
                 horario = self.pedido_en_curso.get("hora_programada")
+                dia = self.pedido_en_curso.get("dia_programado")
+                cuando = f"para las {horario}{f' del {dia}' if dia else ''}" if horario else "para ahora"
                 self.ultimo_pedido = (
-                    f"{_describir_items(self.pedido_en_curso)} "
-                    f"({'para las ' + horario if horario else 'para ahora'}), "
+                    f"{_describir_items(self.pedido_en_curso)} ({cuando}), "
                     "registrado y pendiente de que el local lo confirme"
                 )
             self.pedido_en_curso = None

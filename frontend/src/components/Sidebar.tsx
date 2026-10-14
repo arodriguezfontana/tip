@@ -8,9 +8,10 @@ export type ViewKey =
   | 'reporte-ingredientes'
   | 'clientes'
   | 'productos'
-  | 'ingredientes';
+  | 'ingredientes'
+  | 'horarios';
 
-/** Secciones del panel agrupadas por tarea: el día a día, el catálogo del local y los reportes. */
+/** Secciones del panel agrupadas por tarea: el día a día, el catálogo, los reportes y la configuración del local. */
 const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] = [
   {
     title: 'Operación',
@@ -34,6 +35,10 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
       { key: 'estadisticas', label: 'Estadísticas' },
       { key: 'reporte-ingredientes', label: 'Reporte de ingredientes' },
     ],
+  },
+  {
+    title: 'Configuración',
+    items: [{ key: 'horarios', label: 'Horarios' }],
   },
 ];
 

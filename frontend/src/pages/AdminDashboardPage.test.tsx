@@ -2,6 +2,7 @@ import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import * as businessHoursService from '@/services/businessHoursService';
 import * as catalogService from '@/services/catalogService';
 import * as clientService from '@/services/clientService';
 import * as ingredientService from '@/services/ingredientService';
@@ -16,6 +17,7 @@ vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
 vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
+vi.mock('@/services/businessHoursService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -35,6 +37,14 @@ beforeEach(() => {
     completed_orders: 0,
     items: [],
     products_without_recipe: [],
+  });
+  vi.mocked(businessHoursService.fetchBusinessHours).mockResolvedValue({
+    configured: false,
+    is_open: true,
+    closes_at: null,
+    next_opening: null,
+    next_opening_label: null,
+    ranges: [],
   });
 });
 
@@ -75,6 +85,7 @@ describe('AdminDashboardPage', () => {
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
+    expect(labels('Configuración')).toEqual(['Horarios']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });
@@ -128,6 +139,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Reporte de ingredientes');
     expect(await screen.findByText('No hay consumo de ingredientes en el rango seleccionado.')).toBeInTheDocument();
+
+    await goTo(user, 'Horarios');
+    expect(await screen.findByText(/se aceptan pedidos a cualquier hora/)).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {
