@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
+import { INPUT_FULL_CLASS as INPUT_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
-import { getErrorMessage } from '@/utils/customerValidation';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black';
+import { getErrorMessage } from '@/utils/errors';
 
 interface CategoryFormModalProps {
   /** null para crear una categoría nueva. */
@@ -72,125 +71,88 @@ export function CategoryFormModal({ category, products, onClose, onSave }: Categ
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div
-        role="dialog"
-        aria-modal="true"
-        aria-labelledby="category-modal-title"
-        className="bg-white rounded-2xl shadow-xl max-w-xl w-full max-h-[90vh] flex flex-col"
-      >
-        <div className="flex items-start justify-between border-b border-gray-100 px-6 py-4 shrink-0">
+    <Modal
+      title={category ? `Editar ${category.name}` : 'Nueva categoría'}
+      subtitle="Cada producto pertenece a una sola categoría."
+      onClose={onClose}
+      closeDisabled={saving}
+    >
+      <form onSubmit={handleSubmit} className="flex flex-col min-h-0" noValidate>
+        <ModalBody>
           <div>
-            <h2 id="category-modal-title" className="text-base font-bold text-gray-900">
-              {category ? `Editar ${category.name}` : 'Nueva categoría'}
-            </h2>
-            <p className="text-xs text-gray-500 mt-0.5">Cada producto pertenece a una sola categoría.</p>
-          </div>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            aria-label="Cerrar"
-            className="text-gray-400 hover:text-gray-700 text-lg font-bold"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="flex flex-col min-h-0" noValidate>
-          <div className="px-6 py-4 space-y-4 overflow-y-auto min-h-0">
-            <div>
-              <label htmlFor="category-name" className="block text-xs font-medium text-gray-700 mb-1">
-                Nombre *
-              </label>
-              <input
-                id="category-name"
-                type="text"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-                maxLength={100}
-                className={INPUT_CLASS}
-              />
-            </div>
-
-            <div className="space-y-2">
-              <div className="flex items-center justify-between gap-2">
-                <span className="text-xs font-medium text-gray-700">Productos (opcional)</span>
-                <span className="text-xs text-gray-500">
-                  {selected.size === 1 ? '1 seleccionado' : `${selected.size} seleccionados`}
-                </span>
-              </div>
-              <input
-                type="search"
-                aria-label="Buscar producto para la categoría"
-                placeholder="Buscar producto…"
-                value={search}
-                onChange={(e) => setSearch(e.target.value)}
-                onKeyDown={(e) => {
-                  // Enter en el buscador no debe guardar la categoría.
-                  if (e.key === 'Enter') e.preventDefault();
-                }}
-                className={INPUT_CLASS}
-              />
-              <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-64 overflow-y-auto">
-                {products.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">Todavía no hay productos en el catálogo.</p>
-                ) : visibleProducts.length === 0 ? (
-                  <p className="text-sm text-gray-500 text-center py-6">No hay productos que coincidan.</p>
-                ) : (
-                  visibleProducts.map((product) => (
-                    <label
-                      key={product.id}
-                      className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 select-none"
-                    >
-                      <input
-                        type="checkbox"
-                        checked={selected.has(product.id)}
-                        onChange={() => toggle(product.id)}
-                        className="w-4 h-4 accent-black shrink-0"
-                      />
-                      <span className="flex-1 min-w-0 font-medium text-gray-900 truncate">{product.name}</span>
-                      <span className="text-[11px] text-right shrink-0">{productHint(product)}</span>
-                    </label>
-                  ))
-                )}
-              </div>
-            </div>
+            <label htmlFor="category-name" className={LABEL_CLASS}>
+              Nombre *
+            </label>
+            <input
+              id="category-name"
+              type="text"
+              value={name}
+              onChange={(e) => setName(e.target.value)}
+              maxLength={100}
+              className={INPUT_CLASS}
+            />
           </div>
 
-          <div className="border-t border-gray-100 px-6 py-4 space-y-3 shrink-0">
-            {(moved > 0 || removed > 0) && (
+          <div className="space-y-2">
+            <div className="flex items-center justify-between gap-2">
+              <span className="text-xs font-medium text-gray-700">Productos (opcional)</span>
+              <span className="text-xs text-gray-500">
+                {selected.size === 1 ? '1 seleccionado' : `${selected.size} seleccionados`}
+              </span>
+            </div>
+            <input
+              type="search"
+              aria-label="Buscar producto para la categoría"
+              placeholder="Buscar producto…"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onKeyDown={(e) => {
+                // Enter en el buscador no debe guardar la categoría.
+                if (e.key === 'Enter') e.preventDefault();
+              }}
+              className={INPUT_CLASS}
+            />
+            <div className="rounded-xl border border-gray-200 divide-y divide-gray-100 max-h-64 overflow-y-auto">
+              {products.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">Todavía no hay productos en el catálogo.</p>
+              ) : visibleProducts.length === 0 ? (
+                <p className="text-sm text-gray-500 text-center py-6">No hay productos que coincidan.</p>
+              ) : (
+                visibleProducts.map((product) => (
+                  <label
+                    key={product.id}
+                    className="flex items-center gap-3 px-3 py-2 text-sm cursor-pointer hover:bg-gray-50 select-none"
+                  >
+                    <input
+                      type="checkbox"
+                      checked={selected.has(product.id)}
+                      onChange={() => toggle(product.id)}
+                      className="w-4 h-4 accent-black shrink-0"
+                    />
+                    <span className="flex-1 min-w-0 font-medium text-gray-900 truncate">{product.name}</span>
+                    <span className="text-[11px] text-right shrink-0">{productHint(product)}</span>
+                  </label>
+                ))
+              )}
+            </div>
+          </div>
+        </ModalBody>
+        <ModalFooter
+          note={
+            (moved > 0 || removed > 0) && (
               <p className="text-xs text-gray-600">
                 {moved > 0 && `${moved === 1 ? '1 producto se moverá' : `${moved} productos se moverán`} desde otra categoría. `}
                 {removed > 0 &&
                   `${removed === 1 ? '1 producto quedará' : `${removed} productos quedarán`} sin categoría y no se mostrará${removed === 1 ? '' : 'n'} en el menú.`}
               </p>
-            )}
-            {formError && (
-              <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
-                {formError}
-              </div>
-            )}
-            <div className="flex justify-end gap-2">
-              <button
-                type="button"
-                onClick={onClose}
-                disabled={saving}
-                className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
-              >
-                Cancelar
-              </button>
-              <button
-                type="submit"
-                disabled={saving}
-                className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60"
-              >
-                {saving ? 'Guardando...' : category ? 'Guardar cambios' : 'Crear categoría'}
-              </button>
-            </div>
-          </div>
-        </form>
-      </div>
-    </div>
+            )
+          }
+          error={formError}
+          onCancel={onClose}
+          submitLabel={category ? 'Guardar cambios' : 'Crear categoría'}
+          saving={saving}
+        />
+      </form>
+    </Modal>
   );
 }

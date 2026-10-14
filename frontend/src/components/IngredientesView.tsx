@@ -1,12 +1,11 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { useAsyncData } from '@/hooks/useAsyncData';
 import { createIngredient, deleteIngredient, fetchIngredients, updateIngredient } from '@/services/ingredientService';
+import { INPUT_CLASS } from '@/styles/forms';
 import type { Ingredient, IngredientPayload } from '@/types/ingredient';
-import { getErrorMessage } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import { SUGGESTED_UNITS } from '@/utils/ingredients';
-
-const INPUT_CLASS =
-  'rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black';
 
 function validate(payload: IngredientPayload): string | null {
   if (!payload.name.trim()) return 'Ingresá el nombre del ingrediente.';
@@ -19,9 +18,13 @@ function trimmed(payload: IngredientPayload): IngredientPayload {
 }
 
 export function IngredientesView() {
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Se vuelve a pedir el listado después de cada cambio (cambia en cuántos productos se usa cada uno).
+  const {
+    data: ingredients = [],
+    loading,
+    error: loadError,
+    reload,
+  } = useAsyncData(fetchIngredients, 'No se pudo cargar la lista de ingredientes.');
   const [actionError, setActionError] = useState<string | null>(null);
 
   const [newIngredient, setNewIngredient] = useState<IngredientPayload>({ name: '', unit: '' });
@@ -30,30 +33,6 @@ export function IngredientesView() {
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editDraft, setEditDraft] = useState<IngredientPayload>({ name: '', unit: '' });
   const [savingEdit, setSavingEdit] = useState(false);
-
-  // Se incrementa para volver a pedir el listado después de cada cambio.
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchIngredients()
-      .then((data) => {
-        if (cancelled) return;
-        setIngredients(data);
-        setLoadError(null);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('No se pudo cargar la lista de ingredientes.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((key) => key + 1);
 
   const handleCreate = async (event: FormEvent) => {
     event.preventDefault();

@@ -1,23 +1,20 @@
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useState } from 'react';
 import { fetchClients, updateClient } from '@/services/clientService';
 import { ClientEditModal } from '@/components/ClientEditModal';
+import { Toast } from '@/components/ui/Toast';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { useToast } from '@/hooks/useToast';
 import type { Client } from '@/types/client';
 
 export function ClientesView() {
-  const [clients, setClients] = useState<Client[]>([]);
-  const [loading, setLoading] = useState<boolean>(true);
-  const [error, setError] = useState<string | null>(null);
-
   const [search, setSearch] = useState<string>('');
   const [debouncedSearch, setDebouncedSearch] = useState<string>('');
-  
+
   const [page, setPage] = useState<number>(1);
   const [perPage, setPerPage] = useState<number>(10);
-  const [totalPages, setTotalPages] = useState<number>(1);
-  const [total, setTotal] = useState<number>(0);
 
   const [editingClient, setEditingClient] = useState<Client | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     const timer = setTimeout(() => {
@@ -27,49 +24,28 @@ export function ClientesView() {
     return () => clearTimeout(timer);
   }, [search]);
 
-  // Se incrementa para volver a pedir el listado (por ejemplo, después de editar un cliente).
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchClients({ search: debouncedSearch || undefined, page, per_page: perPage })
-      .then((response) => {
-        // Se descarta la respuesta si mientras tanto cambió la búsqueda o la página.
-        if (cancelled) return;
-        setClients(response.items);
-        setTotal(response.total);
-        setTotalPages(response.total_pages);
-        setError(null);
-      })
-      .catch(() => {
-        if (!cancelled) setError('No se pudo cargar el listado de clientes.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [debouncedSearch, page, perPage, reloadKey]);
+  const listing = useAsyncData(
+    useCallback(
+      () => fetchClients({ search: debouncedSearch || undefined, page, per_page: perPage }),
+      [debouncedSearch, page, perPage]
+    ),
+    'No se pudo cargar el listado de clientes.'
+  );
+  const { loading, error } = listing;
+  const clients = listing.data?.items ?? [];
+  const total = listing.data?.total ?? 0;
+  const totalPages = listing.data?.total_pages ?? 1;
 
   const handleSaveClient = async (id: number, data: { full_name: string; phone: string; address: string | null }) => {
     await updateClient(id, data);
-    setToastMessage('Los datos del cliente se actualizaron exitosamente.');
-    setTimeout(() => setToastMessage(null), 4000);
-
+    toast.show('Los datos del cliente se actualizaron exitosamente.');
     setEditingClient(null);
-    setReloadKey((key) => key + 1);
+    listing.reload();
   };
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 relative">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-green-50 text-green-800 border border-green-200 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition">
-          {toastMessage}
-        </div>
-      )}
+      <Toast message={toast.message} />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>

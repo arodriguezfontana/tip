@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
 import { CartSummary } from '@/components/CartSummary';
@@ -9,9 +9,9 @@ import { CustomerAuthModal } from '@/components/CustomerAuthModal';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
-import { fetchMenuProducts } from '@/services/menuService';
+import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { groupByCategory } from '@/utils/productGrouping';
-import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
+import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 
 interface SubmittedOrder {
   order: WebOrderCreated;
@@ -23,38 +23,12 @@ export default function MenuPage() {
   const { user, isCustomer } = useAuth();
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [productsError, setProductsError] = useState<string | null>(null);
-
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchMenuProducts()
-      .then((data) => {
-        if (!cancelled) setProducts(data);
-      })
-      .catch((err) => {
-        if (cancelled) return;
-        const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
-        setProductsError(message || 'No pudimos cargar el menú.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProducts(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const loadProducts = () => {
-    setLoadingProducts(true);
-    setProductsError(null);
-    setReloadKey((key) => key + 1);
-  };
+  const {
+    products,
+    loading: loadingProducts,
+    error: productsError,
+    reload: loadProducts,
+  } = useMenuProducts('No pudimos cargar el menú.');
 
   const productGroups = groupByCategory(products);
 

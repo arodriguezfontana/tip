@@ -1,7 +1,10 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { ProductFormModal } from '@/components/ProductFormModal';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { RecipeEditModal } from '@/components/RecipeEditModal';
+import { Toast } from '@/components/ui/Toast';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { useToast } from '@/hooks/useToast';
 import {
   createProduct,
   deleteProductImage,
@@ -11,14 +14,12 @@ import {
   uploadProductImage,
 } from '@/services/catalogService';
 import { fetchIngredients, updateProductRecipe } from '@/services/ingredientService';
+import { INPUT_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, ImageChange, ProductPayload } from '@/types/catalog';
 import type { Ingredient, RecipeItemPayload } from '@/types/ingredient';
 import { formatCurrency } from '@/utils/currency';
-import { getErrorMessage } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import { formatQuantity } from '@/utils/ingredients';
-
-const INPUT_CLASS =
-  'rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black';
 
 const ALL = 'all';
 const WITHOUT_CATEGORY = 'none';
@@ -40,51 +41,40 @@ async function applyImageChange(product: AdminProduct, image: ImageChange): Prom
   return product;
 }
 
+interface CatalogData {
+  products: AdminProduct[];
+  categories: AdminCategory[];
+  ingredients: Ingredient[];
+}
+
+async function loadCatalog(): Promise<CatalogData> {
+  const [products, categories, ingredients] = await Promise.all([
+    fetchAdminProducts(),
+    fetchCategories(),
+    fetchIngredients(),
+  ]);
+  return { products, categories, ingredients };
+}
+
+/** Reemplaza el producto en el listado, o lo agrega al final si es nuevo. */
+function upsertProduct(products: AdminProduct[], saved: AdminProduct): AdminProduct[] {
+  return products.some((product) => product.id === saved.id)
+    ? products.map((product) => (product.id === saved.id ? saved : product))
+    : [...products, saved];
+}
+
 export function ProductosView() {
-  const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
-  const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const catalog = useAsyncData(loadCatalog, 'No se pudieron cargar los productos.');
+  const { products = [], categories = [], ingredients = [] } = catalog.data ?? {};
   const [actionError, setActionError] = useState<string | null>(null);
   const [search, setSearch] = useState('');
   const [categoryFilter, setCategoryFilter] = useState(ALL);
   const [productForm, setProductForm] = useState<ProductForm>(null);
   const [recipeProduct, setRecipeProduct] = useState<AdminProduct | null>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toast = useToast();
 
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchAdminProducts(), fetchCategories(), fetchIngredients()])
-      .then(([productsData, categoriesData, ingredientsData]) => {
-        if (cancelled) return;
-        setProducts(productsData);
-        setCategories(categoriesData);
-        setIngredients(ingredientsData);
-      })
-      .catch(() => {
-        if (!cancelled) setError('No se pudieron cargar los productos.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, []);
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
-
-  /** Reemplaza el producto en el listado, o lo agrega al final si es nuevo. */
   const upsert = (saved: AdminProduct) =>
-    setProducts((current) =>
-      current.some((product) => product.id === saved.id)
-        ? current.map((product) => (product.id === saved.id ? saved : product))
-        : [...current, saved]
-    );
+    catalog.update((data) => data && { ...data, products: upsertProduct(data.products, saved) });
 
   const handleSaveProduct = async (payload: ProductPayload, image: ImageChange) => {
     const editing = productForm?.product ?? null;
@@ -104,7 +94,7 @@ export function ProductosView() {
       return;
     }
     setProductForm(null);
-    showToast(editing ? `Se guardaron los cambios de ${saved.name}.` : `Se creó el producto ${saved.name}.`);
+    toast.show(editing ? `Se guardaron los cambios de ${saved.name}.` : `Se creó el producto ${saved.name}.`);
   };
 
   const handleSaveRecipe = async (items: RecipeItemPayload[]) => {
@@ -112,7 +102,7 @@ export function ProductosView() {
     const updated = await updateProductRecipe(recipeProduct.id, items);
     upsert(updated);
     setRecipeProduct(null);
-    showToast(`Se guardó la receta de ${updated.name}.`);
+    toast.show(`Se guardó la receta de ${updated.name}.`);
   };
 
   const visibleProducts = products.filter((product) => matches(product, search, categoryFilter));
@@ -121,11 +111,7 @@ export function ProductosView() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-green-50 text-green-800 border border-green-200 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition">
-          {toastMessage}
-        </div>
-      )}
+      <Toast message={toast.message} />
 
       <div className="shrink-0 bg-white p-4 rounded-2xl shadow-xs border border-gray-100 space-y-3">
         <div className="flex flex-col sm:flex-row gap-2">
@@ -154,7 +140,7 @@ export function ProductosView() {
           <button
             type="button"
             onClick={() => setProductForm({ product: null })}
-            disabled={loading}
+            disabled={catalog.loading}
             className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60 whitespace-nowrap"
           >
             + Crear producto
@@ -175,14 +161,14 @@ export function ProductosView() {
         </div>
       )}
 
-      {(actionError || error) && (
+      {(actionError || catalog.error) && (
         <div role="alert" className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
-          {actionError || error}
+          {actionError || catalog.error}
         </div>
       )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-0">
-        {loading ? (
+        {catalog.loading && products.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Cargando productos...</p>
         ) : products.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Todavía no hay productos en el catálogo.</p>

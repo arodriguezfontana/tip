@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatCurrency } from '@/utils/currency';
-import { PHONE_PATTERN, getErrorMessage, validateCustomerData } from '@/utils/customerValidation';
+import { PHONE_PATTERN, validateCustomerData } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import { parseDateInputValue, presetLabel, rangeForPreset } from '@/utils/dateRange';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import { groupByCategory } from '@/utils/productGrouping';

@@ -1,7 +1,8 @@
-import { useEffect, useMemo, useState } from 'react';
+import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { useAsyncData } from '@/hooks/useAsyncData';
 import { fetchIngredientConsumption, fetchIngredients } from '@/services/ingredientService';
-import type { Ingredient, IngredientConsumptionReport } from '@/types/ingredient';
+import type { Ingredient } from '@/types/ingredient';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { formatQuantity } from '@/utils/ingredients';
@@ -13,9 +14,6 @@ export function ReporteIngredientesView() {
   const [ingredientId, setIngredientId] = useState<number | null>(null);
 
   const [ingredients, setIngredients] = useState<Ingredient[]>([]);
-  const [report, setReport] = useState<IngredientConsumptionReport | null>(null);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
 
   const range = useMemo(
     () =>
@@ -34,32 +32,16 @@ export function ReporteIngredientesView() {
       });
   }, []);
 
-  useEffect(() => {
-    if (preset === 'custom' && (!customFrom || !customTo)) return;
-
-    let cancelled = false;
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchIngredientConsumption({
-          dateFrom: range.from,
-          dateTo: range.to,
-          ingredientId: ingredientId ?? undefined,
-        });
-        if (!cancelled) setReport(data);
-      } catch {
-        if (!cancelled) setError('No se pudo cargar el reporte de ingredientes.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [range.from, range.to, preset, customFrom, customTo, ingredientId]);
+  // Con un rango personalizado incompleto no se pide nada (se sigue mostrando el último reporte).
+  const rangeIncomplete = preset === 'custom' && (!customFrom || !customTo);
+  const load = useCallback(
+    () => fetchIngredientConsumption({ dateFrom: range.from, dateTo: range.to, ingredientId: ingredientId ?? undefined }),
+    [range.from, range.to, ingredientId]
+  );
+  const { data: report = null, loading, error } = useAsyncData(
+    rangeIncomplete ? null : load,
+    'No se pudo cargar el reporte de ingredientes.'
+  );
 
   return (
     <div className="flex flex-col gap-4 lg:h-full">

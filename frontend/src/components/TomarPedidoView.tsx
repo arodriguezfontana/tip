@@ -2,19 +2,18 @@ import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { lookupClientByPhone } from '@/services/clientService';
-import { fetchMenuProducts } from '@/services/menuService';
+import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { createCounterOrder } from '@/services/orderService';
 import type { Client } from '@/types/client';
 import { MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { groupByCategory } from '@/utils/productGrouping';
-import { PHONE_PATTERN, getErrorMessage } from '@/utils/customerValidation';
+import { PHONE_PATTERN } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
+import { INPUT_FULL_CLASS as INPUT_CLASS } from '@/styles/forms';
 
 const ALL_CATEGORIES = 'all';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black';
 
 /** Espera tras la última tecla del teléfono antes de buscar al cliente. */
 const CLIENT_LOOKUP_DEBOUNCE_MS = 400;
@@ -32,10 +31,7 @@ type ClientLookup =
 
 export function TomarPedidoView() {
   // Catálogo
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loadingProducts, setLoadingProducts] = useState(true);
-  const [productsError, setProductsError] = useState<string | null>(null);
-  const [reloadKey, setReloadKey] = useState(0);
+  const { products, loading: loadingProducts, error: productsError, reload: reloadProducts } = useMenuProducts();
   const [activeCategory, setActiveCategory] = useState<number | typeof ALL_CATEGORIES>(ALL_CATEGORIES);
   const [search, setSearch] = useState('');
 
@@ -61,25 +57,6 @@ export function TomarPedidoView() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    fetchMenuProducts()
-      .then((data) => {
-        if (!cancelled) setProducts(data);
-      })
-      .catch((err) => {
-        if (!cancelled) setProductsError(getErrorMessage(err, 'No se pudo cargar el menú.'));
-      })
-      .finally(() => {
-        if (!cancelled) setLoadingProducts(false);
-      });
-
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
 
   // Busca al cliente por teléfono y autocompleta nombre y dirección. Nunca bloquea la carga:
   // si la búsqueda falla o tarda, el usuario sigue completando los campos a mano.
@@ -128,12 +105,6 @@ export function TomarPedidoView() {
     foundClient !== null &&
     ((name.trim() !== '' && name.trim() !== foundClient.full_name) ||
       (deliveryMethod === 'domicilio' && address.trim() !== '' && address.trim() !== (foundClient.address ?? '')));
-
-  const reloadProducts = () => {
-    setLoadingProducts(true);
-    setProductsError(null);
-    setReloadKey((key) => key + 1);
-  };
 
   const categories = useMemo(() => groupByCategory(products).map((group) => group.category), [products]);
 

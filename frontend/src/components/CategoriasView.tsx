@@ -1,50 +1,27 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { CategoryFormModal } from '@/components/CategoryFormModal';
+import { Toast } from '@/components/ui/Toast';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import { useToast } from '@/hooks/useToast';
 import { createCategory, deleteCategory, fetchAdminProducts, fetchCategories, updateCategory } from '@/services/catalogService';
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
-import { getErrorMessage } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 
 /** El formulario abierto: categoría a editar, o null para crear una nueva. */
 type CategoryForm = { category: AdminCategory | null } | null;
 
+async function loadCategories(): Promise<{ categories: AdminCategory[]; products: AdminProduct[] }> {
+  const [categories, products] = await Promise.all([fetchCategories(), fetchAdminProducts()]);
+  return { categories, products };
+}
+
 export function CategoriasView() {
-  const [categories, setCategories] = useState<AdminCategory[]>([]);
-  const [products, setProducts] = useState<AdminProduct[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [loadError, setLoadError] = useState<string | null>(null);
+  // Después de cada cambio se vuelve a pedir todo: mover productos afecta a varias categorías.
+  const { data, loading, error: loadError, reload } = useAsyncData(loadCategories, 'No se pudieron cargar las categorías.');
+  const { categories = [], products = [] } = data ?? {};
   const [actionError, setActionError] = useState<string | null>(null);
   const [categoryForm, setCategoryForm] = useState<CategoryForm>(null);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
-
-  // Se incrementa para volver a pedir los datos después de cada cambio: mover productos afecta a varias categorías.
-  const [reloadKey, setReloadKey] = useState(0);
-
-  useEffect(() => {
-    let cancelled = false;
-    Promise.all([fetchCategories(), fetchAdminProducts()])
-      .then(([categoriesData, productsData]) => {
-        if (cancelled) return;
-        setCategories(categoriesData);
-        setProducts(productsData);
-        setLoadError(null);
-      })
-      .catch(() => {
-        if (!cancelled) setLoadError('No se pudieron cargar las categorías.');
-      })
-      .finally(() => {
-        if (!cancelled) setLoading(false);
-      });
-    return () => {
-      cancelled = true;
-    };
-  }, [reloadKey]);
-
-  const reload = () => setReloadKey((key) => key + 1);
-
-  const showToast = (message: string) => {
-    setToastMessage(message);
-    setTimeout(() => setToastMessage(null), 4000);
-  };
+  const { message: toastMessage, show: showToast } = useToast();
 
   const handleSave = async (payload: CategoryPayload) => {
     const editing = categoryForm?.category ?? null;
@@ -78,11 +55,7 @@ export function CategoriasView() {
 
   return (
     <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-green-50 text-green-800 border border-green-200 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition">
-          {toastMessage}
-        </div>
-      )}
+      <Toast message={toastMessage} />
 
       <div className="shrink-0 bg-white p-4 rounded-2xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-3">
         <p className="flex-1 text-xs text-gray-500">

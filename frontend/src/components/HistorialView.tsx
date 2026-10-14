@@ -1,4 +1,5 @@
-import { useCallback, useEffect, useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
+import { useAsyncData } from '@/hooks/useAsyncData';
 import type { AdminOrder } from '@/types/order';
 import { fetchOrders } from '@/services/orderService';
 import { formatCurrency } from '@/utils/currency';
@@ -31,9 +32,6 @@ export function HistorialView() {
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
 
-  const [orders, setOrders] = useState<AdminOrder[]>([]);
-  const [loading, setLoading] = useState(false);
-  const [error, setError] = useState<string | null>(null);
   const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
   const closeDetail = useCallback(() => setDetailOrder(null), []);
 
@@ -46,30 +44,10 @@ export function HistorialView() {
     [preset, customFrom, customTo]
   );
 
-  useEffect(() => {
-    if (preset === 'custom' && (!customFrom || !customTo)) return;
-
-    let cancelled = false;
-
-    const load = async () => {
-      setLoading(true);
-      setError(null);
-      try {
-        const data = await fetchOrders({ dateFrom: range.from, dateTo: range.to });
-        if (!cancelled) setOrders(data);
-      } catch {
-        if (!cancelled) setError('No se pudieron cargar los pedidos.');
-      } finally {
-        if (!cancelled) setLoading(false);
-      }
-    };
-
-    load();
-
-    return () => {
-      cancelled = true;
-    };
-  }, [range.from, range.to, preset, customFrom, customTo]);
+  // Con un rango personalizado incompleto no se pide nada (se siguen mostrando los últimos pedidos).
+  const rangeIncomplete = preset === 'custom' && (!customFrom || !customTo);
+  const load = useCallback(() => fetchOrders({ dateFrom: range.from, dateTo: range.to }), [range.from, range.to]);
+  const { data: orders = [], loading, error } = useAsyncData(rangeIncomplete ? null : load, 'No se pudieron cargar los pedidos.');
 
   const facturedOrders = useMemo(() => orders.filter((order) => order.status !== 'Rechazado'), [orders]);
   const totalRevenue = useMemo(
