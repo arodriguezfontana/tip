@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_customer
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.customer_schemas import CustomerProfileResponse, CustomerProfileUpdate
 from app.services.auth_service import update_customer_profile
 

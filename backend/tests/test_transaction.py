@@ -4,7 +4,7 @@ import pytest
 
 from app.core.errors import ConflictError
 from app.db.session import transaction
-from app.modules.menu import Category
+from app.models.menu import Category
 from app.services.catalog_service import create_category
 
 
@@ -17,11 +17,10 @@ def test_confirma_los_cambios_al_terminar_el_bloque(db_session):
 
 
 def test_si_algo_falla_deshace_todo_y_la_sesion_sigue_usable(db_session):
-    with pytest.raises(RuntimeError):
-        with transaction(db_session):
-            db_session.add(Category(name="Empanadas"))
-            db_session.flush()
-            raise RuntimeError("falla a mitad del caso de uso")
+    with pytest.raises(RuntimeError), transaction(db_session):
+        db_session.add(Category(name="Empanadas"))
+        db_session.flush()
+        raise RuntimeError("falla a mitad del caso de uso")
 
     assert db_session.query(Category).count() == 0
     with transaction(db_session):

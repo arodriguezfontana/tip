@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-from app.modules.order import DeliveryMethod, Order, OrderItem, OrderStatus, PaymentMethod
+from app.models.order import DeliveryMethod, Order, OrderItem, OrderStatus, PaymentMethod
 from app.schemas.common import PHONE_PATTERN
 from app.services.order_service import CounterPayment, OrderRequest
 

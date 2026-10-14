@@ -22,7 +22,7 @@ env:
 
 jobs:
   backend:
-    name: Backend · tests y migraciones
+    name: Backend · lint, tests y migraciones
     runs-on: ubuntu-latest
     defaults:
       run:
@@ -58,6 +58,9 @@ jobs:
 
       - name: Instalar dependencias
         run: pip install -r requirements-dev.txt
+
+      - name: Lint
+        run: ruff check .
 
       - name: Migraciones (aplicar, verificar contra los modelos y revertir)
         env:

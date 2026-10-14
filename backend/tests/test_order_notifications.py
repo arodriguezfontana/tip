@@ -2,7 +2,7 @@ from unittest.mock import AsyncMock, patch
 
 import pytest
 
-from app.modules.order import Order
+from app.models.order import Order
 
 
 def _create_order(db_session, status="Pendiente", delivery_method="domicilio", telegram_chat_id="12345"):

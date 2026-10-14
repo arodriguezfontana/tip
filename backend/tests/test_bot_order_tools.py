@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.modules.order import Order
+from app.models.order import Order
 from app.services.tools.order_tools import (
     _parsear_hora,
     calcular_y_preparar_pedido,
@@ -80,7 +80,7 @@ def test_informa_los_productos_que_no_encuentra(products):
 
 
 def test_si_el_nombre_coincide_con_varios_productos_pregunta_cual(db_session, products):
-    from app.modules.menu import Product
+    from app.models.menu import Product
 
     db_session.add(Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id))
     db_session.commit()
@@ -93,7 +93,7 @@ def test_si_el_nombre_coincide_con_varios_productos_pregunta_cual(db_session, pr
 
 
 def test_si_todos_los_productos_son_ambiguos_solo_pregunta(db_session, products):
-    from app.modules.menu import Product
+    from app.models.menu import Product
 
     db_session.add(Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id))
     db_session.commit()
@@ -105,7 +105,7 @@ def test_si_todos_los_productos_son_ambiguos_solo_pregunta(db_session, products)
 
 
 def test_el_nombre_exacto_gana_aunque_otro_producto_lo_contenga(db_session, products):
-    from app.modules.menu import Product
+    from app.models.menu import Product
 
     db_session.add(Product(name="Pizza Muzzarella Grande", price=12000.0, category_id=products["muzza"].category_id))
     db_session.commit()

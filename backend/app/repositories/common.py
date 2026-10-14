@@ -3,7 +3,7 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Query, Session
 
-from app.modules.order import Order
+from app.models.order import Order
 
 
 def name_taken(db: Session, model, name: str, exclude_id: int | None = None) -> bool:

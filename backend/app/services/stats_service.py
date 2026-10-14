@@ -2,6 +2,7 @@
 
 from dataclasses import dataclass
 from datetime import datetime, timezone
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
@@ -52,12 +53,12 @@ def best_selling_day(db: Session, date_from: datetime | None = None, date_to: da
     El día se calcula en Python porque depende de la zona horaria del local (y cada motor de base la
     maneja distinto); de la base solo se traen la fecha y el total de cada pedido.
     """
-    revenue_by_day: dict[str, float] = {}
+    revenue_by_day: dict[str, Decimal] = {}
     for created_at, total in order_repository.billable_totals(db, date_from, date_to):
         day = _local_weekday(created_at)
-        revenue_by_day[day] = revenue_by_day.get(day, 0.0) + total
+        revenue_by_day[day] = revenue_by_day.get(day, Decimal(0)) + total
 
     if not revenue_by_day:
         return BestSellingDay(weekday=None, total_revenue=None)
     best = max(revenue_by_day, key=lambda day: revenue_by_day[day])
-    return BestSellingDay(weekday=best, total_revenue=revenue_by_day[best])
+    return BestSellingDay(weekday=best, total_revenue=float(revenue_by_day[best]))

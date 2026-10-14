@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 
-from app.modules.order import Order, OrderItem
+from app.models.order import Order, OrderItem
 
 
 def _create_order(db_session, status, created_at=None, **extra):

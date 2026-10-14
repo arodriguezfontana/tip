@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.modules.client import Client
-from app.modules.user import User
+from app.models.client import Client
+from app.models.user import User
 from app.schemas.client_schemas import ClientPaginatedResponse, ClientResponse, ClientUpdatePayload
 from app.services import client_service
 

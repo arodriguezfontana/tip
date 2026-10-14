@@ -3,7 +3,7 @@ import uuid
 from fastapi import APIRouter, Depends
 
 from app.api.deps import get_current_admin
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.chat_schemas import ChatRequest, ChatResponse
 from app.services.chat_service import ChatService
 

@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session, selectinload
 
-from app.modules.menu import Category
+from app.models.menu import Category
 from app.repositories.common import name_taken as _name_taken
 
 

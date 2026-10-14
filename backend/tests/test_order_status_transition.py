@@ -4,7 +4,7 @@ import pytest
 
 from app.api.deps import get_current_user
 from app.main import app
-from app.modules.order import Order
+from app.models.order import Order
 from app.services.order_notification_service import build_status_message
 
 

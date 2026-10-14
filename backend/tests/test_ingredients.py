@@ -4,8 +4,8 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.modules.menu import Ingredient, ProductIngredient
-from app.modules.order import Order, OrderItem
+from app.models.menu import Ingredient, ProductIngredient
+from app.models.order import Order, OrderItem
 
 INGREDIENTS_URL = "/api/v1/ingredients"
 PRODUCTS_URL = "/api/v1/products"

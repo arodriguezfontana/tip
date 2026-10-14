@@ -1,24 +1,27 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, APIRouter
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.api import (
+    auth_router,
+    category_router,
+    chat_router,
+    client_router,
+    customer_router,
+    ingredient_router,
+    menu_router,
+    order_router,
+    product_router,
+    stats_router,
+    telegram_router,
+)
+from app.api.errors import register_error_handlers
 from app.core.config import settings
 from app.db.session import get_db
-from app.api import auth_router
-from app.api.errors import register_error_handlers
-from app.api import category_router
-from app.api import chat_router
-from app.api import client_router
-from app.api import customer_router
-from app.api import ingredient_router
-from app.api import menu_router
-from app.api import order_router
-from app.api import product_router
-from app.api import telegram_router
-from app.api import stats_router
 from app.services.telegram_service import register_webhook
 
 logging.basicConfig(level=logging.INFO)

@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import AuthenticationError, ConflictError
 from app.core.security import create_access_token, hash_password, verify_password
 from app.db.session import transaction
-from app.modules.user import ROLE_CUSTOMER, User
+from app.models.user import ROLE_CUSTOMER, User
 from app.repositories import user_repository
 
 

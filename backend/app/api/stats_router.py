@@ -5,7 +5,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.ingredient_schemas import IngredientConsumptionResponse
 from app.schemas.stats_schemas import BestSellingDayResponse, StatusDistributionResponse, TopProductResponse
 from app.services import stats_service

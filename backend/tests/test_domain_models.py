@@ -1,12 +1,13 @@
 """Reglas de negocio de los modelos, probadas sin base de datos ni HTTP."""
 
 from datetime import datetime, timezone
+from decimal import Decimal
 
 import pytest
 
 from app.api.errors import status_for
 from app.core.errors import BusinessRuleError, ConflictError, DomainError, NotFoundError
-from app.modules.menu import (
+from app.models.menu import (
     MAX_IMAGE_BYTES,
     Category,
     Ingredient,
@@ -17,7 +18,7 @@ from app.modules.menu import (
     ProductImage,
     ProductIngredient,
 )
-from app.modules.order import (
+from app.models.order import (
     MAX_QUANTITY_PER_ITEM,
     PICKUP_ADDRESS,
     InvalidOrderError,
@@ -33,6 +34,16 @@ def _product(id_=1, name="Muzza", price=8500.0, active=True, category_id=1) -> P
 
 
 # --- Pedido: productos y total ------------------------------------------------------------------------
+
+
+def test_los_montos_se_calculan_sin_errores_de_redondeo():
+    """Con float, 0.1 + 0.2 da 0.30000000000000004: los montos se manejan con Decimal a centavos."""
+    order = Order()
+
+    order.set_items([(_product(1, "Caramelo", 0.1), 1), (_product(2, "Chicle", 0.2), 1)])
+
+    assert order.total_amount == Decimal("0.30")
+    assert _product(price=8500.555).price == Decimal("8500.56")
 
 
 def test_el_pedido_suma_las_lineas_de_un_mismo_producto_y_calcula_el_total():

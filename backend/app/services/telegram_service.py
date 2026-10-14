@@ -2,7 +2,9 @@ import asyncio
 import contextlib
 import logging
 import time
+
 import httpx
+
 from app.core.config import settings
 from app.services.chat_service import ChatService
 

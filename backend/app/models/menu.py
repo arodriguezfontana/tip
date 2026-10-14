@@ -1,11 +1,26 @@
 from collections.abc import Iterable
 from datetime import datetime
+from decimal import Decimal
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, LargeBinary, String, Text, JSON, and_
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    Float,
+    ForeignKey,
+    Integer,
+    LargeBinary,
+    String,
+    Text,
+    and_,
+)
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import deferred, relationship
+from sqlalchemy.orm import deferred, relationship, validates
 
 from app.core.errors import BusinessRuleError, ConflictError, UnsupportedFileError
+from app.core.money import MoneyColumn, to_money
 from app.db.base_class import Base
 
 MAX_IMAGE_BYTES = 5 * 1024 * 1024
@@ -103,7 +118,7 @@ class Product(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(150), unique=True, index=True, nullable=False)
     description = Column(Text, nullable=True)
-    price = Column(Float, nullable=False)
+    price = Column(MoneyColumn, nullable=False)
     is_active = Column(Boolean, default=True, nullable=False)
 
     preparation_time_minutes = Column(Integer, default=10, nullable=False)
@@ -115,6 +130,10 @@ class Product(Base):
 
     recipe_items = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")
     image = relationship("ProductImage", back_populates="product", uselist=False, cascade="all, delete-orphan")
+
+    @validates("price")
+    def _as_money(self, _key: str, value) -> Decimal:
+        return to_money(value)
 
     @hybrid_property
     def is_available(self) -> bool:
@@ -130,7 +149,7 @@ class Product(Base):
         self,
         name: str,
         description: str,
-        price: float,
+        price: Decimal | float,
         category: Category,
         is_active: bool,
         dietary_restrictions: list[str],

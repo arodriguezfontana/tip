@@ -1,13 +1,14 @@
 import logging
 from datetime import datetime
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, status as http_status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query
+from fastapi import status as http_status
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.order_schemas import (
     CounterOrderCreate,
     OrderDetailResponse,

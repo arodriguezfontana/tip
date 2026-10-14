@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.menu import Product
+from app.models.menu import Product
 
 
 def product_image_url(product: Product) -> str | None:

@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Session
 
-from app.modules.user import User
+from app.models.user import User
 
 
 def add(db: Session, user: User) -> None:

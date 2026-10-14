@@ -1,6 +1,6 @@
 from sqlalchemy.orm import Session
 
-from app.modules.client import Client
+from app.models.client import Client
 
 
 def add(db: Session, client: Client) -> None:

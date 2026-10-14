@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
-from app.modules.menu import Category, Ingredient, Product, ProductIngredient
-from app.modules.user import User
+from app.models.menu import Category, Ingredient, Product, ProductIngredient
+from app.models.user import User
 
 
 def get_or_create(db: Session, model, defaults: dict | None = None, **kwargs):

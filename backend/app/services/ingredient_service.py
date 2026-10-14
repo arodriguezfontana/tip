@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.session import transaction
-from app.modules.menu import Ingredient, InvalidRecipeError, Product
+from app.models.menu import Ingredient, InvalidRecipeError, Product
 from app.repositories import ingredient_repository
 from app.services.catalog_service import get_admin_product, get_product
 

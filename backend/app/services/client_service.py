@@ -6,7 +6,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.session import transaction
-from app.modules.client import Client
+from app.models.client import Client
 from app.repositories import client_repository
 
 

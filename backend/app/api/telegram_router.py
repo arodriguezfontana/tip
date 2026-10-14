@@ -1,6 +1,7 @@
 import hmac
 
 from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
+
 from app.core.config import settings
 from app.services.telegram_service import TelegramService
 
@@ -23,7 +24,7 @@ async def recibir_mensaje(
     if "message" in data and "text" in data["message"]:
         chat_id = str(data["message"]["chat"]["id"])
         mensaje_usuario = data["message"]["text"]
-        
+
         background_tasks.add_task(
             telegram_service.procesar_y_enviar, chat_id, mensaje_usuario
         )

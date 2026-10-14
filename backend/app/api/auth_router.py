@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_current_user
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.auth_schemas import LoginRequest, TokenResponse, UserResponse
 from app.schemas.customer_schemas import CustomerRegisterRequest
 from app.services import auth_service

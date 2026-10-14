@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from app.modules.menu import Category, Product
+from app.models.menu import Category, Product
 from app.schemas.ingredient_schemas import RecipeItemResponse
 from app.schemas.menu_schemas import CategoryResponse, product_image_url
 from app.services.catalog_service import ProductData

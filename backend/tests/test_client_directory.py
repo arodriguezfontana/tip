@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.modules.client import Client
+from app.models.client import Client
 
 CLIENTS_URL = "/api/v1/clients"
 

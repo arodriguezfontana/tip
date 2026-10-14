@@ -3,8 +3,8 @@ from datetime import datetime
 from sqlalchemy import func
 from sqlalchemy.orm import Session, joinedload
 
-from app.modules.menu import Product
-from app.modules.order import Order, OrderItem, OrderStatus
+from app.models.menu import Product
+from app.models.order import Order, OrderItem, OrderStatus
 from app.repositories.common import created_between
 
 

@@ -7,7 +7,7 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
 from app.db.session import transaction
-from app.modules.menu import Category, Product, ProductImage
+from app.models.menu import Category, Product, ProductImage
 from app.repositories import category_repository, product_repository
 
 

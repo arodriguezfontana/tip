@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
-from app.modules.order import Order
+from app.models.order import Order
 from app.services import chat_memory
 from app.services.chat_service import ChatService
 from tests.conftest import TestingSessionLocal
@@ -120,7 +120,7 @@ def test_solo_manda_los_mensajes_recientes(bot):
     assert len(historial) <= chat_memory.MAX_MENSAJES_HISTORIAL
     assert isinstance(historial[0], HumanMessage)
     assert historial[-1].content == "respuesta 19"
-    assert all("mensaje 0" != m.content for m in llm.llamadas[-1])
+    assert all(m.content != "mensaje 0" for m in llm.llamadas[-1])
 
 
 def test_el_recorte_no_deja_resultados_de_herramientas_huerfanos(bot, muzza):

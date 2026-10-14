@@ -5,8 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.modules.menu import Category, Product, ProductImage
-from app.modules.menu import MAX_IMAGE_BYTES
+from app.models.menu import MAX_IMAGE_BYTES, Category, Product, ProductImage
 from app.services.tools.menu_tools import obtener_menu_actual
 from tests.conftest import TestingSessionLocal
 

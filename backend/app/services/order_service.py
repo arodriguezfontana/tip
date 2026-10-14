@@ -10,9 +10,9 @@ from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
-from app.modules.menu import Product
-from app.modules.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
-from app.modules.user import User
+from app.models.menu import Product
+from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
+from app.models.user import User
 from app.repositories import order_repository, product_repository
 from app.services.client_service import upsert_client
 

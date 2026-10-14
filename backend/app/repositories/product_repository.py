@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Query, Session, joinedload, selectinload
 
-from app.modules.menu import Product, ProductImage, ProductIngredient
+from app.models.menu import Product, ProductImage, ProductIngredient
 from app.repositories.common import name_taken as _name_taken
 
 

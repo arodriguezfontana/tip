@@ -1,10 +1,11 @@
-from fastapi import APIRouter, Depends, HTTPException, Request, status as http_status
+from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.modules.menu import MAX_IMAGE_BYTES, MAX_IMAGE_MB
-from app.modules.user import User
+from app.models.menu import MAX_IMAGE_BYTES, MAX_IMAGE_MB
+from app.models.user import User
 from app.schemas.catalog_schemas import AdminProductResponse, ProductPayload
 from app.schemas.ingredient_schemas import RecipeUpdate
 from app.services import catalog_service

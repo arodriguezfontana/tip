@@ -1,17 +1,19 @@
 from collections.abc import Iterable
+from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, ClassVar
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, Float, ForeignKey, Integer, String, Text, false
+from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, false
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import relationship
+from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
 from app.core.errors import BusinessRuleError, ConflictError
+from app.core.money import MoneyColumn, to_money
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
-    from app.modules.menu import Product
+    from app.models.menu import Product
 
 
 class _StrEnum(str, Enum):
@@ -93,8 +95,8 @@ class Order(Base):
     customer_name = Column(String(150), nullable=False)
     shipping_address = Column(String(255), nullable=False)
     # Total a pagar: suma de los productos más el costo de envío.
-    total_amount = Column(Float, nullable=False)
-    shipping_cost = Column(Float, nullable=False, default=0, server_default="0")
+    total_amount = Column(MoneyColumn, nullable=False)
+    shipping_cost = Column(MoneyColumn, nullable=False, default=0, server_default="0")
     # Sin informar (None) en los pedidos del bot y de la web, que se cobran al entregar.
     payment_method = Column(String(20), nullable=True)
     is_paid = Column(Boolean, nullable=False, default=False, server_default=false())
@@ -110,6 +112,10 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+
+    @validates("total_amount", "shipping_cost")
+    def _as_money(self, _key: str, value) -> Decimal | None:
+        return None if value is None else to_money(value)
 
     # --- Entrega ------------------------------------------------------------------------------------
 
@@ -130,7 +136,7 @@ class Order(Base):
         se supere el máximo de unidades por producto. Las líneas de un mismo producto se suman.
         """
         quantities: dict[int, int] = {}
-        products: dict[int, "Product"] = {}
+        products: dict[int, Product] = {}
         for product, quantity in lines:
             if quantity < 1:
                 raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
@@ -152,12 +158,12 @@ class Order(Base):
             OrderItem(product_id=pid, product=products[pid], quantity=qty, unit_price=products[pid].price)
             for pid, qty in quantities.items()
         ]
-        self.total_amount = self.subtotal + (self.shipping_cost or 0)
+        self.total_amount = self.subtotal + (self.shipping_cost or Decimal(0))
 
     @property
-    def subtotal(self) -> float:
+    def subtotal(self) -> Decimal:
         """Suma de los productos, sin el envío."""
-        return sum(item.subtotal for item in self.items)
+        return sum((item.subtotal for item in self.items), Decimal(0))
 
     @hybrid_property
     def is_billable(self) -> bool:
@@ -204,11 +210,15 @@ class OrderItem(Base):
     order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
-    unit_price = Column(Float, nullable=False)
+    unit_price = Column(MoneyColumn, nullable=False)
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
 
+    @validates("unit_price")
+    def _as_money(self, _key: str, value) -> Decimal:
+        return to_money(value)
+
     @property
-    def subtotal(self) -> float:
+    def subtotal(self) -> Decimal:
         return self.unit_price * self.quantity

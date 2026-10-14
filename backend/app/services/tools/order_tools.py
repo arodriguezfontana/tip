@@ -5,17 +5,20 @@ lenguaje y le devuelven textos para el cliente, pero las reglas del pedido y el 
 los servicios y el modelo, iguales para todos los canales.
 """
 
-from datetime import datetime, time, timezone
 import json
 import logging
 import re
+from datetime import datetime, time, timezone
+from decimal import Decimal
 from typing import Annotated
-from langchain_core.tools import tool, InjectedToolArg
+
+from langchain_core.tools import InjectedToolArg, tool
 from sqlalchemy.orm import Session
+
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
-from app.modules.menu import Product
-from app.modules.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError
+from app.models.menu import Product
+from app.models.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError
 from app.schemas.common import PHONE_PATTERN
 from app.services.catalog_service import find_available_products_by_name
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
@@ -129,7 +132,7 @@ def calcular_y_preparar_pedido(
     db = SessionLocal()
     try:
         lista_items = []
-        
+
         try:
             parsed = json.loads(items_solicitados)
             if isinstance(parsed, list):
@@ -149,7 +152,7 @@ def calcular_y_preparar_pedido(
                     lista_items.append({"nombre": parte_limpia, "cantidad": 1})
 
         resumen_lineas = []
-        total_general = 0.0
+        total_general = Decimal(0)
         items_validados = []
         hay_ambiguos = False
 
@@ -178,7 +181,7 @@ def calcular_y_preparar_pedido(
                 "product_id": producto.id,
                 "nombre": producto.name,
                 "quantity": cantidad,
-                "unit_price": producto.price
+                "unit_price": float(producto.price),
             })
 
         if not items_validados:
@@ -199,7 +202,7 @@ def calcular_y_preparar_pedido(
 
         resultado_json = {
             "items": items_validados,
-            "total": total_general,
+            "total": float(total_general),
             "cliente": customer_name,
             "telefono": telefono or None,
             "direccion": PICKUP_ADDRESS if es_retiro else shipping_address,

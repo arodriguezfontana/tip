@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.modules.client import Client
-from app.modules.order import Order
+from app.models.client import Client
+from app.models.order import Order
 
 COUNTER_URL = "/api/v1/orders/counter"
 LOOKUP_URL = "/api/v1/clients/lookup"

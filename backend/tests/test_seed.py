@@ -5,8 +5,8 @@ import pytest
 from app.core.config import settings
 from app.core.security import verify_password
 from app.db import seed
-from app.modules.menu import Category, Ingredient, Product, ProductIngredient
-from app.modules.user import User
+from app.models.menu import Category, Ingredient, Product, ProductIngredient
+from app.models.user import User
 from tests.conftest import TestingSessionLocal
 
 

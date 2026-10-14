@@ -5,7 +5,7 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.order import Order, OrderStatus
+from app.models.order import Order, OrderStatus
 from app.services.telegram_service import send_telegram_message
 
 logger = logging.getLogger(__name__)

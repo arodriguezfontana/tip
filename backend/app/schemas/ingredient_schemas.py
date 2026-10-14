@@ -1,6 +1,6 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.modules.menu import ProductIngredient
+from app.models.menu import ProductIngredient
 from app.services.ingredient_service import ConsumptionReport, IngredientUsage
 
 MAX_RECIPE_ITEMS = 50

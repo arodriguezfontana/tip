@@ -1,7 +1,7 @@
 import pytest
 
 from app.core.errors import NotFoundError
-from app.modules.client import Client
+from app.models.client import Client
 from app.services.client_service import find_client_by_phone, upsert_client
 
 

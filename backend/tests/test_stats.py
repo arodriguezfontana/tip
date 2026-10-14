@@ -2,7 +2,7 @@ from datetime import datetime, timezone
 
 import pytest
 
-from app.modules.order import Order, OrderItem
+from app.models.order import Order, OrderItem
 
 STATS_URL = "/api/v1/stats"
 
