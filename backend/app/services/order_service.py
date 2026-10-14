@@ -6,13 +6,14 @@ from dataclasses import dataclass
 from datetime import datetime, timedelta
 
 from sqlalchemy.exc import SQLAlchemyError
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session
 
 from app.core.errors import BusinessRuleError, NotFoundError
-from app.db.session import commit
+from app.db.session import transaction
 from app.modules.menu import Product
-from app.modules.order import DeliveryMethod, InvalidOrderError, Order, OrderItem, OrderSource, OrderStatus
+from app.modules.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
 from app.modules.user import User
+from app.repositories import order_repository, product_repository
 from app.services.client_service import upsert_client
 
 logger = logging.getLogger(__name__)
@@ -56,7 +57,7 @@ class ScheduleTooEarlyError(BusinessRuleError):
 def estimate_delay_minutes(db: Session) -> int:
     """Demora estimada para un pedido nuevo según los pedidos en preparación (confirmados y todavía no
     despachados ni listos para retirar)."""
-    in_progress = db.query(Order).filter(Order.status == OrderStatus.CONFIRMED.value).count()
+    in_progress = order_repository.count_with_status(db, OrderStatus.CONFIRMED)
     return BASE_DELAY_MINUTES + in_progress * MINUTES_PER_ORDER_IN_PROGRESS
 
 
@@ -82,7 +83,7 @@ def validate_schedule(db: Session, requested: datetime, now: datetime, tolerance
 
 def _products_for(db: Session, items: list[tuple[int, int]]) -> list[tuple[Product, int]]:
     ids = {product_id for product_id, _ in items}
-    products = {p.id: p for p in db.query(Product).filter(Product.id.in_(ids)).all()} if ids else {}
+    products = product_repository.get_many(db, ids)
     if len(products) != len(ids):
         raise InvalidOrderError("Algunos productos del pedido ya no existen en el menú.")
     return [(products[product_id], quantity) for product_id, quantity in items]
@@ -103,8 +104,8 @@ def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order
 
 
 def _save(db: Session, order: Order) -> Order:
-    db.add(order)
-    commit(db)
+    with transaction(db):
+        order_repository.add(db, order)
     db.refresh(order)
     return order
 
@@ -156,8 +157,8 @@ def _register_client(db: Session, request: OrderRequest) -> None:
     """
     address = request.shipping_address if DeliveryMethod(request.delivery_method) == DeliveryMethod.DELIVERY else None
     try:
-        upsert_client(db, request.customer_phone, request.customer_name, address)
-        commit(db)
+        with transaction(db):
+            upsert_client(db, request.customer_phone, request.customer_name, address)
     except SQLAlchemyError:
         logger.exception("No se pudo registrar al cliente del pedido presencial en la agenda.")
 
@@ -172,24 +173,12 @@ def list_orders(
     statuses: list[str] | None = None,
 ) -> list[Order]:
     """Pedidos registrados, del más reciente al más antiguo, filtrados por fecha de creación y estado."""
-    query = db.query(Order).options(joinedload(Order.items))
-    if date_from is not None:
-        query = query.filter(Order.created_at >= date_from)
-    if date_to is not None:
-        query = query.filter(Order.created_at <= date_to)
-    if statuses:
-        query = query.filter(Order.status.in_(statuses))
-    return query.order_by(Order.created_at.desc()).all()
+    return order_repository.list_orders(db, date_from, date_to, statuses)
 
 
 def get_order(db: Session, order_id: int) -> Order:
     """Pedido con sus ítems y productos."""
-    order = (
-        db.query(Order)
-        .options(joinedload(Order.items).joinedload(OrderItem.product))
-        .filter(Order.id == order_id)
-        .first()
-    )
+    order = order_repository.get_with_items(db, order_id)
     if order is None:
         raise NotFoundError("Pedido no encontrado")
     return order
@@ -200,7 +189,7 @@ def change_order_status(
 ) -> Order:
     """Avanza el pedido al nuevo estado según las reglas de su ciclo de vida (ver Order.transition_to)."""
     order = get_order(db, order_id)
-    order.transition_to(new_status, estimated_minutes, current_delay_minutes=estimate_delay_minutes(db))
-    commit(db)
+    with transaction(db):
+        order.transition_to(new_status, estimated_minutes, current_delay_minutes=estimate_delay_minutes(db))
     db.refresh(order)
     return order

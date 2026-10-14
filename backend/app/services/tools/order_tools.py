@@ -323,8 +323,8 @@ def confirmar_y_guardar_pedido(
             "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
             "¡Muchas gracias por elegirnos!"
         )
-    except Exception as e:
-        db.rollback()
+    except Exception:
+        # Si el error ocurrió al guardar, el servicio ya deshizo la transacción.
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
         return "Error al procesar el registro del pedido. Por favor, intentá nuevamente."
     finally:

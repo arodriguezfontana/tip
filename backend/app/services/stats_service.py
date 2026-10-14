@@ -3,12 +3,10 @@
 from dataclasses import dataclass
 from datetime import datetime, timezone
 
-from sqlalchemy import func
-from sqlalchemy.orm import Query, Session
+from sqlalchemy.orm import Session
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.menu import Product
-from app.modules.order import Order, OrderItem
+from app.repositories import order_repository
 
 WEEKDAYS = ("Lunes", "Martes", "Miércoles", "Jueves", "Viernes", "Sábado", "Domingo")
 
@@ -26,40 +24,19 @@ class BestSellingDay:
     total_revenue: float | None
 
 
-def _in_period(query: Query, date_from: datetime | None, date_to: datetime | None) -> Query:
-    if date_from is not None:
-        query = query.filter(Order.created_at >= date_from)
-    if date_to is not None:
-        query = query.filter(Order.created_at <= date_to)
-    return query
-
-
 def status_distribution(db: Session, date_from: datetime | None = None, date_to: datetime | None = None) -> dict[str, int]:
     """Cantidad de pedidos del período en cada estado."""
-    rows = _in_period(db.query(Order.status, func.count(Order.id)), date_from, date_to).group_by(Order.status).all()
-    return {status: count for status, count in rows}
+    return dict(order_repository.count_by_status(db, date_from, date_to))
 
 
 def top_products(
     db: Session, date_from: datetime | None = None, date_to: datetime | None = None, limit: int = 5
 ) -> list[TopProduct]:
     """Productos más vendidos del período (por unidades), sin contar los pedidos rechazados."""
-    quantity = func.sum(OrderItem.quantity)
-    rows = (
-        _in_period(
-            db.query(Product.name, quantity, func.sum(OrderItem.quantity * OrderItem.unit_price))
-            .join(OrderItem, OrderItem.product_id == Product.id)
-            .join(Order, Order.id == OrderItem.order_id)
-            .filter(Order.is_billable),
-            date_from,
-            date_to,
-        )
-        .group_by(Product.id, Product.name)
-        .order_by(quantity.desc(), Product.name)
-        .limit(limit)
-        .all()
-    )
-    return [TopProduct(product_name=name, total_quantity=int(qty), total_revenue=float(revenue)) for name, qty, revenue in rows]
+    return [
+        TopProduct(product_name=name, total_quantity=int(quantity), total_revenue=float(revenue))
+        for name, quantity, revenue in order_repository.best_selling_products(db, date_from, date_to, limit)
+    ]
 
 
 def _local_weekday(moment: datetime) -> str:
@@ -75,9 +52,8 @@ def best_selling_day(db: Session, date_from: datetime | None = None, date_to: da
     El día se calcula en Python porque depende de la zona horaria del local (y cada motor de base la
     maneja distinto); de la base solo se traen la fecha y el total de cada pedido.
     """
-    rows = _in_period(db.query(Order.created_at, Order.total_amount).filter(Order.is_billable), date_from, date_to)
     revenue_by_day: dict[str, float] = {}
-    for created_at, total in rows:
+    for created_at, total in order_repository.billable_totals(db, date_from, date_to):
         day = _local_weekday(created_at)
         revenue_by_day[day] = revenue_by_day.get(day, 0.0) + total
 
