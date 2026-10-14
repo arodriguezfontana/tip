@@ -6,6 +6,7 @@ import logging
 import re
 from typing import Annotated
 from langchain_core.tools import tool, InjectedToolArg
+from sqlalchemy import func
 from sqlalchemy.orm import Session
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
@@ -13,6 +14,7 @@ from app.modules.menu import Product
 from app.modules.order import Order, OrderItem
 from app.schemas.common import PHONE_PATTERN
 from app.services.order_service import calcular_demora_actual
+from app.services.web_order_service import PICKUP_ADDRESS, InvalidOrderError, build_order_items
 
 logger = logging.getLogger(__name__)
 
@@ -58,24 +60,32 @@ def _items_con_precios_de_la_base(db: Session, items: list) -> tuple[list[OrderI
     try:
         for item in items:
             product_id, cantidad = int(item["product_id"]), int(item.get("quantity") or 1)
-            if cantidad < 1:
-                return "Hay una cantidad inválida en el pedido."
             cantidades[product_id] = cantidades.get(product_id, 0) + cantidad
     except (KeyError, TypeError, ValueError, AttributeError):
         return "No pude identificar los productos del pedido."
-    if not cantidades:
-        return "El pedido no tiene productos."
 
-    productos = {p.id: p for p in db.query(Product).filter(Product.id.in_(cantidades.keys())).all()}
-    if any(pid not in productos or not productos[pid].is_available for pid in cantidades):
-        return "Algunos productos del pedido ya no están disponibles en el menú."
+    # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
+    try:
+        return build_order_items(db, cantidades)
+    except InvalidOrderError as exc:
+        return str(exc)
 
-    order_items = [
-        OrderItem(product_id=pid, quantity=cantidad, unit_price=productos[pid].price)
-        for pid, cantidad in cantidades.items()
-    ]
-    total = sum(item.unit_price * item.quantity for item in order_items)
-    return order_items, total
+
+def _buscar_producto(db: Session, nombre: str) -> Product | list[Product] | None:
+    """Producto disponible que corresponde al nombre que escribió el cliente.
+
+    Si el nombre coincide exacto (sin distinguir mayúsculas) se usa ese. Si no, se buscan los que lo
+    contienen: con uno solo se usa ese y con varios se devuelve la lista para preguntarle cuál quiso,
+    en vez de elegir uno al azar (y cobrarle otro producto).
+    """
+    disponibles = db.query(Product).filter(Product.is_available)
+    exacto = disponibles.filter(func.lower(Product.name) == nombre.lower()).first()
+    if exacto is not None:
+        return exacto
+    candidatos = disponibles.filter(Product.name.ilike(f"%{nombre}%")).order_by(Product.name).all()
+    if not candidatos:
+        return None
+    return candidatos[0] if len(candidatos) == 1 else candidatos
 
 
 def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
@@ -159,6 +169,7 @@ def calcular_y_preparar_pedido(
         resumen_lineas = []
         total_general = 0.0
         items_validados = []
+        hay_ambiguos = False
 
         for item in lista_items:
             nombre_buscado = str(item.get("nombre", "")).strip()
@@ -167,13 +178,15 @@ def calcular_y_preparar_pedido(
             if not nombre_buscado:
                 continue
 
-            producto = db.query(Product).filter(
-                Product.is_available,
-                Product.name.ilike(f"%{nombre_buscado}%")
-            ).first()
+            producto = _buscar_producto(db, nombre_buscado)
 
             if not producto:
                 resumen_lineas.append(f"- No pudimos encontrar el producto: '{nombre_buscado}'")
+                continue
+            if isinstance(producto, list):
+                hay_ambiguos = True
+                opciones = ", ".join(p.name for p in producto)
+                resumen_lineas.append(f"- '{nombre_buscado}' puede ser: {opciones}. ¿Cuál querés?")
                 continue
 
             subtotal = producto.price * cantidad
@@ -187,6 +200,8 @@ def calcular_y_preparar_pedido(
             })
 
         if not items_validados:
+            if hay_ambiguos:
+                return "Necesito que me aclares algunos productos:\n" + "\n".join(resumen_lineas)
             return "No se pudieron reconocer productos válidos en el menú para tu pedido."
 
         es_retiro = metodo_entrega == "retiro"
@@ -194,7 +209,9 @@ def calcular_y_preparar_pedido(
         telefono = (customer_phone or "").strip()
         falta_telefono = not _telefono_valido(telefono)
         notas = _limpiar_observaciones(observaciones)
-        faltan_datos = metodo_entrega is None or not customer_name or falta_telefono or falta_direccion
+        faltan_datos = (
+            metodo_entrega is None or not customer_name or falta_telefono or falta_direccion or hay_ambiguos
+        )
 
         horario_programado, aviso_horario = _evaluar_hora_programada(db, hora_programada)
 
@@ -203,7 +220,7 @@ def calcular_y_preparar_pedido(
             "total": total_general,
             "cliente": customer_name,
             "telefono": telefono or None,
-            "direccion": "Retiro en el local" if es_retiro else shipping_address,
+            "direccion": PICKUP_ADDRESS if es_retiro else shipping_address,
             "metodo_entrega": metodo_entrega,
             "hora_programada": f"{horario_programado:%H:%M}" if horario_programado else None,
             "observaciones": notas,
@@ -222,13 +239,15 @@ def calcular_y_preparar_pedido(
                 faltantes.append("un teléfono de contacto válido" if telefono else "un teléfono de contacto")
             if falta_direccion:
                 faltantes.append("tu dirección de envío")
+            if hay_ambiguos:
+                faltantes.append("cuál de los productos que te consulté arriba querés")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
             if aviso_horario:
                 texto_respuesta += f"\n\n{aviso_horario}"
         elif aviso_horario:
             texto_respuesta = aviso_horario
         else:
-            entrega = "Retiro en el local" if es_retiro else f"Envío a domicilio: {shipping_address}"
+            entrega = PICKUP_ADDRESS if es_retiro else f"Envío a domicilio: {shipping_address}"
             horario = f"para las {horario_programado:%H:%M}" if horario_programado else "para ahora"
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
@@ -301,7 +320,7 @@ def confirmar_y_guardar_pedido(
 
         nueva_orden = Order(
             customer_name=cliente,
-            shipping_address="Retiro en el local" if es_retiro else (direccion or "Sin especificar"),
+            shipping_address=PICKUP_ADDRESS if es_retiro else (direccion or "Sin especificar"),
             customer_phone=telefono,
             notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
             total_amount=total,

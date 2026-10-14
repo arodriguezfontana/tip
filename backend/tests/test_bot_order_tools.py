@@ -79,6 +79,42 @@ def test_informa_los_productos_que_no_encuentra(products):
     assert len(respuesta["datos_temporales"]["items"]) == 1
 
 
+def test_si_el_nombre_coincide_con_varios_productos_pregunta_cual(db_session, products):
+    from app.modules.menu import Product
+
+    db_session.add(Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id))
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="1 pizza, 1 Coca-Cola 500ml")
+
+    assert "'pizza' puede ser: Pizza Muzzarella, Pizza Napolitana. ¿Cuál querés?" in respuesta["mensaje_para_usuario"]
+    assert [i["nombre"] for i in respuesta["datos_temporales"]["items"]] == ["Coca-Cola 500ml"]
+    assert respuesta["datos_temporales"]["faltan_datos"] is True
+
+
+def test_si_todos_los_productos_son_ambiguos_solo_pregunta(db_session, products):
+    from app.modules.menu import Product
+
+    db_session.add(Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id))
+    db_session.commit()
+
+    resultado = calcular_y_preparar_pedido.invoke({"items_solicitados": "1 pizza"})
+
+    assert resultado.startswith("Necesito que me aclares algunos productos:")
+    assert "Pizza Muzzarella, Pizza Napolitana" in resultado
+
+
+def test_el_nombre_exacto_gana_aunque_otro_producto_lo_contenga(db_session, products):
+    from app.modules.menu import Product
+
+    db_session.add(Product(name="Pizza Muzzarella Grande", price=12000.0, category_id=products["muzza"].category_id))
+    db_session.commit()
+
+    datos = _calcular(items_solicitados="1 pizza muzzarella")["datos_temporales"]
+
+    assert [i["nombre"] for i in datos["items"]] == ["Pizza Muzzarella"]
+
+
 def test_no_ofrece_productos_agotados(products):
     resultado = calcular_y_preparar_pedido.invoke({"items_solicitados": "1 Pizza Agotada"})
 
@@ -202,7 +238,15 @@ def test_no_registra_pedidos_con_productos_invalidos(db_session, products, items
 def test_no_registra_productos_que_se_agotaron_durante_la_charla(db_session, products):
     resultado = _confirmar(_datos(products, items=[{"product_id": products["agotada"].id, "quantity": 1}]))
 
-    assert "ya no están disponibles" in resultado
+    assert "no están disponibles en este momento: Pizza Agotada" in resultado
+    assert db_session.query(Order).count() == 0
+
+
+def test_respeta_el_maximo_por_producto_igual_que_la_web(db_session, products):
+    resultado = _confirmar(_datos(products, items=[{"product_id": products["muzza"].id, "quantity": 500}]))
+
+    assert "NO se registró" in resultado
+    assert "cantidad máxima (20 unidades)" in resultado
     assert db_session.query(Order).count() == 0
 
 

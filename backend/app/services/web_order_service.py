@@ -30,25 +30,27 @@ def _merge_quantities(payload: WebOrderCreate) -> dict[int, int]:
     return quantities
 
 
-def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
-    """Valida el pedido contra el menú actual y arma la orden (sin persistirla) con precios de la base."""
-    quantities = _merge_quantities(payload)
+def build_order_items(db: Session, quantities: dict[int, int]) -> tuple[list[OrderItem], float]:
+    """Valida las cantidades pedidas de cada producto contra el menú actual y arma los ítems con los
+    precios de la base. Es la única validación de productos para todos los canales (web, mostrador y bot).
+
+    Devuelve los ítems y el total, o lanza InvalidOrderError con el motivo para mostrarle al cliente.
+    """
+    if not quantities:
+        raise InvalidOrderError("El pedido no tiene productos.")
+    if any(qty < 1 for qty in quantities.values()):
+        raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
 
     products = db.query(Product).filter(Product.id.in_(quantities.keys())).all()
     products_by_id = {product.id: product for product in products}
 
     missing_ids = [product_id for product_id in quantities if product_id not in products_by_id]
     if missing_ids:
-        raise InvalidOrderError(
-            "Algunos productos del pedido no existen en el menú. Actualizá la página e intentá nuevamente."
-        )
+        raise InvalidOrderError("Algunos productos del pedido ya no existen en el menú.")
 
     unavailable = [products_by_id[product_id].name for product_id in quantities if not products_by_id[product_id].is_available]
     if unavailable:
-        raise InvalidOrderError(
-            f"Estos productos no están disponibles en este momento: {', '.join(unavailable)}. "
-            "Quitalos del carrito para continuar."
-        )
+        raise InvalidOrderError(f"Estos productos no están disponibles en este momento: {', '.join(unavailable)}.")
 
     exceeded = [products_by_id[product_id].name for product_id, qty in quantities.items() if qty > MAX_QUANTITY_PER_ITEM]
     if exceeded:
@@ -56,6 +58,16 @@ def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
             f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
         )
 
+    items = [
+        OrderItem(product_id=product_id, quantity=qty, unit_price=products_by_id[product_id].price)
+        for product_id, qty in quantities.items()
+    ]
+    return items, sum(item.unit_price * item.quantity for item in items)
+
+
+def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
+    """Valida el pedido contra el menú actual y arma la orden (sin persistirla) con precios de la base."""
+    items, total = build_order_items(db, _merge_quantities(payload))
     is_pickup = payload.delivery_method == "retiro"
     order = Order(
         customer_name=payload.customer_name,
@@ -65,12 +77,9 @@ def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
         delivery_method=payload.delivery_method,
         status="Pendiente",
         source=source,
-        total_amount=sum(products_by_id[product_id].price * qty for product_id, qty in quantities.items()),
+        total_amount=total,
     )
-    order.items = [
-        OrderItem(product_id=product_id, quantity=qty, unit_price=products_by_id[product_id].price)
-        for product_id, qty in quantities.items()
-    ]
+    order.items = items
     return order
 
 

@@ -56,11 +56,22 @@ def test_cors_no_habilita_otros_origenes(public_client):
     assert "access-control-allow-origin" not in response.headers
 
 
-def test_chat_web_genera_una_sesion_nueva_si_no_se_envia(public_client):
+def test_chat_web_es_solo_para_administradores(public_client, customer_headers):
+    """Cada mensaje consume la API de Gemini: no puede quedar abierto al público."""
+    with patch("app.api.chat_router.chat_service.obtener_respuesta", new_callable=AsyncMock) as responder:
+        assert public_client.post("/api/v1/chat/", json={"mensaje": "Hola"}).status_code == 401
+        assert (
+            public_client.post("/api/v1/chat/", json={"mensaje": "Hola"}, headers=customer_headers).status_code
+            == 403
+        )
+    responder.assert_not_awaited()
+
+
+def test_chat_web_genera_una_sesion_nueva_si_no_se_envia(client):
     with patch(
         "app.api.chat_router.chat_service.obtener_respuesta", new_callable=AsyncMock, return_value="¡Hola!"
     ) as responder:
-        response = public_client.post("/api/v1/chat/", json={"mensaje": "Hola"})
+        response = client.post("/api/v1/chat/", json={"mensaje": "Hola"})
 
     assert response.status_code == 200
     body = response.json()
@@ -69,15 +80,15 @@ def test_chat_web_genera_una_sesion_nueva_si_no_se_envia(public_client):
     responder.assert_awaited_once_with("Hola", session_id=body["session_id"])
 
 
-def test_chat_web_continua_la_sesion_indicada(public_client):
+def test_chat_web_continua_la_sesion_indicada(client):
     with patch(
         "app.api.chat_router.chat_service.obtener_respuesta", new_callable=AsyncMock, return_value="Perfecto"
     ) as responder:
-        response = public_client.post("/api/v1/chat/", json={"mensaje": "Sí", "session_id": "sesion-1"})
+        response = client.post("/api/v1/chat/", json={"mensaje": "Sí", "session_id": "sesion-1"})
 
     assert response.json()["session_id"] == "sesion-1"
     responder.assert_awaited_once_with("Sí", session_id="sesion-1")
 
 
-def test_chat_web_requiere_mensaje(public_client):
-    assert public_client.post("/api/v1/chat/", json={}).status_code == 422
+def test_chat_web_requiere_mensaje(client):
+    assert client.post("/api/v1/chat/", json={}).status_code == 422

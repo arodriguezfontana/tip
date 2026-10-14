@@ -11,6 +11,11 @@ def _update(texto="Hola", chat_id=12345):
     return {"update_id": 1, "message": {"message_id": 7, "chat": {"id": chat_id}, "text": texto}}
 
 
+def _headers_de_telegram() -> dict:
+    """Telegram manda en cada llamada el secreto con el que se registró el webhook."""
+    return {"X-Telegram-Bot-Api-Secret-Token": settings.telegram_webhook_secret}
+
+
 @pytest.fixture()
 def procesar():
     with patch(
@@ -26,7 +31,9 @@ def secreto(monkeypatch):
 
 
 def test_mensaje_de_texto_se_procesa_en_segundo_plano(public_client, procesar):
-    response = public_client.post(WEBHOOK_URL, json=_update("Quiero una muzza", chat_id=98765))
+    response = public_client.post(
+        WEBHOOK_URL, json=_update("Quiero una muzza", chat_id=98765), headers=_headers_de_telegram()
+    )
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
@@ -43,10 +50,19 @@ def test_mensaje_de_texto_se_procesa_en_segundo_plano(public_client, procesar):
 )
 def test_actualizaciones_sin_texto_se_ignoran_pero_se_confirman(public_client, procesar, update):
     """Telegram reintenta las actualizaciones no confirmadas: siempre hay que responder 200."""
-    response = public_client.post(WEBHOOK_URL, json=update)
+    response = public_client.post(WEBHOOK_URL, json=update, headers=_headers_de_telegram())
 
     assert response.status_code == 200
     procesar.assert_not_awaited()
+
+
+def test_sin_secreto_configurado_igual_exige_uno_derivado_del_token(public_client, procesar, monkeypatch):
+    monkeypatch.setattr(settings, "TELEGRAM_WEBHOOK_SECRET", "")
+
+    assert public_client.post(WEBHOOK_URL, json=_update()).status_code == 403
+    assert settings.telegram_webhook_secret not in ("", settings.TELEGRAM_TOKEN)
+    assert public_client.post(WEBHOOK_URL, json=_update(), headers=_headers_de_telegram()).status_code == 200
+    procesar.assert_awaited_once()
 
 
 def test_con_secreto_configurado_rechaza_pedidos_sin_el_header(public_client, procesar, secreto):
