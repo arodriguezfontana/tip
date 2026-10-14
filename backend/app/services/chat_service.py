@@ -6,6 +6,7 @@ from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 from app.core.config import settings
 from app.services.chat_memory import SesionChat
+from app.services.tools.horario_tools import obtener_estado_del_local
 from app.services.tools.menu_tools import obtener_menu_actual
 from app.services.tools.order_tools import calcular_y_preparar_pedido, confirmar_y_guardar_pedido
 
@@ -45,7 +46,7 @@ class ChatService:
             7. Registro: Solo si el cliente confirma explícitamente que el resumen es correcto, invoca la herramienta "confirmar_y_guardar_pedido". Si dice que no, permítele corregir los datos.
             8. Después del registro: Nunca le digas al cliente que el pedido está confirmado o aceptado: queda pendiente hasta que el local lo revise y le avise por este chat.
             
-            REGLA DE HORARIOS: Si el cliente pide un horario, pasáselo a "calcular_y_preparar_pedido" tal cual lo dijo (ej: "21:00"). Si la herramienta responde que ese horario es demasiado pronto, decile al cliente cuál es el horario más rápido posible que te indicó y preguntale si lo quiere para esa hora o para ahora. Nunca registres un pedido con un horario (o como "para ahora") que el cliente no haya aceptado.
+            REGLA DE HORARIOS: Si el cliente pide un horario, pasáselo a "calcular_y_preparar_pedido" tal cual lo dijo (ej: "21:00"), y si además indica el día (ej: "mañana", "el sábado"), pasalo en "dia_programado". Si la herramienta responde que ese horario es demasiado pronto, decile al cliente cuál es el horario más rápido posible que te indicó y preguntale si lo quiere para esa hora o para ahora. Si responde que el local está cerrado en ese horario (o para ahora), transmitíselo al cliente junto con los horarios de atención y pedile otro horario en el que el local esté abierto. Nunca registres un pedido con un horario (o como "para ahora") que el cliente no haya aceptado.
 
             REGLA DE OBSERVACIONES: Si en cualquier momento de la conversación el cliente menciona una aclaración importante sobre la comida o la entrega (ej: "sin cebolla", "bien cocida", "es alérgico al maní", "tocar timbre 2B", "pago con $20000"), incluila en "observaciones" aunque no se la hayas preguntado, y no se la vuelvas a pedir.
 
@@ -53,9 +54,10 @@ class ChatService:
         """
         self.sesiones: dict[str, SesionChat] = {}
 
-    def _mensajes_para_el_modelo(self, sesion: SesionChat, menu: str) -> list:
+    def _mensajes_para_el_modelo(self, sesion: SesionChat, menu: str, horario: str = "") -> list:
         # La memoria se recalcula en cada llamada: puede cambiar a mitad de turno tras usar una herramienta.
-        instrucciones = f"{self.system_prompt}\n\nMENÚ ACTUAL:\n{menu}{sesion.texto_memoria()}"
+        horario = f"\n\n{horario}" if horario else ""
+        instrucciones = f"{self.system_prompt}{horario}\n\nMENÚ ACTUAL:\n{menu}{sesion.texto_memoria()}"
         return [SystemMessage(content=instrucciones), *sesion.historial]
 
     async def obtener_respuesta(self, mensaje_usuario: str, session_id: str) -> str:
@@ -66,10 +68,10 @@ class ChatService:
         finally:
             sesion.finalizar_turno()
 
-    async def _llamar_al_modelo(self, sesion: SesionChat, menu: str, session_id: str) -> AIMessage:
+    async def _llamar_al_modelo(self, sesion: SesionChat, menu: str, horario: str, session_id: str) -> AIMessage:
         inicio = time.perf_counter()
         respuesta = await asyncio.wait_for(
-            self.llm_con_herramientas.ainvoke(self._mensajes_para_el_modelo(sesion, menu)),
+            self.llm_con_herramientas.ainvoke(self._mensajes_para_el_modelo(sesion, menu, horario)),
             timeout=LLM_TIMEOUT_SECONDS,
         )
         uso = respuesta.usage_metadata or {}
@@ -85,10 +87,11 @@ class ChatService:
     async def _responder(self, sesion: SesionChat, session_id: str) -> str:
         historial = sesion.historial
         menu = obtener_menu_actual()
+        horario = obtener_estado_del_local()
         respuesta_ia = None
         try:
             for _ in range(MAX_TOOL_ITERATIONS):
-                respuesta_ia = await self._llamar_al_modelo(sesion, menu, session_id)
+                respuesta_ia = await self._llamar_al_modelo(sesion, menu, horario, session_id)
                 historial.append(respuesta_ia)
 
                 if not respuesta_ia.tool_calls:

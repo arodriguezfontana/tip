@@ -2,16 +2,38 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MenuPage from '@/pages/MenuPage';
+import * as businessHoursService from '@/services/businessHoursService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
+import type { BusinessHoursStatus } from '@/types/businessHours';
 import type { WebOrderCreated } from '@/types/order';
 import { COCA, CUSTOMER, FUGAZZETA, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/menuService');
 vi.mock('@/services/orderService');
+vi.mock('@/services/businessHoursService');
 
 const menu = vi.mocked(menuService);
 const orders = vi.mocked(orderService);
+const businessHours = vi.mocked(businessHoursService);
+
+const OPEN: BusinessHoursStatus = {
+  configured: true,
+  is_open: true,
+  closes_at: null,
+  next_opening: null,
+  next_opening_label: null,
+  ranges: [{ day_of_week: 1, opens_at: '20:00', closes_at: '00:00' }],
+};
+const CLOSED: BusinessHoursStatus = {
+  ...OPEN,
+  is_open: false,
+  next_opening_label: 'mañana a las 20:00',
+  ranges: [
+    { day_of_week: 1, opens_at: '20:00', closes_at: '00:00' },
+    { day_of_week: 1, opens_at: '12:00', closes_at: '15:00' },
+  ],
+};
 
 const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 
@@ -49,6 +71,7 @@ function cart() {
 beforeEach(() => {
   vi.resetAllMocks();
   menu.fetchMenuProducts.mockResolvedValue([MUZZA, FUGAZZETA, COCA]);
+  businessHours.fetchBusinessHours.mockResolvedValue(OPEN);
 });
 
 describe('MenuPage', () => {
@@ -206,5 +229,50 @@ describe('MenuPage', () => {
     await user.click(screen.getByRole('button', { name: 'creá una cuenta' }));
 
     expect(screen.getByRole('dialog', { name: 'Crear cuenta' })).toBeInTheDocument();
+  });
+
+  it('con el local cerrado avisa los horarios y no permite hacer pedidos', async () => {
+    businessHours.fetchBusinessHours.mockResolvedValue(CLOSED);
+    renderMenu();
+    const user = userEvent.setup();
+
+    const notice = await screen.findByRole('region', { name: 'El local se encuentra cerrado' });
+    expect(notice).toHaveTextContent('Volvemos a abrir mañana a las 20:00.');
+    expect(within(notice).getByText('Martes').nextElementSibling).toHaveTextContent('12:00 a 15:00 y 20:00 a 00:00');
+    expect(within(notice).getByText('Lunes').nextElementSibling).toHaveTextContent('Cerrado');
+
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+    await user.click(within(productCard('Pizza Muzzarella')).getByRole('button', { name: 'Agregar' }));
+
+    expect(screen.getByText(/Vas a poder hacer tu pedido cuando volvamos a abrir/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Confirmar pedido' })).not.toBeInTheDocument();
+  });
+
+  it('sin horarios configurados no muestra el aviso de cerrado', async () => {
+    businessHours.fetchBusinessHours.mockResolvedValue({ ...CLOSED, configured: false, ranges: [] });
+    renderMenu();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+    await user.click(within(productCard('Pizza Muzzarella')).getByRole('button', { name: 'Agregar' }));
+
+    expect(screen.queryByRole('region', { name: 'El local se encuentra cerrado' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar pedido' })).toBeInTheDocument();
+  });
+
+  it('si el local cerró mientras armaba el pedido muestra el aviso del servidor', async () => {
+    orders.createWebOrder.mockRejectedValue({
+      statusCode: 409,
+      message: 'El local está cerrado en este momento, así que no podemos tomar pedidos.',
+    });
+    renderMenu();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+    await user.click(within(productCard('Pizza Muzzarella')).getByRole('button', { name: 'Agregar' }));
+    await user.click(screen.getByRole('button', { name: 'Retiro en el local' }));
+    await user.type(screen.getByLabelText('Nombre'), 'Ana');
+    await user.type(screen.getByLabelText('Teléfono'), '11 5555-1234');
+    await user.click(screen.getByRole('button', { name: 'Confirmar pedido' }));
+
+    expect(await screen.findByRole('alert')).toHaveTextContent('El local está cerrado en este momento');
   });
 });

@@ -35,7 +35,8 @@ class FakeLLM:
 @pytest.fixture(autouse=True)
 def tools_session(db_session):
     with patch("app.services.tools.order_tools.SessionLocal", TestingSessionLocal), \
-         patch("app.services.tools.menu_tools.SessionLocal", TestingSessionLocal):
+         patch("app.services.tools.menu_tools.SessionLocal", TestingSessionLocal), \
+         patch("app.services.tools.horario_tools.SessionLocal", TestingSessionLocal):
         yield
 
 

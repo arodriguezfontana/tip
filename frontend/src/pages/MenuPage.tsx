@@ -7,8 +7,10 @@ import { OrderSuccess } from '@/components/OrderSuccess';
 import { CustomerAccountActions } from '@/components/CustomerAccountActions';
 import { CustomerAuthModal } from '@/components/CustomerAuthModal';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
+import { StoreClosedNotice } from '@/components/StoreClosedNotice';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
+import { useBusinessHours } from '@/hooks/useBusinessHours';
 import { fetchMenuProducts } from '@/services/menuService';
 import { groupByCategory } from '@/utils/productGrouping';
 import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
@@ -21,6 +23,8 @@ interface SubmittedOrder {
 export default function MenuPage() {
   const { clearCart } = useCart();
   const { user, isCustomer } = useAuth();
+  const businessHours = useBusinessHours();
+  const storeClosed = businessHours !== null && businessHours.configured && !businessHours.is_open;
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [products, setProducts] = useState<Product[]>([]);
@@ -72,6 +76,7 @@ export default function MenuPage() {
     <div className="min-h-screen bg-gray-50 flex flex-col">
       <TopBar actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />} />
       <main className="flex-1 px-4 py-10">
+        {storeClosed && !submittedOrder && <StoreClosedNotice status={businessHours} />}
         {submittedOrder ? (
           <OrderSuccess order={submittedOrder.order} form={submittedOrder.form} onNewOrder={handleNewOrder} />
         ) : (
@@ -122,12 +127,21 @@ export default function MenuPage() {
             <div className="lg:col-span-1">
               <div className="lg:sticky lg:top-6">
                 <CartSummary />
-                {/* Se remonta al iniciar/cerrar sesión para autocompletar con los datos de la cuenta. */}
-                <CheckoutForm
-                  key={isCustomer && user ? `customer-${user.id}` : 'guest'}
-                  onSubmitSuccess={handleOrderCreated}
-                  onRequestAuth={setAuthModalMode}
-                />
+                {storeClosed ? (
+                  <div className="bg-white rounded-2xl shadow-md p-6 mt-6">
+                    <h2 className="text-lg font-bold text-gray-900 mb-2">Pedidos no disponibles</h2>
+                    <p className="text-sm text-gray-500">
+                      El local está cerrado. Vas a poder hacer tu pedido cuando volvamos a abrir.
+                    </p>
+                  </div>
+                ) : (
+                  /* Se remonta al iniciar/cerrar sesión para autocompletar con los datos de la cuenta. */
+                  <CheckoutForm
+                    key={isCustomer && user ? `customer-${user.id}` : 'guest'}
+                    onSubmitSuccess={handleOrderCreated}
+                    onRequestAuth={setAuthModalMode}
+                  />
+                )}
               </div>
             </div>
           </div>

@@ -2,6 +2,7 @@ import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import * as businessHoursService from '@/services/businessHoursService';
 import * as clientService from '@/services/clientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
@@ -12,6 +13,7 @@ vi.mock('@/services/orderService');
 vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
+vi.mock('@/services/businessHoursService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -24,6 +26,14 @@ beforeEach(() => {
   vi.mocked(statsService.fetchTopProducts).mockResolvedValue([]);
   vi.mocked(statsService.fetchBestSellingDay).mockResolvedValue({ best_selling_day: null, total_revenue: null });
   vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
+  vi.mocked(businessHoursService.fetchBusinessHours).mockResolvedValue({
+    configured: false,
+    is_open: true,
+    closes_at: null,
+    next_opening: null,
+    next_opening_label: null,
+    ranges: [],
+  });
 });
 
 function renderDashboard(auth = fakeAuth(ADMIN)) {
@@ -66,6 +76,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Clientes');
     expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
+
+    await goTo(user, 'Horarios');
+    expect(await screen.findByText(/se aceptan pedidos a cualquier hora/)).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {
