@@ -5,8 +5,8 @@ import pytest
 from app.core.config import settings
 from app.core.security import verify_password
 from app.db import seed
-from app.modules.menu import Category, Product, ProductIngredient
-from app.modules.user import User
+from app.models.menu import Category, Ingredient, Product, ProductIngredient
+from app.models.user import User
 from tests.conftest import TestingSessionLocal
 
 
@@ -32,6 +32,9 @@ def test_seed_carga_admin_categorias_y_menu(run_seed, db_session):
     assert len(productos) > 5
     assert all(p.price > 0 and p.is_active for p in productos)
     assert db_session.query(ProductIngredient).count() > 0
+    unidades = {i.name: i.unit for i in db_session.query(Ingredient)}
+    assert unidades["Muzzarella"] == "gramos"
+    assert unidades["Albahaca"] == "hojas"
 
 
 def test_seed_se_puede_correr_varias_veces_sin_duplicar(run_seed, db_session):

@@ -4,7 +4,7 @@ import bcrypt
 from jose import jwt
 
 from app.core.config import settings
-from app.modules.user import ROLE_ADMIN
+from app.models.user import ROLE_ADMIN
 
 
 def hash_password(password: str) -> str:

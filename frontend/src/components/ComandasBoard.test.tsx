@@ -162,4 +162,16 @@ describe('ComandasBoard', () => {
     await user.click(within(column('Pendientes')).getAllByRole('button', { name: 'Rechazar' })[0]);
     expect(service.updateOrderStatus).not.toHaveBeenCalled();
   });
+
+  it('el modo simulación no se ofrece en producción', async () => {
+    vi.stubEnv('DEV', false);
+    try {
+      render(<ComandasBoard />);
+      await screen.findByText('Pendiente Ahora');
+
+      expect(screen.queryByRole('button', { name: 'Simular 55 Pedidos' })).not.toBeInTheDocument();
+    } finally {
+      vi.unstubAllEnvs();
+    }
+  });
 });

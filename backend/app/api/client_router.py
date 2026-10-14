@@ -1,25 +1,14 @@
-from fastapi import APIRouter, Depends, HTTPException, Query, status as http_status
-from pydantic import BaseModel, ConfigDict, Field
+from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.modules.client import Client
-from app.modules.user import User
-from app.schemas.client_schemas import ClientPaginatedResponse, ClientResponse
-from app.schemas.common import PHONE_PATTERN
-from app.services.client_service import find_client_by_phone, get_clients_paginated, update_client
+from app.models.client import Client
+from app.models.user import User
+from app.schemas.client_schemas import ClientPaginatedResponse, ClientResponse, ClientUpdatePayload
+from app.services import client_service
 
 router = APIRouter()
-
-
-class ClientUpdatePayload(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
-
-    full_name: str = Field(..., min_length=1, max_length=150)
-    # Mismo formato que en los pedidos: un teléfono sin dígitos quedaría vacío al normalizarlo.
-    phone: str = Field(..., min_length=6, max_length=30, pattern=PHONE_PATTERN)
-    address: str | None = Field(None, max_length=255)
 
 
 @router.get("/lookup", response_model=ClientResponse)
@@ -29,10 +18,7 @@ def lookup_client(
     current_user: User = Depends(get_current_admin),
 ) -> Client:
     """Busca un cliente de la agenda del local por teléfono para autocompletar la carga de pedidos."""
-    client = find_client_by_phone(db, phone)
-    if client is None:
-        raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Cliente no registrado")
-    return client
+    return client_service.find_client_by_phone(db, phone)
 
 
 @router.get("", response_model=ClientPaginatedResponse)
@@ -43,32 +29,16 @@ def list_clients(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> ClientPaginatedResponse:
-    """Lista los clientes registrados con búsqueda en tiempo real y paginación."""
-    clients, total = get_clients_paginated(db, search=search, page=page, per_page=per_page)
-    
-    total_pages = (total + per_page - 1) // per_page if total > 0 else 1
-
-    return ClientPaginatedResponse(
-        items=[ClientResponse.model_validate(c) for c in clients],
-        total=total,
-        page=page,
-        per_page=per_page,
-        total_pages=total_pages,
-    )
+    """Lista los clientes de la agenda con búsqueda y paginación."""
+    return ClientPaginatedResponse.from_page(client_service.list_clients(db, search=search, page=page, per_page=per_page))
 
 
 @router.put("/{client_id}", response_model=ClientResponse)
-def update_client_endpoint(
+def update_client(
     client_id: int,
     payload: ClientUpdatePayload,
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> Client:
     """Actualiza la información de un cliente de la agenda."""
-    try:
-        updated = update_client(db, client_id, payload.full_name, payload.phone, payload.address)
-        if not updated:
-            raise HTTPException(status_code=http_status.HTTP_404_NOT_FOUND, detail="Cliente no encontrado")
-        return updated
-    except ValueError as e:
-        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(e))
+    return client_service.update_client(db, client_id, payload.full_name, payload.phone, payload.address)

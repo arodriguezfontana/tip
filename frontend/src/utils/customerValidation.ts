@@ -1,13 +1,6 @@
 /** Mismo formato de teléfono que valida el backend. */
 export const PHONE_PATTERN = /^\+?[0-9\s()-]{6,30}$/;
 
-export function getErrorMessage(err: unknown, fallback: string): string {
-  if (err && typeof err === 'object' && 'message' in err && typeof err.message === 'string') {
-    return err.message;
-  }
-  return fallback;
-}
-
 export interface CustomerDataErrors {
   full_name?: string;
   phone?: string;

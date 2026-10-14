@@ -1,53 +1,27 @@
-import { useEffect, useState } from 'react';
-import type { StatsParams, TopProduct } from '@/types/stats';
+import { useCallback } from 'react';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import type { StatsParams } from '@/types/stats';
 import { fetchStatusDistribution, fetchTopProducts, fetchBestSellingDay } from '@/services/statsService';
 
+const NO_BEST_DAY = { best_selling_day: null, total_revenue: null };
+
 export function useStats({ dateFrom, dateTo }: StatsParams = {}) {
-  const [statusDistribution, setStatusDistribution] = useState<Record<string, number>>({});
-  const [topProducts, setTopProducts] = useState<TopProduct[]>([]);
-  const [bestDay, setBestDay] = useState<{ best_selling_day: string | null; total_revenue: number | null }>({
-    best_selling_day: null,
-    total_revenue: null,
-  });
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-
-    async function loadStats() {
-      setLoading(true);
-      setError(null);
-      const params = { dateFrom, dateTo };
-      try {
-        const [statusData, topData, bestDayData] = await Promise.all([
-          fetchStatusDistribution(params),
-          fetchTopProducts(params),
-          fetchBestSellingDay(params),
-        ]);
-
-        if (!cancelled) {
-          setStatusDistribution(statusData);
-          setTopProducts(topData);
-          setBestDay(bestDayData);
-        }
-      } catch {
-        if (!cancelled) {
-          setError('No se pudieron cargar las estadísticas del negocio.');
-        }
-      } finally {
-        if (!cancelled) {
-          setLoading(false);
-        }
-      }
-    }
-
-    loadStats();
-
-    return () => {
-      cancelled = true;
-    };
+  const load = useCallback(async () => {
+    const params = { dateFrom, dateTo };
+    const [statusDistribution, topProducts, bestDay] = await Promise.all([
+      fetchStatusDistribution(params),
+      fetchTopProducts(params),
+      fetchBestSellingDay(params),
+    ]);
+    return { statusDistribution, topProducts, bestDay };
   }, [dateFrom, dateTo]);
+  const { data, loading, error } = useAsyncData(load, 'No se pudieron cargar las estadísticas del negocio.');
 
-  return { statusDistribution, topProducts, bestDay, loading, error };
+  return {
+    statusDistribution: data?.statusDistribution ?? {},
+    topProducts: data?.topProducts ?? [],
+    bestDay: data?.bestDay ?? NO_BEST_DAY,
+    loading,
+    error,
+  };
 }

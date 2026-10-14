@@ -4,7 +4,8 @@ import { Link } from 'react-router-dom';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { createWebOrder } from '@/services/orderService';
-import { PHONE_PATTERN, getErrorMessage } from '@/utils/customerValidation';
+import { PHONE_PATTERN } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated } from '@/types/order';
 

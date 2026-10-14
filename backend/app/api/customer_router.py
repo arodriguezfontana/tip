@@ -3,7 +3,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_customer
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.customer_schemas import CustomerProfileResponse, CustomerProfileUpdate
 from app.services.auth_service import update_customer_profile
 
@@ -23,4 +23,4 @@ def update_profile(
     current_customer: User = Depends(get_current_customer),
 ) -> User:
     """Actualiza los datos personales que se usan para autocompletar los pedidos."""
-    return update_customer_profile(db, current_customer, payload)
+    return update_customer_profile(db, current_customer, payload.full_name, payload.phone, payload.address)

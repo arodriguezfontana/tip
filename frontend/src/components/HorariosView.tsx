@@ -1,8 +1,10 @@
 import { useEffect, useState } from 'react';
+import { Toast } from '@/components/ui/Toast';
+import { useToast } from '@/hooks/useToast';
 import { fetchBusinessHours, updateBusinessHours } from '@/services/businessHoursService';
 import type { BusinessHoursRange, BusinessHoursStatus } from '@/types/businessHours';
 import { DAY_NAMES, groupRangesByDay } from '@/utils/businessHours';
-import { getErrorMessage } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 
 interface EditableRange {
   opens_at: string;
@@ -59,7 +61,7 @@ export function HorariosView() {
   const [loadError, setLoadError] = useState<string | null>(null);
   const [formError, setFormError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
-  const [toastMessage, setToastMessage] = useState<string | null>(null);
+  const toast = useToast();
 
   useEffect(() => {
     let cancelled = false;
@@ -105,8 +107,7 @@ export function HorariosView() {
       const saved = await updateBusinessHours(toRanges(draft));
       setStatus(saved);
       setDraft(toDraft(saved.ranges));
-      setToastMessage('Los horarios de atención se guardaron correctamente.');
-      setTimeout(() => setToastMessage(null), 4000);
+      toast.show('Los horarios de atención se guardaron correctamente.');
     } catch (err) {
       setFormError(getErrorMessage(err, 'No se pudieron guardar los horarios. Intentá nuevamente.'));
     } finally {
@@ -118,11 +119,7 @@ export function HorariosView() {
   // guardar queda siempre a la vista.
   return (
     <div className="flex flex-col gap-4 max-w-4xl mx-auto relative lg:h-full">
-      {toastMessage && (
-        <div className="fixed top-5 right-5 z-50 bg-green-50 text-green-800 border border-green-200 px-5 py-3 rounded-2xl shadow-lg text-sm font-semibold transition">
-          {toastMessage}
-        </div>
-      )}
+      <Toast message={toast.message} />
 
       <div className="bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-1 shrink-0">
         <h1 className="text-lg font-bold text-gray-900">Horarios de atención</h1>

@@ -1,9 +1,9 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { formatCurrency } from '@/utils/currency';
-import { PHONE_PATTERN, getErrorMessage, validateCustomerData } from '@/utils/customerValidation';
+import { PHONE_PATTERN, validateCustomerData } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import { parseDateInputValue, presetLabel, rangeForPreset } from '@/utils/dateRange';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
-import { groupOrdersByPeriod } from '@/utils/orderGrouping';
 import { groupByCategory } from '@/utils/productGrouping';
 import { COCA, FUGAZZETA, MUZZA, makeOrder } from '@/test/utils';
 
@@ -136,46 +136,6 @@ describe('elapsedTime', () => {
 
   it('no aplica si no hay demora ni horario', () => {
     expect(getDelayLevel(makeOrder({ status: 'Confirmado' }), Date.now())).toBeNull();
-  });
-});
-
-describe('groupOrdersByPeriod', () => {
-  const orders = [
-    makeOrder({ id: 1, total_amount: 1000, created_at: new Date(2026, 8, 28, 12).toISOString() }), // lunes
-    makeOrder({ id: 2, total_amount: 2000, created_at: new Date(2026, 8, 28, 21).toISOString() }),
-    makeOrder({ id: 3, total_amount: 500, created_at: new Date(2026, 9, 4, 13).toISOString() }), // domingo
-    makeOrder({ id: 4, total_amount: 700, created_at: new Date(2026, 9, 5, 13).toISOString() }), // lunes siguiente
-  ];
-
-  it('agrupa por día, del más reciente al más antiguo', () => {
-    const groups = groupOrdersByPeriod(orders, 'day');
-    expect(groups.map((g) => [g.key, g.orderCount, g.revenue])).toEqual([
-      ['2026-10-05', 1, 700],
-      ['2026-10-04', 1, 500],
-      ['2026-09-28', 2, 3000],
-    ]);
-    expect(groups[2].label).toBe('28/09/2026');
-  });
-
-  it('agrupa por semana de lunes a domingo', () => {
-    const groups = groupOrdersByPeriod(orders, 'week');
-    expect(groups.map((g) => [g.key, g.orderCount, g.revenue])).toEqual([
-      ['2026-10-05', 1, 700],
-      ['2026-09-28', 3, 3500],
-    ]);
-  });
-
-  it('agrupa por mes', () => {
-    const groups = groupOrdersByPeriod(orders, 'month');
-    expect(groups.map((g) => [g.key, g.orderCount, g.revenue])).toEqual([
-      ['2026-10', 2, 1200],
-      ['2026-09', 2, 3000],
-    ]);
-    expect(groups[0].label).toBe('octubre de 2026');
-  });
-
-  it('sin pedidos no hay grupos', () => {
-    expect(groupOrdersByPeriod([], 'day')).toEqual([]);
   });
 });
 

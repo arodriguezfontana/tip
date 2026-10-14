@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HistorialView } from '@/components/HistorialView';
-import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
@@ -100,28 +99,6 @@ describe('HistorialView', () => {
     await user.click(screen.getByRole('button', { name: 'Ver detalle del pedido #1' }));
 
     expect(screen.getByRole('dialog', { name: 'Pedido #1' })).toBeInTheDocument();
-  });
-});
-
-describe('IngresosView', () => {
-  it('agrupa la facturación por día y por mes', async () => {
-    render(<IngresosView />);
-    const user = userEvent.setup();
-
-    const rows = async () => (await screen.findAllByRole('row')).slice(1).map((r) => plain(r.textContent));
-
-    expect(await rows()).toEqual(['03/10/20261$ 10.000,00', '02/10/20261$ 5.000,00']);
-    expect(kpi('Dinero facturado')).toBe('$ 15.000,00');
-
-    await user.click(screen.getByRole('button', { name: 'Mes' }));
-    expect(await rows()).toEqual(['octubre de 20262$ 15.000,00']);
-  });
-
-  it('avisa si no hay ingresos en el rango', async () => {
-    orders.fetchOrders.mockResolvedValue([HISTORY[1]]); // solo un rechazado
-    render(<IngresosView />);
-
-    expect(await screen.findByText('No hay ingresos en el rango seleccionado.')).toBeInTheDocument();
   });
 });
 

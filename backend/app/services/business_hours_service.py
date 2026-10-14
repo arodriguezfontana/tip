@@ -9,8 +9,11 @@ from datetime import date, datetime, time, timedelta
 
 from sqlalchemy.orm import Session
 
+from app.core.errors import BusinessRuleError, ConflictError
 from app.core.time import ahora_local
-from app.modules.business_hours import BusinessHours
+from app.db.session import transaction
+from app.models.business_hours import BusinessHours
+from app.repositories import business_hours_repository
 
 MINUTOS_POR_DIA = 24 * 60
 MINUTOS_POR_SEMANA = 7 * MINUTOS_POR_DIA
@@ -18,11 +21,11 @@ MINUTOS_POR_SEMANA = 7 * MINUTOS_POR_DIA
 DIAS_SEMANA = ("lunes", "martes", "miércoles", "jueves", "viernes", "sábado", "domingo")
 
 
-class HorarioInvalidoError(ValueError):
+class HorarioInvalidoError(BusinessRuleError):
     """La configuración de horarios enviada no es válida."""
 
 
-class LocalCerradoError(Exception):
+class LocalCerradoError(ConflictError):
     """Se intentó hacer un pedido para ahora con el local cerrado."""
 
 
@@ -74,8 +77,10 @@ def _minuto_de_la_semana(momento: datetime) -> int:
 
 
 def obtener_franjas(db: Session) -> list[Franja]:
-    filas = db.query(BusinessHours).order_by(BusinessHours.day_of_week, BusinessHours.opens_at).all()
-    return [Franja(dia=f.day_of_week, apertura=f.opens_at, cierre=f.closes_at) for f in filas]
+    return [
+        Franja(dia=f.day_of_week, apertura=f.opens_at, cierre=f.closes_at)
+        for f in business_hours_repository.list_ordered(db)
+    ]
 
 
 def validar_franjas(franjas: list[Franja]) -> None:
@@ -106,13 +111,10 @@ def validar_franjas(franjas: list[Franja]) -> None:
 def guardar_franjas(db: Session, franjas: list[Franja]) -> list[Franja]:
     """Reemplaza todos los horarios de atención por los indicados."""
     validar_franjas(franjas)
-    try:
-        db.query(BusinessHours).delete()
-        db.add_all(BusinessHours(day_of_week=f.dia, opens_at=f.apertura, closes_at=f.cierre) for f in franjas)
-        db.commit()
-    except Exception:
-        db.rollback()
-        raise
+    with transaction(db):
+        business_hours_repository.replace_all(
+            db, [BusinessHours(day_of_week=f.dia, opens_at=f.apertura, closes_at=f.cierre) for f in franjas]
+        )
     return obtener_franjas(db)
 
 

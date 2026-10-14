@@ -5,7 +5,7 @@ import { fetchOrderDetail } from '@/services/orderService';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { AdminOrder, OrderDetail, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
-import { getErrorMessage } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 

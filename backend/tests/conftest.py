@@ -25,8 +25,8 @@ from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
-from app.modules.menu import Category, Product  # noqa: E402
-from app.modules.user import User  # noqa: E402
+from app.models.menu import Category, Product  # noqa: E402
+from app.models.user import User  # noqa: E402
 
 # Por defecto SQLite en memoria (rápido, sin dependencias). En CI se apunta TEST_DATABASE_URL a un
 # PostgreSQL real para validar también las restricciones y el comportamiento del motor de producción.

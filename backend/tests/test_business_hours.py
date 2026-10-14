@@ -6,7 +6,7 @@ from unittest.mock import patch
 import pytest
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.order import Order
+from app.models.order import Order
 from app.services.business_hours_service import (
     Franja,
     HorarioInvalidoError,

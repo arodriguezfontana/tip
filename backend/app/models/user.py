@@ -20,3 +20,17 @@ class User(Base):
     phone = Column(String(30), nullable=True)
     address = Column(String(255), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+
+    @property
+    def is_admin(self) -> bool:
+        return self.role == ROLE_ADMIN
+
+    @property
+    def is_customer(self) -> bool:
+        return self.role == ROLE_CUSTOMER
+
+    def update_profile(self, full_name: str, phone: str, address: str) -> None:
+        """Datos personales que el cliente guarda para autocompletar sus pedidos."""
+        self.full_name = full_name
+        self.phone = phone
+        self.address = address

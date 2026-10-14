@@ -1,21 +1,28 @@
 import logging
 from contextlib import asynccontextmanager
 
-from fastapi import Depends, FastAPI, APIRouter
+from fastapi import APIRouter, Depends, FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from sqlalchemy import text
 from sqlalchemy.orm import Session
+
+from app.api import (
+    auth_router,
+    business_hours_router,
+    category_router,
+    chat_router,
+    client_router,
+    customer_router,
+    ingredient_router,
+    menu_router,
+    order_router,
+    product_router,
+    stats_router,
+    telegram_router,
+)
+from app.api.errors import register_error_handlers
 from app.core.config import settings
 from app.db.session import get_db
-from app.api import auth_router
-from app.api import business_hours_router
-from app.api import chat_router
-from app.api import client_router
-from app.api import customer_router
-from app.api import menu_router
-from app.api import order_router
-from app.api import telegram_router
-from app.api import stats_router  # Corregido el path relativo de importación
 from app.services.telegram_service import register_webhook
 
 logging.basicConfig(level=logging.INFO)
@@ -32,6 +39,8 @@ app = FastAPI(
     openapi_url=f"{settings.API_V1_STR}/openapi.json",
     lifespan=lifespan,
 )
+
+register_error_handlers(app)
 
 app.add_middleware(
     CORSMiddleware,
@@ -55,13 +64,16 @@ def health_check(db: Session = Depends(get_db)):
 
 api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(business_hours_router.router, prefix="/business-hours", tags=["Business hours"])
+api_router.include_router(category_router.router, prefix="/categories", tags=["Categories"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
+api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
+api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
-api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])  
+api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
 
 app.include_router(api_router)
 

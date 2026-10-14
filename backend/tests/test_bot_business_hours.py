@@ -7,7 +7,7 @@ from unittest.mock import patch
 import pytest
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.order import Order
+from app.models.order import Order
 from app.services.business_hours_service import Franja, guardar_franjas
 from app.services.tools.horario_tools import obtener_estado_del_local
 from app.services.tools.order_tools import _parsear_dia, calcular_y_preparar_pedido, confirmar_y_guardar_pedido

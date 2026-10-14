@@ -1,19 +1,13 @@
 from datetime import time
 
-from fastapi import APIRouter, Depends, HTTPException, status as http_status
+from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.modules.user import User
+from app.models.user import User
 from app.schemas.business_hours_schemas import BusinessHoursRange, BusinessHoursStatus, BusinessHoursUpdate
-from app.services.business_hours_service import (
-    EstadoLocal,
-    Franja,
-    HorarioInvalidoError,
-    estado_del_local,
-    guardar_franjas,
-)
+from app.services.business_hours_service import EstadoLocal, Franja, estado_del_local, guardar_franjas
 
 router = APIRouter()
 
@@ -53,8 +47,6 @@ def update_business_hours(
         Franja(dia=r.day_of_week, apertura=time.fromisoformat(r.opens_at), cierre=time.fromisoformat(r.closes_at))
         for r in payload.ranges
     ]
-    try:
-        guardar_franjas(db, franjas)
-    except HorarioInvalidoError as exc:
-        raise HTTPException(status_code=http_status.HTTP_400_BAD_REQUEST, detail=str(exc))
+    # Un horario inválido (HorarioInvalidoError) responde 400 a través del manejador de errores de negocio.
+    guardar_franjas(db, franjas)
     return _to_status(estado_del_local(db))

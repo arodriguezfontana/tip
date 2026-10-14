@@ -2,8 +2,8 @@ from unittest.mock import patch
 
 from sqlalchemy.exc import SQLAlchemyError
 
-from app.modules.client import Client
-from app.modules.order import Order
+from app.models.client import Client
+from app.models.order import Order
 
 COUNTER_URL = "/api/v1/orders/counter"
 LOOKUP_URL = "/api/v1/clients/lookup"
@@ -79,7 +79,7 @@ def test_pedido_para_retirar_no_borra_la_direccion_guardada(client, db_session, 
 
 
 def test_si_falla_la_agenda_el_pedido_igual_se_registra(client, db_session, muzza):
-    with patch("app.services.web_order_service.upsert_client", side_effect=SQLAlchemyError("caída")):
+    with patch("app.services.order_service.upsert_client", side_effect=SQLAlchemyError("caída")):
         response = client.post(COUNTER_URL, json=_payload(muzza))
 
     assert response.status_code == 201

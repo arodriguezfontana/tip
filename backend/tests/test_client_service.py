@@ -1,7 +1,8 @@
 import pytest
 
-from app.modules.client import Client
-from app.services.client_service import find_client_by_phone, normalize_phone, upsert_client
+from app.core.errors import NotFoundError
+from app.models.client import Client
+from app.services.client_service import find_client_by_phone, upsert_client
 
 
 @pytest.mark.parametrize(
@@ -15,7 +16,13 @@ from app.services.client_service import find_client_by_phone, normalize_phone, u
     ],
 )
 def test_normaliza_telefonos(telefono, esperado):
-    assert normalize_phone(telefono) == esperado
+    assert Client.normalize_phone(telefono) == esperado
+
+
+def test_el_cliente_guarda_siempre_el_telefono_normalizado():
+    client = Client(phone=" (11) 4444-5555 ", full_name="  Paula ", address="   ")
+
+    assert (client.phone, client.full_name, client.address) == ("1144445555", "Paula", None)
 
 
 def test_busqueda_encuentra_al_cliente_con_cualquier_formato(db_session):
@@ -29,7 +36,8 @@ def test_busqueda_con_telefono_sin_digitos_no_devuelve_nada(db_session):
     db_session.add(Client(phone="", full_name="Fantasma"))
     db_session.commit()
 
-    assert find_client_by_phone(db_session, "---") is None
+    with pytest.raises(NotFoundError):
+        find_client_by_phone(db_session, "---")
 
 
 def test_alta_de_cliente_nuevo_sin_direccion(db_session):

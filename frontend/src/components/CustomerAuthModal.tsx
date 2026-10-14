@@ -1,13 +1,12 @@
 import { useEffect, useState } from 'react';
 import type { FormEvent, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
-import { getErrorMessage, validateCustomerData } from '@/utils/customerValidation';
+import { validateCustomerData } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import type { CustomerDataErrors } from '@/utils/customerValidation';
+import { INPUT_LG_CLASS as INPUT_CLASS } from '@/styles/forms';
 
 export type CustomerAuthMode = 'login' | 'register';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black';
 
 interface RegisterErrors extends CustomerDataErrors {
   email?: string;

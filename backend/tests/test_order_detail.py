@@ -1,4 +1,4 @@
-from app.modules.order import Order, OrderItem
+from app.models.order import Order, OrderItem
 
 COUNTER_URL = "/api/v1/orders/counter"
 

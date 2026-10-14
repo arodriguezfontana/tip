@@ -4,7 +4,7 @@ from datetime import datetime, timedelta, timezone
 
 import pytest
 
-from app.modules.client import Client
+from app.models.client import Client
 
 CLIENTS_URL = "/api/v1/clients"
 
@@ -101,7 +101,7 @@ def test_no_permite_usar_el_telefono_de_otro_cliente(client, db_session, agenda)
         f"{CLIENTS_URL}/{martin.id}", json={"full_name": "Martín Pérez", "phone": "11 4444-5555", "address": None}
     )
 
-    assert response.status_code == 400
+    assert response.status_code == 409
     assert "ya está registrado" in response.json()["detail"]
     db_session.refresh(martin)
     assert martin.phone == "1155556666"

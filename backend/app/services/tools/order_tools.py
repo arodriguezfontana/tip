@@ -1,17 +1,25 @@
-"""Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta."""
+"""Tools de LangChain para analizar, calcular y persistir pedidos de forma exacta.
 
-from datetime import date, datetime, time, timedelta, timezone
+Son la "capa de entrada" del bot (como los routers para la API): interpretan lo que arma el modelo de
+lenguaje y le devuelven textos para el cliente, pero las reglas del pedido y el acceso a la base quedan en
+los servicios y el modelo, iguales para todos los canales.
+"""
+
 import json
 import logging
 import re
 import unicodedata
+from datetime import date, datetime, time, timedelta, timezone
+from decimal import Decimal
 from typing import Annotated
-from langchain_core.tools import tool, InjectedToolArg
+
+from langchain_core.tools import InjectedToolArg, tool
 from sqlalchemy.orm import Session
+
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
-from app.modules.menu import Product
-from app.modules.order import Order, OrderItem
+from app.models.menu import Product
+from app.models.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError
 from app.schemas.common import PHONE_PATTERN
 from app.services.business_hours_service import (
     DIAS_SEMANA,
@@ -23,7 +31,8 @@ from app.services.business_hours_service import (
     proxima_apertura,
     proxima_fecha_abierta_a_la_hora,
 )
-from app.services.order_service import calcular_demora_actual
+from app.services.catalog_service import find_available_products_by_name
+from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
 
 logger = logging.getLogger(__name__)
 
@@ -115,38 +124,25 @@ def _limpiar_observaciones(observaciones: str | None) -> str | None:
     return texto[:MAX_LARGO_OBSERVACIONES] or None
 
 
-def _items_con_precios_de_la_base(db: Session, items: list) -> tuple[list[OrderItem], float] | str:
-    """Arma los ítems del pedido con los precios actuales de la base, sin confiar en los que mande el modelo.
+def _items_del_modelo(items: list) -> list[tuple[int, int]] | None:
+    """(product_id, cantidad) de cada ítem que armó el modelo, o None si no se pueden interpretar.
 
-    Devuelve los ítems y el total, o el motivo por el que el pedido no se puede registrar.
+    Solo se toman los ids y las cantidades: los precios y el total los calcula siempre el pedido con los
+    de la base, nunca con lo que haya armado el modelo.
     """
-    cantidades: dict[int, int] = {}
     try:
-        for item in items:
-            product_id, cantidad = int(item["product_id"]), int(item.get("quantity") or 1)
-            if cantidad < 1:
-                return "Hay una cantidad inválida en el pedido."
-            cantidades[product_id] = cantidades.get(product_id, 0) + cantidad
+        return [(int(item["product_id"]), int(item.get("quantity") or 1)) for item in items]
     except (KeyError, TypeError, ValueError, AttributeError):
-        return "No pude identificar los productos del pedido."
-    if not cantidades:
-        return "El pedido no tiene productos."
-
-    productos = {p.id: p for p in db.query(Product).filter(Product.id.in_(cantidades.keys())).all()}
-    if any(pid not in productos or not productos[pid].is_active for pid in cantidades):
-        return "Algunos productos del pedido ya no están disponibles en el menú."
-
-    order_items = [
-        OrderItem(product_id=pid, quantity=cantidad, unit_price=productos[pid].price)
-        for pid, cantidad in cantidades.items()
-    ]
-    total = sum(item.unit_price * item.quantity for item in order_items)
-    return order_items, total
+        return None
 
 
-def _redondear_al_minuto_siguiente(momento: datetime) -> datetime:
-    redondeado = momento.replace(second=0, microsecond=0)
-    return redondeado if redondeado == momento else redondeado + timedelta(minutes=1)
+def _buscar_producto(db: Session, nombre: str) -> Product | list[Product] | None:
+    """Producto que corresponde al nombre que escribió el cliente: uno solo, la lista de candidatos si el
+    nombre es ambiguo (para preguntarle cuál quiso, en vez de elegir uno al azar) o None."""
+    candidatos = find_available_products_by_name(db, nombre)
+    if not candidatos:
+        return None
+    return candidatos[0] if len(candidatos) == 1 else candidatos
 
 
 def _evaluar_hora_programada(
@@ -198,19 +194,18 @@ def _evaluar_hora_programada(
             "¿Para qué otro horario querés programarlo?"
         )
 
-    demora = calcular_demora_actual(db)
-    horario_mas_temprano = _redondear_al_minuto_siguiente(ahora + timedelta(minutes=demora))
-
-    if solicitado + timedelta(minutes=tolerancia_minutos) < horario_mas_temprano:
-        if not esta_abierto(franjas, ahora) or not esta_abierto(franjas, horario_mas_temprano):
+    try:
+        validate_schedule(db, solicitado, now=ahora, tolerance_minutes=tolerancia_minutos)
+    except ScheduleTooEarlyError as exc:
+        if not esta_abierto(franjas, ahora) or not esta_abierto(franjas, exc.earliest):
             # Lo más rápido posible cae fuera del horario: no se puede ofrecer ni esa hora ni "para ahora".
             return None, (
-                f"Con la demora actual (unos {demora} minutos) no llegamos a tenerlo a las {solicitado:%H:%M}. "
-                "¿Para qué otro horario querés programarlo?"
+                f"Con la demora actual (unos {exc.delay_minutes} minutos) no llegamos a tenerlo a las "
+                f"{solicitado:%H:%M}. ¿Para qué otro horario querés programarlo?"
             )
         return None, (
-            f"Con la demora actual (unos {demora} minutos), lo más rápido que podemos tener tu pedido "
-            f"es a las {horario_mas_temprano:%H:%M}. ¿Querés programarlo para esa hora o preferís pedirlo para ahora?"
+            f"Con la demora actual (unos {exc.delay_minutes} minutos), lo más rápido que podemos tener tu pedido "
+            f"es a las {exc.earliest:%H:%M}. ¿Querés programarlo para esa hora o preferís pedirlo para ahora?"
         )
     return solicitado, None
 
@@ -244,7 +239,7 @@ def calcular_y_preparar_pedido(
     db = SessionLocal()
     try:
         lista_items = []
-        
+
         try:
             parsed = json.loads(items_solicitados)
             if isinstance(parsed, list):
@@ -264,8 +259,9 @@ def calcular_y_preparar_pedido(
                     lista_items.append({"nombre": parte_limpia, "cantidad": 1})
 
         resumen_lineas = []
-        total_general = 0.0
+        total_general = Decimal(0)
         items_validados = []
+        hay_ambiguos = False
 
         for item in lista_items:
             nombre_buscado = str(item.get("nombre", "")).strip()
@@ -274,13 +270,15 @@ def calcular_y_preparar_pedido(
             if not nombre_buscado:
                 continue
 
-            producto = db.query(Product).filter(
-                Product.is_active.is_(True),
-                Product.name.ilike(f"%{nombre_buscado}%")
-            ).first()
+            producto = _buscar_producto(db, nombre_buscado)
 
             if not producto:
                 resumen_lineas.append(f"- No pudimos encontrar el producto: '{nombre_buscado}'")
+                continue
+            if isinstance(producto, list):
+                hay_ambiguos = True
+                opciones = ", ".join(p.name for p in producto)
+                resumen_lineas.append(f"- '{nombre_buscado}' puede ser: {opciones}. ¿Cuál querés?")
                 continue
 
             subtotal = producto.price * cantidad
@@ -290,27 +288,31 @@ def calcular_y_preparar_pedido(
                 "product_id": producto.id,
                 "nombre": producto.name,
                 "quantity": cantidad,
-                "unit_price": producto.price
+                "unit_price": float(producto.price),
             })
 
         if not items_validados:
+            if hay_ambiguos:
+                return "Necesito que me aclares algunos productos:\n" + "\n".join(resumen_lineas)
             return "No se pudieron reconocer productos válidos en el menú para tu pedido."
 
-        es_retiro = metodo_entrega == "retiro"
+        es_retiro = metodo_entrega == DeliveryMethod.PICKUP
         falta_direccion = not es_retiro and not shipping_address
         telefono = (customer_phone or "").strip()
         falta_telefono = not _telefono_valido(telefono)
         notas = _limpiar_observaciones(observaciones)
-        faltan_datos = metodo_entrega is None or not customer_name or falta_telefono or falta_direccion
+        faltan_datos = (
+            metodo_entrega is None or not customer_name or falta_telefono or falta_direccion or hay_ambiguos
+        )
 
         horario_programado, aviso_horario = _evaluar_hora_programada(db, hora_programada, dia_programado)
 
         resultado_json = {
             "items": items_validados,
-            "total": total_general,
+            "total": float(total_general),
             "cliente": customer_name,
             "telefono": telefono or None,
-            "direccion": "Retiro en el local" if es_retiro else shipping_address,
+            "direccion": PICKUP_ADDRESS if es_retiro else shipping_address,
             "metodo_entrega": metodo_entrega,
             "hora_programada": f"{horario_programado:%H:%M}" if horario_programado else None,
             "dia_programado": f"{horario_programado:%Y-%m-%d}" if horario_programado else None,
@@ -330,13 +332,15 @@ def calcular_y_preparar_pedido(
                 faltantes.append("un teléfono de contacto válido" if telefono else "un teléfono de contacto")
             if falta_direccion:
                 faltantes.append("tu dirección de envío")
+            if hay_ambiguos:
+                faltantes.append("cuál de los productos que te consulté arriba querés")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
             if aviso_horario:
                 texto_respuesta += f"\n\n{aviso_horario}"
         elif aviso_horario:
             texto_respuesta = aviso_horario
         else:
-            entrega = "Retiro en el local" if es_retiro else f"Envío a domicilio: {shipping_address}"
+            entrega = PICKUP_ADDRESS if es_retiro else f"Envío a domicilio: {shipping_address}"
             horario = describir_horario_programado(horario_programado, ahora_local())
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
@@ -380,11 +384,10 @@ def confirmar_y_guardar_pedido(
 
         raw_delivery = str(datos.get("metodo_entrega", "domicilio")).lower()
         if "retiro" in raw_delivery or "local" in raw_delivery:
-            delivery_method = "retiro"
+            delivery_method = DeliveryMethod.PICKUP
         else:
-            delivery_method = "domicilio"
-            
-        es_retiro = delivery_method == "retiro"
+            delivery_method = DeliveryMethod.DELIVERY
+        es_retiro = delivery_method == DeliveryMethod.PICKUP
 
         cliente = datos.get("cliente") or datos.get("customer_name") or "Cliente"
         direccion = datos.get("direccion") or datos.get("shipping_address")
@@ -404,27 +407,29 @@ def confirmar_y_guardar_pedido(
         if aviso_horario:
             return f"El pedido NO se registró todavía. {aviso_horario}"
 
-        # Los precios y el total salen siempre de la base: nunca de lo que haya armado el modelo.
-        items_y_total = _items_con_precios_de_la_base(db, datos.get("items") or [])
-        if isinstance(items_y_total, str):
-            return f"El pedido NO se registró todavía. {items_y_total}"
-        order_items, total = items_y_total
+        items = _items_del_modelo(datos.get("items") or [])
+        if items is None:
+            return "El pedido NO se registró todavía. No pude identificar los productos del pedido."
 
-        nueva_orden = Order(
+        pedido = OrderRequest(
             customer_name=cliente,
-            shipping_address="Retiro en el local" if es_retiro else (direccion or "Sin especificar"),
             customer_phone=telefono,
-            notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
-            total_amount=total,
-            status="Pendiente",
             delivery_method=delivery_method,
-            telegram_chat_id=telegram_chat_id,
-            scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
+            shipping_address=None if es_retiro else direccion,
+            notes=_limpiar_observaciones(datos.get("observaciones") or datos.get("notes")),
+            items=items,
         )
-        nueva_orden.items = order_items
-        db.add(nueva_orden)
-        db.commit()
-        
+        # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
+        try:
+            create_bot_order(
+                db,
+                pedido,
+                telegram_chat_id=telegram_chat_id,
+                scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
+            )
+        except InvalidOrderError as exc:
+            return f"El pedido NO se registró todavía. {exc}"
+
         horario_texto = f" {describir_horario_programado(scheduled_dt, ahora_local())}" if scheduled_dt else ""
         return (
             f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
@@ -432,9 +437,9 @@ def confirmar_y_guardar_pedido(
             "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
             "¡Muchas gracias por elegirnos!"
         )
-    except Exception as e:
-        db.rollback()
+    except Exception:
+        # Si el error ocurrió al guardar, el servicio ya deshizo la transacción.
         logger.exception("Error al guardar la orden. datos_pedido_json=%s", datos_pedido_json)
-        return f"Error al procesar el registro del pedido. Por favor, intentá nuevamente."
+        return "Error al procesar el registro del pedido. Por favor, intentá nuevamente."
     finally:
         db.close()

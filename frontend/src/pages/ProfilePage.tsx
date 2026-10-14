@@ -5,11 +5,10 @@ import { TopBar } from '@/components/TopBar';
 import { CustomerAccountActions } from '@/components/CustomerAccountActions';
 import { useAuth } from '@/hooks/useAuth';
 import type { Me } from '@/services/authService';
-import { getErrorMessage, validateCustomerData } from '@/utils/customerValidation';
+import { validateCustomerData } from '@/utils/customerValidation';
+import { getErrorMessage } from '@/utils/errors';
 import type { CustomerDataErrors } from '@/utils/customerValidation';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black';
+import { INPUT_LG_CLASS as INPUT_CLASS } from '@/styles/forms';
 
 function ProfileForm({ user }: { user: Me }) {
   const { updateProfile } = useAuth();

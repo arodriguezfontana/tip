@@ -1,7 +1,7 @@
 import pytest
 
-from app.modules.order import Order
-from app.modules.user import User
+from app.models.order import Order
+from app.models.user import User
 
 REGISTER_URL = "/api/v1/auth/register"
 LOGIN_URL = "/api/v1/auth/login"

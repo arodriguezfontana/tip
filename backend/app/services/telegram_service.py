@@ -2,7 +2,9 @@ import asyncio
 import contextlib
 import logging
 import time
+
 import httpx
+
 from app.core.config import settings
 from app.services.chat_service import ChatService
 
@@ -58,9 +60,7 @@ async def register_webhook() -> None:
     if not base_url.startswith(("http://", "https://")):
         base_url = f"https://{base_url}"
     webhook_url = f"{base_url}{settings.API_V1_STR}/telegram/webhook"
-    payload = {"url": webhook_url}
-    if settings.TELEGRAM_WEBHOOK_SECRET:
-        payload["secret_token"] = settings.TELEGRAM_WEBHOOK_SECRET
+    payload = {"url": webhook_url, "secret_token": settings.telegram_webhook_secret}
 
     url = f"https://api.telegram.org/bot{settings.TELEGRAM_TOKEN}/setWebhook"
     try:

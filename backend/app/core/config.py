@@ -1,3 +1,5 @@
+import hashlib
+
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -16,6 +18,7 @@ class Settings(BaseSettings):
 
     TELEGRAM_TOKEN: str
     GOOGLE_API_KEY: str
+    # Si no se configura, se usa uno derivado del token del bot (ver telegram_webhook_secret).
     TELEGRAM_WEBHOOK_SECRET: str = ""
     # URL pública fija del backend (ej. el dominio estático de ngrok). Si está, el webhook
     # de Telegram se registra solo al levantar la API.
@@ -38,6 +41,17 @@ class Settings(BaseSettings):
         env_file_encoding="utf-8",
         extra="ignore",
     )
+
+    @property
+    def telegram_webhook_secret(self) -> str:
+        """Secreto que Telegram envía en cada llamada al webhook para probar que viene de él.
+
+        Siempre hay uno: si no se configura TELEGRAM_WEBHOOK_SECRET se deriva del token del bot, que es
+        privado. Así el webhook nunca queda abierto a cualquiera que conozca la URL.
+        """
+        if self.TELEGRAM_WEBHOOK_SECRET:
+            return self.TELEGRAM_WEBHOOK_SECRET
+        return hashlib.sha256(f"telegram-webhook:{self.TELEGRAM_TOKEN}".encode()).hexdigest()
 
 
 settings = Settings()

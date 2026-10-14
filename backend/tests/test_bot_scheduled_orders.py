@@ -5,8 +5,8 @@ from unittest.mock import patch
 import pytest
 
 from app.core.time import RESTAURANT_TZ
-from app.modules.order import Order
-from app.services.order_service import calcular_demora_actual
+from app.models.order import Order
+from app.services.order_service import estimate_delay_minutes
 from app.services.tools.order_tools import (
     _parsear_hora,
     calcular_y_preparar_pedido,
@@ -35,8 +35,8 @@ def _agregar_pedidos(db_session, status: str, cantidad: int):
 
 def _datos_pedido(muzza, hora_programada=None, **extra):
     return json.dumps({
-        "items": [{"product_id": muzza.id, "quantity": 1, "unit_price": muzza.price}],
-        "total": muzza.price,
+        "items": [{"product_id": muzza.id, "quantity": 1, "unit_price": float(muzza.price)}],
+        "total": float(muzza.price),
         "cliente": "Paula",
         "direccion": "Retiro en el local",
         "metodo_entrega": "retiro",
@@ -47,7 +47,7 @@ def _datos_pedido(muzza, hora_programada=None, **extra):
 
 
 def test_demora_minima_es_15_minutos(db_session):
-    assert calcular_demora_actual(db_session) == 15
+    assert estimate_delay_minutes(db_session) == 15
 
 
 def test_demora_suma_3_minutos_por_pedido_en_proceso(db_session):
@@ -56,7 +56,7 @@ def test_demora_suma_3_minutos_por_pedido_en_proceso(db_session):
     _agregar_pedidos(db_session, "En Camino", 1)
     _agregar_pedidos(db_session, "Listo para Retirar", 1)
 
-    assert calcular_demora_actual(db_session) == 15 + 4 * 3
+    assert estimate_delay_minutes(db_session) == 15 + 4 * 3
 
 
 @pytest.mark.parametrize("texto", ["21", "21:00", "21.00hs", "21 hs", "21h00", "2100"])

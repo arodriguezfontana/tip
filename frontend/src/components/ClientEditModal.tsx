@@ -1,10 +1,9 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
+import { INPUT_LG_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { Client } from '@/types/client';
-import { getErrorMessage } from '@/utils/customerValidation';
-
-const INPUT_CLASS =
-  'w-full rounded-xl border border-gray-300 px-4 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-black';
+import { getErrorMessage } from '@/utils/errors';
 
 interface ClientEditModalProps {
   client: Client;
@@ -43,75 +42,53 @@ export function ClientEditModal({ client, onClose, onSave }: ClientEditModalProp
   };
 
   return (
-    <div className="fixed inset-0 bg-black/50 z-50 flex items-center justify-center p-4">
-      <div className="bg-white rounded-2xl shadow-xl max-w-md w-full p-6 space-y-5">
-        <div className="flex items-center justify-between border-b border-gray-100 pb-3">
-          <h2 className="text-base font-bold text-gray-900">Editar Cliente #{client.id}</h2>
-          <button
-            type="button"
-            onClick={onClose}
-            disabled={saving}
-            className="text-gray-400 hover:text-gray-700 text-lg font-bold"
-          >
-            ×
-          </button>
-        </div>
-
-        <form onSubmit={handleSubmit} className="space-y-4" noValidate>
+    <Modal title={`Editar Cliente #${client.id}`} onClose={onClose} closeDisabled={saving} width="md">
+      <form onSubmit={handleSubmit} className="flex flex-col min-h-0" noValidate>
+        <ModalBody>
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Nombre completo</label>
+            <label htmlFor="client-full-name" className={LABEL_CLASS}>
+              Nombre completo
+            </label>
             <input
+              id="client-full-name"
               type="text"
               value={fullName}
               onChange={(e) => setFullName(e.target.value)}
-              className={INPUT_CLASS}
+              className={INPUT_LG_CLASS}
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Teléfono</label>
+            <label htmlFor="client-phone" className={LABEL_CLASS}>
+              Teléfono
+            </label>
             <input
+              id="client-phone"
               type="text"
               value={phone}
               onChange={(e) => setPhone(e.target.value)}
-              className={INPUT_CLASS}
+              className={INPUT_LG_CLASS}
               required
             />
           </div>
 
           <div>
-            <label className="block text-xs font-medium text-gray-700 mb-1">Dirección</label>
+            <label htmlFor="client-address" className={LABEL_CLASS}>
+              Dirección
+            </label>
             <input
+              id="client-address"
               type="text"
               value={address}
               onChange={(e) => setAddress(e.target.value)}
-              className={INPUT_CLASS}
+              className={INPUT_LG_CLASS}
               placeholder="Sin dirección"
             />
           </div>
-
-          {formError && <p className="text-xs text-red-600 bg-red-50 p-2.5 rounded-xl">{formError}</p>}
-
-          <div className="flex gap-3 pt-2">
-            <button
-              type="button"
-              onClick={onClose}
-              disabled={saving}
-              className="flex-1 bg-gray-100 text-gray-700 rounded-xl py-2.5 text-xs font-semibold hover:bg-gray-200 transition"
-            >
-              Cancelar
-            </button>
-            <button
-              type="submit"
-              disabled={saving}
-              className="flex-1 bg-black text-white rounded-xl py-2.5 text-xs font-semibold hover:bg-gray-800 transition disabled:opacity-60"
-            >
-              {saving ? 'Guardando...' : 'Guardar cambios'}
-            </button>
-          </div>
-        </form>
-      </div>
-    </div>
+        </ModalBody>
+        <ModalFooter error={formError} onCancel={onClose} submitLabel="Guardar cambios" saving={saving} />
+      </form>
+    </Modal>
   );
 }

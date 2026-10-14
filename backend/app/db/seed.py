@@ -3,8 +3,8 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
-from app.modules.menu import Category, Ingredient, Product, ProductIngredient
-from app.modules.user import User
+from app.models.menu import Category, Ingredient, Product, ProductIngredient
+from app.models.user import User
 
 
 def get_or_create(db: Session, model, defaults: dict | None = None, **kwargs):
@@ -19,30 +19,31 @@ def get_or_create(db: Session, model, defaults: dict | None = None, **kwargs):
 
 
 def seed_ingredientes(db: Session) -> dict[str, Ingredient]:
-    nombres = [
-        "Salsa de tomate",
-        "Muzzarella",
-        "Albahaca",
-        "Tomate en rodajas",
-        "Ajo",
-        "Cebolla",
-        "Jamón",
-        "Morrones",
-        "Longaniza calabresa",
-        "Roquefort",
-        "Aceitunas negras",
-        "Panceta",
-        "Huevo",
-    ]
+    unidades = {
+        "Salsa de tomate": "gramos",
+        "Muzzarella": "gramos",
+        "Albahaca": "hojas",
+        "Tomate en rodajas": "gramos",
+        "Ajo": "gramos",
+        "Cebolla": "gramos",
+        "Jamón": "gramos",
+        "Morrones": "gramos",
+        "Longaniza calabresa": "gramos",
+        "Roquefort": "gramos",
+        "Aceitunas negras": "gramos",
+        "Panceta": "gramos",
+        "Huevo": "unidades",
+    }
     ingredientes = {}
-    for nombre in nombres:
-        ingrediente, _ = get_or_create(db, Ingredient, name=nombre)
+    for nombre, unidad in unidades.items():
+        ingrediente, _ = get_or_create(db, Ingredient, name=nombre, defaults={"unit": unidad})
         ingredientes[nombre] = ingrediente
     return ingredientes
 
 
-def agregar_receta(db: Session, producto: Product, ingredientes: dict[str, Ingredient], receta: list[tuple[str, float, str]]):
-    for nombre, cantidad, unidad in receta:
+def agregar_receta(db: Session, producto: Product, ingredientes: dict[str, Ingredient], receta: list[tuple[str, float]]):
+    """Cada línea es (ingrediente, cantidad por unidad de producto, en la unidad del ingrediente)."""
+    for nombre, cantidad in receta:
         existe = (
             db.query(ProductIngredient)
             .filter_by(product_id=producto.id, ingredient_id=ingredientes[nombre].id)
@@ -55,7 +56,6 @@ def agregar_receta(db: Session, producto: Product, ingredientes: dict[str, Ingre
                 product_id=producto.id,
                 ingredient_id=ingredientes[nombre].id,
                 quantity=cantidad,
-                unit_measure=unidad,
             )
         )
 
@@ -69,9 +69,9 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 20,
             "dietary_restrictions": ["vegetariano"],
             "receta": [
-                ("Salsa de tomate", 100, "gramos"),
-                ("Muzzarella", 250, "gramos"),
-                ("Albahaca", 5, "hojas"),
+                ("Salsa de tomate", 100),
+                ("Muzzarella", 250),
+                ("Albahaca", 5),
             ],
         },
         {
@@ -81,11 +81,11 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 22,
             "dietary_restrictions": ["vegetariano"],
             "receta": [
-                ("Salsa de tomate", 100, "gramos"),
-                ("Muzzarella", 200, "gramos"),
-                ("Tomate en rodajas", 80, "gramos"),
-                ("Ajo", 5, "gramos"),
-                ("Albahaca", 5, "hojas"),
+                ("Salsa de tomate", 100),
+                ("Muzzarella", 200),
+                ("Tomate en rodajas", 80),
+                ("Ajo", 5),
+                ("Albahaca", 5),
             ],
         },
         {
@@ -95,8 +95,8 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 20,
             "dietary_restrictions": ["vegetariano"],
             "receta": [
-                ("Muzzarella", 300, "gramos"),
-                ("Cebolla", 150, "gramos"),
+                ("Muzzarella", 300),
+                ("Cebolla", 150),
             ],
         },
         {
@@ -106,10 +106,10 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 22,
             "dietary_restrictions": [],
             "receta": [
-                ("Salsa de tomate", 100, "gramos"),
-                ("Muzzarella", 220, "gramos"),
-                ("Jamón", 100, "gramos"),
-                ("Morrones", 60, "gramos"),
+                ("Salsa de tomate", 100),
+                ("Muzzarella", 220),
+                ("Jamón", 100),
+                ("Morrones", 60),
             ],
         },
         {
@@ -119,10 +119,10 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 22,
             "dietary_restrictions": [],
             "receta": [
-                ("Salsa de tomate", 100, "gramos"),
-                ("Muzzarella", 220, "gramos"),
-                ("Longaniza calabresa", 120, "gramos"),
-                ("Aceitunas negras", 40, "gramos"),
+                ("Salsa de tomate", 100),
+                ("Muzzarella", 220),
+                ("Longaniza calabresa", 120),
+                ("Aceitunas negras", 40),
             ],
         },
         {
@@ -132,8 +132,8 @@ def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingred
             "preparation_time_minutes": 20,
             "dietary_restrictions": ["vegetariano"],
             "receta": [
-                ("Muzzarella", 220, "gramos"),
-                ("Roquefort", 100, "gramos"),
+                ("Muzzarella", 220),
+                ("Roquefort", 100),
             ],
         },
     ]

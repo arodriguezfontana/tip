@@ -1,7 +1,7 @@
 import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import type { Product } from '@/types/order';
 import { useCart } from '@/hooks/useCart';
-import { CategoryIcon } from '@/components/CategoryIcon';
+import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { formatCurrency } from '@/utils/currency';
 
 export function ProductCard({ product }: { product: Product }) {
@@ -10,7 +10,7 @@ export function ProductCard({ product }: { product: Product }) {
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-4 flex gap-4">
-      <CategoryIcon category={product.category.name} />
+      <ProductThumbnail product={product} />
       <div className="flex-1 flex flex-col">
         <h3 className="font-semibold text-gray-900">{product.name}</h3>
         <p className="text-sm text-gray-500 flex-1">{product.description}</p>

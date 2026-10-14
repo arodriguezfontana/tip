@@ -210,13 +210,16 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
             ))}
           </div>
 
-          <button
-            type="button"
-            onClick={handleToggleSimulation}
-            className={`text-xs font-medium px-3 py-1.5 rounded-xl transition shadow-xs ${isSimulating ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}
-          >
-            {isSimulating ? 'Salir de Simulación' : 'Simular 55 Pedidos'}
-          </button>
+          {/* Herramienta de desarrollo para probar el tablero con muchos pedidos: no se incluye en producción. */}
+          {import.meta.env.DEV && (
+            <button
+              type="button"
+              onClick={handleToggleSimulation}
+              className={`text-xs font-medium px-3 py-1.5 rounded-xl transition shadow-xs ${isSimulating ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}
+            >
+              {isSimulating ? 'Salir de Simulación' : 'Simular 55 Pedidos'}
+            </button>
+          )}
 
           <button
             type="button"

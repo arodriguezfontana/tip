@@ -1,29 +1,17 @@
-from datetime import datetime, timezone
-from typing import Dict, List
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
-from app.core.time import RESTAURANT_TZ
 from app.db.session import get_db
-from app.modules.order import Order
-from app.modules.user import User
-from app.schemas.stats_schemas import (
-    BestSellingDayResponse,
-    StatusDistributionResponse,
-    TopProductResponse,
-)
+from app.models.user import User
+from app.schemas.ingredient_schemas import IngredientConsumptionResponse
+from app.schemas.stats_schemas import BestSellingDayResponse, StatusDistributionResponse, TopProductResponse
+from app.services import stats_service
+from app.services.ingredient_service import ingredient_consumption
 
 router = APIRouter()
-
-
-def _filter_orders_by_date(db: Session, date_from: datetime | None, date_to: datetime | None):
-    query = db.query(Order)
-    if date_from is not None:
-        query = query.filter(Order.created_at >= date_from)
-    if date_to is not None:
-        query = query.filter(Order.created_at <= date_to)
-    return query.all()
 
 
 @router.get("/status-distribution", response_model=StatusDistributionResponse)
@@ -33,62 +21,20 @@ def get_status_distribution(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> StatusDistributionResponse:
-    """Devuelve la distribución de pedidos por su estado."""
-    orders = _filter_orders_by_date(db, date_from, date_to)
-    
-    distribution: Dict[str, int] = {}
-    for order in orders:
-        status = order.status.strip()
-        distribution[status] = distribution.get(status, 0) + 1
-
-    return StatusDistributionResponse(status_distribution=distribution)
+    """Cantidad de pedidos del período en cada estado."""
+    return StatusDistributionResponse(status_distribution=stats_service.status_distribution(db, date_from, date_to))
 
 
-@router.get("/top-products", response_model=List[TopProductResponse])
+@router.get("/top-products", response_model=list[TopProductResponse])
 def get_top_products(
     date_from: datetime | None = Query(None),
     date_to: datetime | None = Query(None),
-    limit: int = Query(5),
+    limit: int = Query(5, ge=1, le=50),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
-) -> List[TopProductResponse]:
-    """Calcula el top de productos más vendidos a partir de los ítems de las órdenes."""
-    orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]
-
-    product_stats: Dict[str, Dict[str, float]] = {}
-
-    for order in orders:
-        for item in getattr(order, "items", []):
-            prod_name = getattr(item, "product_name", None)
-            if not prod_name and hasattr(item, "product") and item.product:
-                prod_name = getattr(item.product, "name", "Producto desconocido")
-            if not prod_name:
-                prod_name = f"Producto #{getattr(item, 'product_id', 'N/A')}"
-
-            qty = float(getattr(item, "quantity", 1))
-            price = float(getattr(item, "unit_price", 0.0))
-            revenue = qty * price
-
-            if prod_name not in product_stats:
-                product_stats[prod_name] = {"quantity": 0.0, "revenue": 0.0}
-            
-            product_stats[prod_name]["quantity"] += qty
-            product_stats[prod_name]["revenue"] += revenue
-
-    sorted_products = sorted(
-        product_stats.items(),
-        key=lambda x: x[1]["quantity"],
-        reverse=True
-    )[:limit]
-
-    return [
-        TopProductResponse(
-            product_name=name,
-            total_quantity=int(data["quantity"]),
-            total_revenue=float(data["revenue"]),
-        )
-        for name, data in sorted_products
-    ]
+) -> list[TopProductResponse]:
+    """Productos más vendidos del período, sin contar los pedidos rechazados."""
+    return [TopProductResponse.from_stat(stat) for stat in stats_service.top_products(db, date_from, date_to, limit)]
 
 
 @router.get("/best-selling-day", response_model=BestSellingDayResponse)
@@ -98,28 +44,17 @@ def get_best_selling_day(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> BestSellingDayResponse:
-    """Calcula y devuelve el día de la semana con mayor volumen de ventas."""
-    orders = [o for o in _filter_orders_by_date(db, date_from, date_to) if o.status != "Rechazado"]
+    """Día de la semana con mayor facturación del período."""
+    return BestSellingDayResponse.from_stat(stats_service.best_selling_day(db, date_from, date_to))
 
-    python_days_map = {
-        0: "Lunes", 1: "Martes", 2: "Miércoles", 3: "Jueves",
-        4: "Viernes", 5: "Sábado", 6: "Domingo"
-    }
 
-    sales_per_day: Dict[str, float] = {}
-    for order in orders:
-        # El día se cuenta en la hora del local: un pedido del lunes a las 22 hs es del lunes, no del martes en UTC.
-        created_at = order.created_at
-        if created_at.tzinfo is None:  # SQLite no conserva la zona horaria; la base guarda UTC
-            created_at = created_at.replace(tzinfo=timezone.utc)
-        day_name = python_days_map[created_at.astimezone(RESTAURANT_TZ).weekday()]
-        sales_per_day[day_name] = sales_per_day.get(day_name, 0.0) + order.total_amount
-
-    if not sales_per_day:
-        return BestSellingDayResponse(best_selling_day=None, total_revenue=None)
-
-    best_day = max(sales_per_day, key=sales_per_day.get)
-    return BestSellingDayResponse(
-        best_selling_day=best_day,
-        total_revenue=sales_per_day[best_day]
-    )
+@router.get("/ingredient-consumption", response_model=IngredientConsumptionResponse)
+def get_ingredient_consumption(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    ingredient_id: int | None = Query(None, description="Muestra solo el consumo de este ingrediente."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> IngredientConsumptionResponse:
+    """Total de cada ingrediente usado en los pedidos finalizados del período, según las recetas."""
+    return IngredientConsumptionResponse.from_report(ingredient_consumption(db, date_from, date_to, ingredient_id))
