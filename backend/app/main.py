@@ -11,8 +11,10 @@ from app.api import auth_router
 from app.api import chat_router
 from app.api import client_router
 from app.api import customer_router
+from app.api import ingredient_router
 from app.api import menu_router
 from app.api import order_router
+from app.api import product_router
 from app.api import telegram_router
 from app.api import stats_router  # Corregido el path relativo de importación
 from app.services.telegram_service import register_webhook
@@ -56,7 +58,9 @@ api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
+api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
+api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
 api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])  

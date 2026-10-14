@@ -1,15 +1,20 @@
-from sqlalchemy import Boolean, Column, Float, ForeignKey, Integer, String, Text, JSON
+from sqlalchemy import Boolean, CheckConstraint, Column, Float, ForeignKey, Integer, String, Text, JSON
 from sqlalchemy.orm import relationship
 from app.db.base_class import Base
 
 class ProductIngredient(Base):
+    """Línea de la receta de un producto: cuánto de un ingrediente lleva una unidad del producto.
+
+    La cantidad se expresa en la unidad de medida del ingrediente.
+    """
+
     __tablename__ = "product_ingredients"
+    __table_args__ = (CheckConstraint("quantity > 0", name="ck_product_ingredients_quantity"),)
 
     product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
     ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
-    
-    quantity = Column(Float, nullable=False, default=1.0)           
-    unit_measure = Column(String(50), nullable=False, default="unidades")
+
+    quantity = Column(Float, nullable=False)
 
     product = relationship("Product", back_populates="recipe_items")
     ingredient = relationship("Ingredient", back_populates="used_in_products")
@@ -25,10 +30,14 @@ class Category(Base):
 
 
 class Ingredient(Base):
+    """Insumo de la lista maestra del local. Todas sus cantidades (en recetas y en los reportes de
+    consumo) se expresan en su unidad de medida, para que siempre se puedan sumar."""
+
     __tablename__ = "ingredients"
 
     id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True, nullable=False) 
+    name = Column(String(100), unique=True, index=True, nullable=False)
+    unit = Column(String(30), nullable=False, server_default="unidades")
 
     used_in_products = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
 

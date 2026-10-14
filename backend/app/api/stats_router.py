@@ -1,6 +1,6 @@
 from datetime import datetime, timezone
 from typing import Dict, List
-from fastapi import APIRouter, Depends, Query
+from fastapi import APIRouter, Depends, HTTPException, Query
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
@@ -8,11 +8,13 @@ from app.core.time import RESTAURANT_TZ
 from app.db.session import get_db
 from app.modules.order import Order
 from app.modules.user import User
+from app.schemas.ingredient_schemas import IngredientConsumptionItem, IngredientConsumptionResponse
 from app.schemas.stats_schemas import (
     BestSellingDayResponse,
     StatusDistributionResponse,
     TopProductResponse,
 )
+from app.services.ingredient_service import IngredientNotFoundError, ingredient_consumption
 
 router = APIRouter()
 
@@ -122,4 +124,24 @@ def get_best_selling_day(
     return BestSellingDayResponse(
         best_selling_day=best_day,
         total_revenue=sales_per_day[best_day]
+    )
+
+
+@router.get("/ingredient-consumption", response_model=IngredientConsumptionResponse)
+def get_ingredient_consumption(
+    date_from: datetime | None = Query(None),
+    date_to: datetime | None = Query(None),
+    ingredient_id: int | None = Query(None, description="Muestra solo el consumo de este ingrediente."),
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> IngredientConsumptionResponse:
+    """Total de cada ingrediente usado en los pedidos finalizados del período, según las recetas."""
+    try:
+        report = ingredient_consumption(db, date_from, date_to, ingredient_id)
+    except IngredientNotFoundError:
+        raise HTTPException(status_code=404, detail="Ingrediente no encontrado")
+    return IngredientConsumptionResponse(
+        completed_orders=report.completed_orders,
+        items=[IngredientConsumptionItem(**vars(item)) for item in report.items],
+        products_without_recipe=report.products_without_recipe,
     )
