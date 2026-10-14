@@ -16,6 +16,7 @@ export function makeProduct(overrides: Partial<Product> = {}): Product {
     price: 8500,
     category: { id: 1, name: 'Pizzas' },
     dietary_restrictions: [],
+    image_url: null,
     ...overrides,
   };
 }

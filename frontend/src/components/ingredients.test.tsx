@@ -4,12 +4,16 @@ import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { IngredientesView } from '@/components/IngredientesView';
 import { ProductosView } from '@/components/ProductosView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
+import * as catalogService from '@/services/catalogService';
 import * as ingredientService from '@/services/ingredientService';
-import type { Ingredient, IngredientConsumptionReport, ProductWithRecipe } from '@/types/ingredient';
+import type { AdminProduct } from '@/types/catalog';
+import type { Ingredient, IngredientConsumptionReport } from '@/types/ingredient';
 
 vi.mock('@/services/ingredientService');
+vi.mock('@/services/catalogService');
 
 const service = vi.mocked(ingredientService);
+const catalog = vi.mocked(catalogService);
 
 const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 
@@ -18,21 +22,29 @@ const SALSA: Ingredient = { id: 2, name: 'Salsa de tomate', unit: 'gramos', prod
 const HUEVO: Ingredient = { id: 3, name: 'Huevo', unit: 'unidades', products_count: 0 };
 const INGREDIENTS = [HUEVO, MUZZARELLA, SALSA];
 
-const MUZZA: ProductWithRecipe = {
+const MUZZA: AdminProduct = {
   id: 10,
   name: 'Pizza Muzzarella',
+  description: 'Salsa de tomate y muzzarella.',
+  price: 8500,
   is_active: true,
+  dietary_restrictions: [],
   category: { id: 1, name: 'Pizzas' },
+  image_url: null,
   recipe: [
     { ingredient_id: 1, ingredient_name: 'Muzzarella', unit: 'gramos', quantity: 250 },
     { ingredient_id: 2, ingredient_name: 'Salsa de tomate', unit: 'gramos', quantity: 100 },
   ],
 };
-const COCA: ProductWithRecipe = {
+const COCA: AdminProduct = {
   id: 11,
   name: 'Coca-Cola 500ml',
+  description: null,
+  price: 2500,
   is_active: false,
+  dietary_restrictions: [],
   category: { id: 2, name: 'Bebidas' },
+  image_url: null,
   recipe: [],
 };
 
@@ -48,7 +60,8 @@ const REPORT: IngredientConsumptionReport = {
 beforeEach(() => {
   vi.resetAllMocks();
   service.fetchIngredients.mockResolvedValue(INGREDIENTS);
-  service.fetchProductsWithRecipes.mockResolvedValue([MUZZA, COCA]);
+  catalog.fetchAdminProducts.mockResolvedValue([MUZZA, COCA]);
+  catalog.fetchCategories.mockResolvedValue([]);
   service.fetchIngredientConsumption.mockResolvedValue(REPORT);
 });
 

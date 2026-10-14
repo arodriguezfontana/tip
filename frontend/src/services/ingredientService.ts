@@ -1,10 +1,10 @@
 import { api } from './api';
+import type { AdminProduct } from '@/types/catalog';
 import type {
   Ingredient,
   IngredientConsumptionParams,
   IngredientConsumptionReport,
   IngredientPayload,
-  ProductWithRecipe,
   RecipeItemPayload,
 } from '@/types/ingredient';
 
@@ -27,15 +27,9 @@ export async function deleteIngredient(id: number): Promise<void> {
   await api.delete(`/ingredients/${id}`);
 }
 
-/** Todos los productos (también los no disponibles) con su receta. */
-export async function fetchProductsWithRecipes(): Promise<ProductWithRecipe[]> {
-  const { data } = await api.get<ProductWithRecipe[]>('/products');
-  return data;
-}
-
 /** Reemplaza la receta completa del producto. */
-export async function updateProductRecipe(productId: number, items: RecipeItemPayload[]): Promise<ProductWithRecipe> {
-  const { data } = await api.put<ProductWithRecipe>(`/products/${productId}/recipe`, { items });
+export async function updateProductRecipe(productId: number, items: RecipeItemPayload[]): Promise<AdminProduct> {
+  const { data } = await api.put<AdminProduct>(`/products/${productId}/recipe`, { items });
   return data;
 }
 

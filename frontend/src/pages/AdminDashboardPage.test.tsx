@@ -1,7 +1,8 @@
-import { screen } from '@testing-library/react';
+import { cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
+import * as catalogService from '@/services/catalogService';
 import * as clientService from '@/services/clientService';
 import * as ingredientService from '@/services/ingredientService';
 import * as menuService from '@/services/menuService';
@@ -14,6 +15,7 @@ vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
 vi.mock('@/services/ingredientService');
+vi.mock('@/services/catalogService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -27,7 +29,8 @@ beforeEach(() => {
   vi.mocked(statsService.fetchBestSellingDay).mockResolvedValue({ best_selling_day: null, total_revenue: null });
   vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
   vi.mocked(ingredientService.fetchIngredients).mockResolvedValue([]);
-  vi.mocked(ingredientService.fetchProductsWithRecipes).mockResolvedValue([]);
+  vi.mocked(catalogService.fetchAdminProducts).mockResolvedValue([]);
+  vi.mocked(catalogService.fetchCategories).mockResolvedValue([]);
   vi.mocked(ingredientService.fetchIngredientConsumption).mockResolvedValue({
     completed_orders: 0,
     items: [],
@@ -60,6 +63,46 @@ describe('AdminDashboardPage', () => {
     expect(await screen.findAllByText('Sin pedidos')).toHaveLength(4);
   });
 
+  it('el menú lateral agrupa las secciones por tarea', async () => {
+    const { user } = renderDashboard();
+
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+
+    const labels = (group: string) =>
+      within(screen.getByRole('group', { name: group }))
+        .getAllByRole('button')
+        .map((button) => button.textContent);
+    expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes']);
+    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
+    expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
+    expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('los grupos del menú lateral se pliegan y despliegan, y se recuerda cuáles quedaron plegados', async () => {
+    const { user } = renderDashboard();
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    const catalogo = screen.getByRole('button', { name: 'Catálogo' });
+    expect(catalogo).toHaveAttribute('aria-expanded', 'true');
+
+    await user.click(catalogo);
+
+    expect(catalogo).toHaveAttribute('aria-expanded', 'false');
+    expect(screen.queryByRole('button', { name: 'Ingredientes' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: 'Catálogo' })).not.toBeInTheDocument();
+    // Los demás grupos no se ven afectados.
+    expect(screen.getByRole('button', { name: 'Estadísticas' })).toBeInTheDocument();
+
+    // Al volver a entrar al panel, el grupo sigue plegado.
+    cleanup();
+    const { user: otraVisita } = renderDashboard();
+    await otraVisita.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    expect(screen.getByRole('button', { name: 'Catálogo' })).toHaveAttribute('aria-expanded', 'false');
+
+    await otraVisita.click(screen.getByRole('button', { name: 'Catálogo' }));
+    expect(screen.getByRole('button', { name: 'Ingredientes' })).toBeInTheDocument();
+  });
+
   it('navega por las secciones desde el menú lateral', async () => {
     const { user } = renderDashboard();
 
@@ -79,8 +122,9 @@ describe('AdminDashboardPage', () => {
     await goTo(user, 'Ingredientes');
     expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument();
 
-    await goTo(user, 'Productos');
-    expect(await screen.findByRole('heading', { name: 'Productos y recetas' })).toBeInTheDocument();
+    await goTo(user, 'Productos y categorías');
+    expect(screen.getByRole('heading', { name: 'Productos y categorías' })).toBeInTheDocument();
+    expect(await screen.findByText('Todavía no hay productos en el catálogo.')).toBeInTheDocument();
 
     await goTo(user, 'Reporte de ingredientes');
     expect(await screen.findByText('No hay consumo de ingredientes en el rango seleccionado.')).toBeInTheDocument();

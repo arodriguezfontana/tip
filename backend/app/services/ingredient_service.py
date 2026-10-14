@@ -4,7 +4,7 @@ from dataclasses import dataclass
 from datetime import datetime
 
 from sqlalchemy import func
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, joinedload, selectinload
 
 from app.modules.menu import Ingredient, Product, ProductIngredient
 from app.modules.order import Order, OrderItem
@@ -119,13 +119,15 @@ def delete_ingredient(db: Session, ingredient_id: int) -> None:
 
 
 def list_products_with_recipes(db: Session) -> list[Product]:
+    """Todos los productos con su categoría, receta e imagen; los que no tienen categoría, al final."""
     return (
         db.query(Product)
         .options(
             joinedload(Product.category),
             joinedload(Product.recipe_items).joinedload(ProductIngredient.ingredient),
+            selectinload(Product.image),
         )
-        .order_by(Product.category_id, Product.name)
+        .order_by(Product.category_id.is_(None), Product.category_id, Product.name)
         .all()
     )
 

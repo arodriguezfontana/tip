@@ -6,12 +6,11 @@ import { Sidebar } from '@/components/Sidebar';
 import type { ViewKey } from '@/components/Sidebar';
 import { ComandasBoard } from '@/components/ComandasBoard';
 import { HistorialView } from '@/components/HistorialView';
-import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ClientesView } from '@/components/ClientesView';
+import { CatalogoView } from '@/components/CatalogoView';
 import { IngredientesView } from '@/components/IngredientesView';
-import { ProductosView } from '@/components/ProductosView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 
 export default function AdminDashboardPage() {
@@ -37,11 +36,10 @@ export default function AdminDashboardPage() {
             <ComandasBoard onTakeOrder={() => setActiveView('tomar-pedido')} />
           </div>
           {activeView === 'historial' && <HistorialView />}
-          {activeView === 'ingresos' && <IngresosView />}
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
-          {activeView === 'productos' && <ProductosView />}
+          {activeView === 'productos' && <CatalogoView />}
           {activeView === 'ingredientes' && <IngredientesView />}
         </div>
       </main>

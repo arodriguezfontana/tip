@@ -1,10 +1,11 @@
 import { expect, test } from '@playwright/test';
-import { adminToken, createWebOrder, goToSection, loginAsAdmin, money, setOrderStatus, unique } from './helpers';
+import { adminToken, createWebOrder, goToSection, loginAsAdmin, setOrderStatus, unique } from './helpers';
 
 test.describe('Reportes del panel', () => {
-  test('ingresos y estadísticas reflejan las ventas y excluyen los rechazados', async ({ page, request }) => {
+  test('historial y estadísticas reflejan las ventas y excluyen los rechazados', async ({ page, request }) => {
     const token = await adminToken(request);
-    const vendido = await createWebOrder(request, { customerName: unique('Vendido'), items: [['Helado 2 bochas', 3]] });
+    const cliente = unique('Vendido');
+    const vendido = await createWebOrder(request, { customerName: cliente, items: [['Helado 2 bochas', 3]] });
     for (const status of ['Confirmado', 'En Camino', 'Finalizado']) {
       await setOrderStatus(request, token, vendido.id, status);
     }
@@ -20,14 +21,15 @@ test.describe('Reportes del panel', () => {
     await expect(page.getByRole('row', { name: /Agua Mineral 500ml/ })).toBeHidden();
     await expect(page.getByText('Rechazado', { exact: true })).toBeVisible();
 
-    await goToSection(page, 'Ingresos');
+    await goToSection(page, 'Historial');
     await page.getByRole('button', { name: 'Hoy' }).click();
-    const fila = page.getByRole('row').nth(1);
-    await expect(fila).toBeVisible();
-    // El total del día incluye la venta y no el pedido rechazado.
-    const totalDelDia = await fila.locator('td').last().textContent();
-    const pesos = Number(totalDelDia!.replace(/[^\d,]/g, '').replace(',', '.'));
+    await expect(page.getByRole('row', { name: new RegExp(cliente) })).toBeVisible();
+    // El dinero facturado del día incluye la venta (los pedidos rechazados no suman).
+    const facturado = await page
+      .getByText('Dinero facturado', { exact: true })
+      .locator('xpath=following-sibling::p')
+      .textContent();
+    const pesos = Number(facturado!.replace(/[^\d,]/g, '').replace(',', '.'));
     expect(pesos).toBeGreaterThanOrEqual(3 * 4000);
-    await expect(page.getByText(money(20 * 1800))).toBeHidden();
   });
 });

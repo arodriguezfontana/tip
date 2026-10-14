@@ -10,6 +10,8 @@ export interface Product {
   price: number;
   category: ProductCategory;
   dietary_restrictions: string[];
+  /** Ruta de la imagen relativa a la API (ver productImageSrc), o null si no tiene. */
+  image_url: string | null;
 }
 
 /** Debe coincidir con MAX_QUANTITY_PER_ITEM del backend. */

@@ -1,24 +1,40 @@
+import { useState } from 'react';
+
 export type ViewKey =
   | 'tomar-pedido'
   | 'comandas'
   | 'historial'
-  | 'ingresos'
   | 'estadisticas'
   | 'reporte-ingredientes'
   | 'clientes'
   | 'productos'
   | 'ingredientes';
 
-const NAV_ITEMS: { key: ViewKey; label: string }[] = [
-  { key: 'tomar-pedido', label: 'Tomar pedido' },
-  { key: 'comandas', label: 'Comandas' },
-  { key: 'historial', label: 'Historial' },
-  { key: 'ingresos', label: 'Ingresos' },
-  { key: 'estadisticas', label: 'Estadísticas' },
-  { key: 'reporte-ingredientes', label: 'Reporte de ingredientes' },
-  { key: 'clientes', label: 'Clientes' },
-  { key: 'productos', label: 'Productos' },
-  { key: 'ingredientes', label: 'Ingredientes' },
+/** Secciones del panel agrupadas por tarea: el día a día, el catálogo del local y los reportes. */
+const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] = [
+  {
+    title: 'Operación',
+    items: [
+      { key: 'comandas', label: 'Comandas' },
+      { key: 'tomar-pedido', label: 'Tomar pedido' },
+      { key: 'historial', label: 'Historial' },
+      { key: 'clientes', label: 'Clientes' },
+    ],
+  },
+  {
+    title: 'Catálogo',
+    items: [
+      { key: 'productos', label: 'Productos y categorías' },
+      { key: 'ingredientes', label: 'Ingredientes' },
+    ],
+  },
+  {
+    title: 'Reportes',
+    items: [
+      { key: 'estadisticas', label: 'Estadísticas' },
+      { key: 'reporte-ingredientes', label: 'Reporte de ingredientes' },
+    ],
+  },
 ];
 
 interface SidebarProps {
@@ -28,7 +44,35 @@ interface SidebarProps {
   onSelect: (view: ViewKey) => void;
 }
 
+/** Grupos plegados, recordados en este navegador. Si no hay almacenamiento disponible, arrancan todos abiertos. */
+const COLLAPSED_STORAGE_KEY = 'admin-sidebar-collapsed-groups';
+
+function loadCollapsedGroups(): string[] {
+  try {
+    const stored: unknown = JSON.parse(localStorage.getItem(COLLAPSED_STORAGE_KEY) ?? '[]');
+    return Array.isArray(stored) ? stored.filter((title): title is string => typeof title === 'string') : [];
+  } catch {
+    return [];
+  }
+}
+
+function saveCollapsedGroups(titles: string[]) {
+  try {
+    localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(titles));
+  } catch {
+    // Sin almacenamiento (ej. navegación privada): el estado dura solo mientras la página está abierta.
+  }
+}
+
 export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
+  const [collapsed, setCollapsed] = useState<string[]>(loadCollapsedGroups);
+
+  const toggleGroup = (title: string) => {
+    const next = collapsed.includes(title) ? collapsed.filter((t) => t !== title) : [...collapsed, title];
+    setCollapsed(next);
+    saveCollapsedGroups(next);
+  };
+
   return (
     <>
       <div
@@ -57,19 +101,57 @@ export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
           </button>
         </div>
 
-        <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onSelect(item.key)}
-              className={`w-full text-left rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                activeView === item.key ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+        <nav className="flex-1 overflow-y-auto p-3 space-y-2">
+          {NAV_GROUPS.map((group, index) => {
+            const titleId = `nav-group-${index}`;
+            const listId = `nav-group-${index}-items`;
+            const expanded = !collapsed.includes(group.title);
+            // Plegado, el título se resalta si la sección abierta está adentro, para no perderla de vista.
+            const containsActive = group.items.some((item) => item.key === activeView);
+            return (
+              <div key={group.title}>
+                <button
+                  type="button"
+                  id={titleId}
+                  onClick={() => toggleGroup(group.title)}
+                  aria-expanded={expanded}
+                  aria-controls={listId}
+                  className={`w-full flex items-center justify-between rounded-lg px-4 py-1.5 text-[11px] font-bold uppercase tracking-wider transition hover:bg-gray-200 ${
+                    !expanded && containsActive ? 'text-gray-900' : 'text-gray-400 hover:text-gray-600'
+                  }`}
+                >
+                  {group.title}
+                  <svg
+                    viewBox="0 0 20 20"
+                    fill="currentColor"
+                    aria-hidden="true"
+                    className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-0' : '-rotate-90'}`}
+                  >
+                    <path
+                      fillRule="evenodd"
+                      d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z"
+                      clipRule="evenodd"
+                    />
+                  </svg>
+                </button>
+                <div id={listId} role="group" aria-labelledby={titleId} hidden={!expanded} className="space-y-1 pt-1 pb-2">
+                  {group.items.map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      onClick={() => onSelect(item.key)}
+                      aria-current={activeView === item.key ? 'page' : undefined}
+                      className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                        activeView === item.key ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'
+                      }`}
+                    >
+                      {item.label}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            );
+          })}
         </nav>
       </aside>
     </>

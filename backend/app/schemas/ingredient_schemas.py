@@ -1,7 +1,5 @@
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.schemas.menu_schemas import CategoryResponse
-
 MAX_RECIPE_ITEMS = 50
 MAX_RECIPE_QUANTITY = 100_000
 
@@ -34,14 +32,6 @@ class RecipeItemResponse(BaseModel):
     ingredient_name: str
     unit: str
     quantity: float
-
-
-class ProductRecipeResponse(BaseModel):
-    id: int
-    name: str
-    is_active: bool
-    category: CategoryResponse
-    recipe: list[RecipeItemResponse]
 
 
 class IngredientConsumptionItem(BaseModel):

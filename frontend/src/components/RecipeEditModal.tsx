@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
-import type { Ingredient, ProductWithRecipe, RecipeItemPayload } from '@/types/ingredient';
+import type { AdminProduct } from '@/types/catalog';
+import type { Ingredient, RecipeItemPayload } from '@/types/ingredient';
 import { getErrorMessage } from '@/utils/customerValidation';
 import { parseQuantity } from '@/utils/ingredients';
 
@@ -15,7 +16,7 @@ interface DraftRow {
 }
 
 interface RecipeEditModalProps {
-  product: ProductWithRecipe;
+  product: AdminProduct;
   ingredients: Ingredient[];
   onClose: () => void;
   onSave: (items: RecipeItemPayload[]) => Promise<void>;

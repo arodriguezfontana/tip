@@ -67,7 +67,7 @@ def _items_con_precios_de_la_base(db: Session, items: list) -> tuple[list[OrderI
         return "El pedido no tiene productos."
 
     productos = {p.id: p for p in db.query(Product).filter(Product.id.in_(cantidades.keys())).all()}
-    if any(pid not in productos or not productos[pid].is_active for pid in cantidades):
+    if any(pid not in productos or not productos[pid].is_available for pid in cantidades):
         return "Algunos productos del pedido ya no están disponibles en el menú."
 
     order_items = [
@@ -168,7 +168,7 @@ def calcular_y_preparar_pedido(
                 continue
 
             producto = db.query(Product).filter(
-                Product.is_active.is_(True),
+                Product.is_available,
                 Product.name.ilike(f"%{nombre_buscado}%")
             ).first()
 

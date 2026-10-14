@@ -43,7 +43,7 @@ def _build_order(db: Session, payload: WebOrderCreate, source: str) -> Order:
             "Algunos productos del pedido no existen en el menú. Actualizá la página e intentá nuevamente."
         )
 
-    unavailable = [products_by_id[product_id].name for product_id in quantities if not products_by_id[product_id].is_active]
+    unavailable = [products_by_id[product_id].name for product_id in quantities if not products_by_id[product_id].is_available]
     if unavailable:
         raise InvalidOrderError(
             f"Estos productos no están disponibles en este momento: {', '.join(unavailable)}. "

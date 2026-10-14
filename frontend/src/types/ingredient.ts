@@ -1,5 +1,3 @@
-import type { ProductCategory } from '@/types/order';
-
 export interface Ingredient {
   id: number;
   name: string;
@@ -20,14 +18,6 @@ export interface RecipeItem {
   unit: string;
   /** Por unidad de producto, en la unidad del ingrediente. */
   quantity: number;
-}
-
-export interface ProductWithRecipe {
-  id: number;
-  name: string;
-  is_active: boolean;
-  category: ProductCategory;
-  recipe: RecipeItem[];
 }
 
 export interface RecipeItemPayload {

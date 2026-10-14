@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { CategoryIcon } from '@/components/CategoryIcon';
+import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { lookupClientByPhone } from '@/services/clientService';
 import { fetchMenuProducts } from '@/services/menuService';
 import { createCounterOrder } from '@/services/orderService';
@@ -452,7 +452,7 @@ export function TomarPedidoView() {
                             {quantity}
                           </span>
                         )}
-                        <CategoryIcon category={product.category.name} size="sm" />
+                        <ProductThumbnail product={product} size="sm" />
                         <span className="text-xs font-semibold text-gray-900 leading-tight">{product.name}</span>
                         <span className="text-xs text-gray-600">{formatCurrency(product.price)}</span>
                       </button>
