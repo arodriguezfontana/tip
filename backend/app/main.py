@@ -15,6 +15,7 @@ from app.api import menu_router
 from app.api import order_router
 from app.api import telegram_router
 from app.api import stats_router  # Corregido el path relativo de importación
+from app.api import store_config_router
 from app.services.telegram_service import register_webhook
 
 logging.basicConfig(level=logging.INFO)
@@ -59,7 +60,8 @@ api_router.include_router(customer_router.router, prefix="/customers", tags=["Cu
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
-api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])  
+api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
+api_router.include_router(store_config_router.router, prefix="/store-config", tags=["StoreConfig"])  
 
 app.include_router(api_router)
 

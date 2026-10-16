@@ -4,6 +4,7 @@ from app.core.config import settings
 from app.core.security import hash_password
 from app.db.session import SessionLocal
 from app.modules.menu import Category, Ingredient, Product, ProductIngredient
+from app.modules.store_config import StoreConfig
 from app.modules.user import User
 
 
@@ -211,10 +212,28 @@ def seed_admin(db: Session) -> User:
     return admin
 
 
+def seed_store_config(db: Session) -> StoreConfig:
+    config, _ = get_or_create(
+        db,
+        StoreConfig,
+        id=1,
+        defaults={
+            "store_name": "RestoIT",
+            "address": "Av. Corrientes 1234, CABA",
+            "opening_hours": "Martes a Domingo: 19:30 a 00:00",
+            "contact_phone": "11 4444-5555",
+            "theme_color": "black",
+            "logo_url": None,
+        },
+    )
+    return config
+
+
 def run():
     db = SessionLocal()
     try:
         seed_admin(db)
+        seed_store_config(db)
         db.flush()
 
         categoria_pizzas, _ = get_or_create(db, Category, name="Pizzas")

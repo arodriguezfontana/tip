@@ -4,8 +4,19 @@ import { fetchOrders } from '@/services/orderService';
 import { formatCurrency } from '@/utils/currency';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
+import type { GroupBy } from '@/utils/orderGrouping';
+import { groupOrdersByPeriod } from '@/utils/orderGrouping';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
+
+export type HistorialGroupBy = 'none' | GroupBy;
+
+const GROUP_BY_OPTIONS: { value: HistorialGroupBy; label: string }[] = [
+  { value: 'none', label: 'Sin agrupar' },
+  { value: 'day', label: 'Día' },
+  { value: 'week', label: 'Semana' },
+  { value: 'month', label: 'Mes' },
+];
 
 function statusBadgeClasses(status: string): string {
   const normalized = status.trim().toLowerCase();
@@ -30,6 +41,7 @@ export function HistorialView() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+  const [groupBy, setGroupBy] = useState<HistorialGroupBy>('none');
 
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
@@ -76,6 +88,10 @@ export function HistorialView() {
     () => facturedOrders.reduce((sum, order) => sum + order.total_amount, 0),
     [facturedOrders]
   );
+  const revenueGroups = useMemo(
+    () => (groupBy !== 'none' ? groupOrdersByPeriod(facturedOrders, groupBy) : []),
+    [facturedOrders, groupBy]
+  );
 
   return (
     <div className="flex flex-col gap-4 lg:h-full">
@@ -99,50 +115,101 @@ export function HistorialView() {
         </div>
       </div>
 
+      <div className="shrink-0">
+        <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
+          Agrupar por
+        </span>
+        <div className="flex gap-2">
+          {GROUP_BY_OPTIONS.map((option) => (
+            <button
+              key={option.value}
+              type="button"
+              onClick={() => setGroupBy(option.value)}
+              className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
+                groupBy === option.value
+                  ? 'bg-black text-white'
+                  : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+              }`}
+            >
+              {option.label}
+            </button>
+          ))}
+        </div>
+      </div>
+
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading ? (
         <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
-      ) : orders.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
+      ) : groupBy === 'none' ? (
+        orders.length === 0 ? (
+          <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
+        ) : (
+          <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+            <div className="overflow-auto lg:min-h-0">
+              <table className="w-full text-sm">
+                <thead className="sticky top-0">
+                  <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-4 py-3">ID</th>
+                    <th className="px-4 py-3">Fecha</th>
+                    <th className="px-4 py-3">Cliente</th>
+                    <th className="px-4 py-3 text-right">Total</th>
+                    <th className="px-4 py-3">Estado</th>
+                  </tr>
+                </thead>
+                <tbody className="divide-y divide-gray-100">
+                  {orders.map((order) => (
+                    <tr key={order.id} onClick={() => setDetailOrder(order)} className="hover:bg-gray-50 cursor-pointer">
+                      <td className="px-4 py-3 font-medium text-gray-900">
+                        <button
+                          type="button"
+                          onClick={(event) => {
+                            event.stopPropagation();
+                            setDetailOrder(order);
+                          }}
+                          aria-label={`Ver detalle del pedido #${order.id}`}
+                          className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                        >
+                          #{order.id}
+                        </button>
+                      </td>
+                      <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
+                      <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
+                      <td className="px-4 py-3 text-right font-medium text-gray-900">
+                        {formatCurrency(order.total_amount)}
+                      </td>
+                      <td className="px-4 py-3">
+                        <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(order.status)}`}>
+                          {order.status}
+                        </span>
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        )
+      ) : revenueGroups.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-8">No hay ingresos en el rango seleccionado.</p>
       ) : (
         <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
           <div className="overflow-auto lg:min-h-0">
             <table className="w-full text-sm">
               <thead className="sticky top-0">
                 <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Fecha</th>
-                  <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3 text-right">Total</th>
-                  <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3">Período</th>
+                  <th className="px-4 py-3 text-right">Pedidos</th>
+                  <th className="px-4 py-3 text-right">Ingresos</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
-                {orders.map((order) => (
-                  <tr key={order.id} onClick={() => setDetailOrder(order)} className="hover:bg-gray-50 cursor-pointer">
-                    <td className="px-4 py-3 font-medium text-gray-900">
-                      <button
-                        type="button"
-                        onClick={(event) => {
-                          event.stopPropagation();
-                          setDetailOrder(order);
-                        }}
-                        aria-label={`Ver detalle del pedido #${order.id}`}
-                        className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
-                      >
-                        #{order.id}
-                      </button>
-                    </td>
-                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
-                    <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
+                {revenueGroups.map((group) => (
+                  <tr key={group.key} className="hover:bg-gray-50">
+                    <td className="px-4 py-3 text-gray-900 capitalize">{group.label}</td>
+                    <td className="px-4 py-3 text-right text-gray-600">{group.orderCount}</td>
                     <td className="px-4 py-3 text-right font-medium text-gray-900">
-                      {formatCurrency(order.total_amount)}
-                    </td>
-                    <td className="px-4 py-3">
-                      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(order.status)}`}>
-                        {order.status}
-                      </span>
+                      {formatCurrency(group.revenue)}
                     </td>
                   </tr>
                 ))}

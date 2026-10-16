@@ -6,12 +6,14 @@ import * as clientService from '@/services/clientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
+import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/orderService');
 vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
+vi.mock('@/services/storeConfigService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -24,6 +26,15 @@ beforeEach(() => {
   vi.mocked(statsService.fetchTopProducts).mockResolvedValue([]);
   vi.mocked(statsService.fetchBestSellingDay).mockResolvedValue({ best_selling_day: null, total_revenue: null });
   vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
+  vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: null,
+    opening_hours: null,
+    contact_phone: null,
+    logo_url: null,
+    theme_color: 'black',
+  });
 });
 
 function renderDashboard(auth = fakeAuth(ADMIN)) {
@@ -66,6 +77,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Clientes');
     expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
+
+    await goTo(user, 'Configuración Web');
+    expect(await screen.findByRole('heading', { name: 'Configuración Web' })).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {

@@ -6,10 +6,10 @@ import { Sidebar } from '@/components/Sidebar';
 import type { ViewKey } from '@/components/Sidebar';
 import { ComandasBoard } from '@/components/ComandasBoard';
 import { HistorialView } from '@/components/HistorialView';
-import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ClientesView } from '@/components/ClientesView';
+import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
 
 export default function AdminDashboardPage() {
   const { logout } = useAuth();
@@ -25,8 +25,12 @@ export default function AdminDashboardPage() {
   return (
     <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-gray-50 flex flex-col">
       <TopBar onToggleMenu={() => setMenuOpen((prev) => !prev)} menuOpen={menuOpen} onLogout={handleLogout} />
-      <main className="flex-1 px-4 py-6 lg:min-h-0">
-        <div className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto lg:h-full`}>
+      <main className="flex-1 px-4 py-6 lg:min-h-0 overflow-y-auto">
+        <div
+          className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto ${
+            activeView === 'tomar-pedido' || activeView === 'comandas' ? 'lg:h-full' : 'pb-12'
+          }`}
+        >
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
           </div>
@@ -34,9 +38,9 @@ export default function AdminDashboardPage() {
             <ComandasBoard onTakeOrder={() => setActiveView('tomar-pedido')} />
           </div>
           {activeView === 'historial' && <HistorialView />}
-          {activeView === 'ingresos' && <IngresosView />}
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'clientes' && <ClientesView />}
+          {activeView === 'configuracion-web' && <ConfiguracionWebView />}
         </div>
       </main>
 

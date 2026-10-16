@@ -2,7 +2,6 @@ import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { HistorialView } from '@/components/HistorialView';
-import { IngresosView } from '@/components/IngresosView';
 import { StatsSection } from '@/components/StatsSection';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
@@ -101,13 +100,13 @@ describe('HistorialView', () => {
 
     expect(screen.getByRole('dialog', { name: 'Pedido #1' })).toBeInTheDocument();
   });
-});
 
-describe('IngresosView', () => {
-  it('agrupa la facturación por día y por mes', async () => {
-    render(<IngresosView />);
+  it('permite agrupar por período (día, mes)', async () => {
+    render(<HistorialView />);
     const user = userEvent.setup();
+    await screen.findByText('Ana');
 
+    await user.click(screen.getByRole('button', { name: 'Día' }));
     const rows = async () => (await screen.findAllByRole('row')).slice(1).map((r) => plain(r.textContent));
 
     expect(await rows()).toEqual(['03/10/20261$ 10.000,00', '02/10/20261$ 5.000,00']);
@@ -115,11 +114,19 @@ describe('IngresosView', () => {
 
     await user.click(screen.getByRole('button', { name: 'Mes' }));
     expect(await rows()).toEqual(['octubre de 20262$ 15.000,00']);
+
+    // Volver a sin agrupar
+    await user.click(screen.getByRole('button', { name: 'Sin agrupar' }));
+    expect(await screen.findByText('Ana')).toBeInTheDocument();
   });
 
-  it('avisa si no hay ingresos en el rango', async () => {
+  it('avisa si no hay ingresos en el rango al agrupar', async () => {
     orders.fetchOrders.mockResolvedValue([HISTORY[1]]); // solo un rechazado
-    render(<IngresosView />);
+    render(<HistorialView />);
+    const user = userEvent.setup();
+
+    await screen.findByText('Beto');
+    await user.click(screen.getByRole('button', { name: 'Día' }));
 
     expect(await screen.findByText('No hay ingresos en el rango seleccionado.')).toBeInTheDocument();
   });

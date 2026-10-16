@@ -10,8 +10,10 @@ import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { fetchMenuProducts } from '@/services/menuService';
+import { fetchStoreConfig } from '@/services/storeConfigService';
 import { groupByCategory } from '@/utils/productGrouping';
 import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
+import type { StoreConfig } from '@/types/storeConfig';
 
 interface SubmittedOrder {
   order: WebOrderCreated;
@@ -26,8 +28,25 @@ export default function MenuPage() {
   const [products, setProducts] = useState<Product[]>([]);
   const [loadingProducts, setLoadingProducts] = useState(true);
   const [productsError, setProductsError] = useState<string | null>(null);
+  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
 
   const [reloadKey, setReloadKey] = useState(0);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    fetchStoreConfig()
+      .then((config) => {
+        if (!cancelled) setStoreConfig(config);
+      })
+      .catch(() => {
+        // Fallback transparente a valores por defecto si no responde
+      });
+
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   useEffect(() => {
     let cancelled = false;
@@ -70,7 +89,12 @@ export default function MenuPage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopBar actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />} />
+      <TopBar
+        title={storeConfig?.store_name}
+        logoUrl={storeConfig?.logo_url}
+        themeColor={storeConfig?.theme_color}
+        actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />}
+      />
       <main className="flex-1 px-4 py-10">
         {submittedOrder ? (
           <OrderSuccess order={submittedOrder.order} form={submittedOrder.form} onNewOrder={handleNewOrder} />
@@ -80,9 +104,32 @@ export default function MenuPage() {
               <div>
                 <h1 className="text-2xl font-bold text-gray-900">Nuestro menú</h1>
                 <p className="text-sm text-gray-500 mt-1">
-                  Elegí tus productos favoritos y armá tu pedido.
+                  Elegí tus productos favoritos y armá tu pedido{storeConfig?.store_name ? ` en ${storeConfig.store_name}` : ''}.
                 </p>
               </div>
+
+              {(storeConfig?.address || storeConfig?.opening_hours || storeConfig?.contact_phone) && (
+                <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 flex flex-wrap items-center gap-y-2 gap-x-6 text-xs text-gray-600">
+                  {storeConfig.address && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-gray-800">Dirección:</span>
+                      <span>{storeConfig.address}</span>
+                    </div>
+                  )}
+                  {storeConfig.opening_hours && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-gray-800">Horarios:</span>
+                      <span>{storeConfig.opening_hours}</span>
+                    </div>
+                  )}
+                  {storeConfig.contact_phone && (
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-semibold text-gray-800">Tel:</span>
+                      <span>{storeConfig.contact_phone}</span>
+                    </div>
+                  )}
+                </div>
+              )}
 
               {loadingProducts && products.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-12">Cargando menú...</p>

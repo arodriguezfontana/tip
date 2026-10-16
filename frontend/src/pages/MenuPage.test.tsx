@@ -4,11 +4,13 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import MenuPage from '@/pages/MenuPage';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
+import * as storeConfigService from '@/services/storeConfigService';
 import type { WebOrderCreated } from '@/types/order';
 import { COCA, CUSTOMER, FUGAZZETA, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/menuService');
 vi.mock('@/services/orderService');
+vi.mock('@/services/storeConfigService');
 
 const menu = vi.mocked(menuService);
 const orders = vi.mocked(orderService);
@@ -49,6 +51,15 @@ function cart() {
 beforeEach(() => {
   vi.resetAllMocks();
   menu.fetchMenuProducts.mockResolvedValue([MUZZA, FUGAZZETA, COCA]);
+  vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: null,
+    opening_hours: null,
+    contact_phone: null,
+    logo_url: null,
+    theme_color: 'black',
+  });
 });
 
 describe('MenuPage', () => {
@@ -206,5 +217,28 @@ describe('MenuPage', () => {
     await user.click(screen.getByRole('button', { name: 'creá una cuenta' }));
 
     expect(screen.getByRole('dialog', { name: 'Crear cuenta' })).toBeInTheDocument();
+  });
+
+  it('muestra la personalización del local y datos de contacto en la web pública', async () => {
+    vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+      id: 1,
+      store_name: 'Pizzería La Clásica',
+      address: 'Av. Corrientes 1234',
+      opening_hours: 'Mar a Dom 19:30 a 00:00',
+      contact_phone: '11 4444-5555',
+      logo_url: 'data:image/png;base64,sample-logo-data',
+      theme_color: 'red',
+    });
+
+    renderMenu();
+
+    expect(await screen.findByRole('heading', { name: 'Pizzería La Clásica' })).toBeInTheDocument();
+    expect(screen.getByAltText('Logo de Pizzería La Clásica')).toHaveAttribute(
+      'src',
+      'data:image/png;base64,sample-logo-data'
+    );
+    expect(screen.getByText('Av. Corrientes 1234')).toBeInTheDocument();
+    expect(screen.getByText('Mar a Dom 19:30 a 00:00')).toBeInTheDocument();
+    expect(screen.getByText('11 4444-5555')).toBeInTheDocument();
   });
 });
