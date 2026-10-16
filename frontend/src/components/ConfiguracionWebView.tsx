@@ -11,7 +11,7 @@ import {
 } from '@/types/storeConfig';
 import { applyThemeColor } from '@/utils/theme';
 
-export const LOGIN_BG_CHOICES: {
+const LOGIN_BG_CHOICES: {
   id: LoginBgOption;
   name: string;
   image: string;

@@ -11,7 +11,7 @@ import backgroundBistro from '@/assets/background_bistro.jpg';
 import backgroundKitchen from '@/assets/background_kitchen.jpg';
 import backgroundTrattoria from '@/assets/background_trattoria.jpg';
 
-export const LOGIN_BACKGROUND_IMAGES: Record<string, string> = {
+const LOGIN_BACKGROUND_IMAGES: Record<string, string> = {
   bistro: backgroundBistro,
   kitchen: backgroundKitchen,
   trattoria: backgroundTrattoria,
