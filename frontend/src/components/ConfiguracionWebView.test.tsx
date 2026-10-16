@@ -141,4 +141,30 @@ describe('ConfiguracionWebView', () => {
     expect(storeConfigService.updateStoreConfig).not.toHaveBeenCalled();
     expect(await screen.findByText(/El nombre del local es obligatorio/i)).toBeInTheDocument();
   });
+
+  it('permite elegir la imagen de fondo para el inicio de sesión', async () => {
+    const user = userEvent.setup();
+    render(<ConfiguracionWebView />);
+
+    expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
+
+    const bistroBtn = screen.getByRole('button', { name: 'Salón' });
+    expect(bistroBtn).toHaveAttribute('aria-pressed', 'true');
+
+    const kitchenBtn = screen.getByRole('button', { name: 'Cocina' });
+    await user.click(kitchenBtn);
+
+    expect(kitchenBtn).toHaveAttribute('aria-pressed', 'true');
+    expect(bistroBtn).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          login_bg: 'kitchen',
+        })
+      );
+    });
+  });
 });

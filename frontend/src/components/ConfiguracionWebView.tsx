@@ -1,8 +1,43 @@
 import { useEffect, useRef, useState } from 'react';
+import backgroundBistro from '@/assets/background_bistro.jpg';
+import backgroundKitchen from '@/assets/background_kitchen.jpg';
+import backgroundTrattoria from '@/assets/background_trattoria.jpg';
 import { fetchStoreConfig, updateStoreConfig } from '@/services/storeConfigService';
-import { THEME_OPTIONS, type StoreConfig, type ThemeColor } from '@/types/storeConfig';
+import {
+  THEME_OPTIONS,
+  type LoginBgOption,
+  type StoreConfig,
+  type ThemeColor,
+} from '@/types/storeConfig';
+import { applyThemeColor } from '@/utils/theme';
 
-export function ConfiguracionWebView() {
+export const LOGIN_BG_CHOICES: {
+  id: LoginBgOption;
+  name: string;
+  image: string;
+}[] = [
+  {
+    id: 'bistro',
+    name: 'Salón',
+    image: backgroundBistro,
+  },
+  {
+    id: 'kitchen',
+    name: 'Cocina',
+    image: backgroundKitchen,
+  },
+  {
+    id: 'trattoria',
+    name: 'Platos',
+    image: backgroundTrattoria,
+  },
+];
+
+interface ConfiguracionWebViewProps {
+  onConfigUpdated?: (config: StoreConfig) => void;
+}
+
+export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewProps = {}) {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [feedback, setFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
@@ -13,6 +48,7 @@ export function ConfiguracionWebView() {
   const [contactPhone, setContactPhone] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [themeColor, setThemeColor] = useState<ThemeColor>('black');
+  const [loginBg, setLoginBg] = useState<LoginBgOption>('bistro');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -28,6 +64,8 @@ export function ConfiguracionWebView() {
         setContactPhone(data.contact_phone || '');
         setLogoUrl(data.logo_url || null);
         setThemeColor(data.theme_color || 'black');
+        setLoginBg(data.login_bg || 'bistro');
+        applyThemeColor(data.theme_color || 'black');
       })
       .catch((err) => {
         if (cancelled) return;
@@ -93,6 +131,7 @@ export function ConfiguracionWebView() {
         contact_phone: contactPhone.trim() || null,
         logo_url: logoUrl,
         theme_color: themeColor,
+        login_bg: loginBg,
       });
 
       setStoreName(updated.store_name);
@@ -101,10 +140,13 @@ export function ConfiguracionWebView() {
       setContactPhone(updated.contact_phone || '');
       setLogoUrl(updated.logo_url || null);
       setThemeColor(updated.theme_color || 'black');
+      setLoginBg(updated.login_bg || 'bistro');
+      applyThemeColor(updated.theme_color || 'black');
       setFeedback({
         type: 'success',
-        message: '¡Configuración guardada exitosamente! Los cambios ya se reflejan en la web de pedidos.',
+        message: '¡Configuración guardada exitosamente!',
       });
+      onConfigUpdated?.(updated);
     } catch (err) {
       const msg = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
       setFeedback({ type: 'error', message: msg || 'Ocurrió un error al guardar los cambios.' });
@@ -127,9 +169,9 @@ export function ConfiguracionWebView() {
     <div className="max-w-4xl mx-auto space-y-6">
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
         <div>
-          <h1 className="text-2xl font-bold text-gray-900">Configuración Web</h1>
+          <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Personalizá la identidad visual, el logotipo y los datos de contacto que ven tus clientes al hacer pedidos.
+            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión y los datos de contacto del local.
           </p>
         </div>
       </div>
@@ -336,29 +378,111 @@ export function ConfiguracionWebView() {
             </div>
 
             {/* Banner de datos simulado */}
-            <div className="bg-gray-50 p-4 border-t border-gray-100 text-xs text-gray-600 flex flex-wrap gap-y-2 gap-x-6">
-              {address && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-gray-800">Dirección:</span>
-                  <span>{address}</span>
-                </div>
-              )}
-              {openingHours && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-gray-800">Horarios:</span>
-                  <span>{openingHours}</span>
-                </div>
-              )}
-              {contactPhone && (
-                <div className="flex items-center gap-1.5">
-                  <span className="font-semibold text-gray-800">Tel:</span>
-                  <span>{contactPhone}</span>
-                </div>
-              )}
-              {!address && !openingHours && !contactPhone && (
-                <span className="italic text-gray-400">Completá los datos de contacto para verlos aquí.</span>
-              )}
+            <div className="bg-white p-4 border-t border-gray-100">
+              <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+                {address && (
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <span
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
+                    >
+                      📍
+                    </span>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase text-gray-500">Dirección</span>
+                      <span className="font-medium text-gray-900 break-words">{address}</span>
+                    </div>
+                  </div>
+                )}
+                {openingHours && (
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <span
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
+                    >
+                      🕒
+                    </span>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase text-gray-500">Horarios</span>
+                      <span className="font-medium text-gray-900 break-words">{openingHours}</span>
+                    </div>
+                  </div>
+                )}
+                {contactPhone && (
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <span
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
+                    >
+                      📞
+                    </span>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-bold uppercase text-gray-500">Teléfonos</span>
+                      <span className="font-medium text-gray-900 break-words">{contactPhone}</span>
+                    </div>
+                  </div>
+                )}
+                {!address && !openingHours && !contactPhone && (
+                  <span className="italic text-gray-400 text-xs py-2 sm:col-span-3">Completá los datos de contacto para verlos aquí.</span>
+                )}
+              </div>
             </div>
+          </div>
+        </section>
+
+        {/* Fondo de inicio de sesión */}
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Imagen de Fondo para Inicio de Sesión</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Elegí la imagen gastronómica que se mostrará como fondo en la pantalla de ingreso al sistema. Por defecto está seleccionada Salón Bistro.
+            </p>
+          </div>
+
+          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+            {LOGIN_BG_CHOICES.map((choice) => {
+              const isSelected = loginBg === choice.id;
+              return (
+                <button
+                  key={choice.id}
+                  type="button"
+                  onClick={() => setLoginBg(choice.id)}
+                  aria-pressed={isSelected}
+                  aria-label={choice.name}
+                  className={`group relative text-left rounded-2xl overflow-hidden border-2 transition-all p-3 flex flex-col ${
+                    isSelected
+                      ? 'border-black bg-gray-50 shadow-md ring-2 ring-black/10'
+                      : 'border-gray-200 hover:border-gray-300 bg-white'
+                  }`}
+                >
+                  <div className="relative aspect-video w-full rounded-xl overflow-hidden bg-gray-100 mb-2.5">
+                    <img
+                      src={choice.image}
+                      alt={choice.name}
+                      className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                    />
+                    {isSelected && (
+                      <div
+                        className="absolute top-2 right-2 rounded-full p-1 text-white shadow"
+                        style={{ backgroundColor: currentTheme.hex }}
+                      >
+                        <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                        </svg>
+                      </div>
+                    )}
+                  </div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-sm font-bold text-gray-900">{choice.name}</span>
+                    {choice.id === 'bistro' && (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full">
+                        Por defecto
+                      </span>
+                    )}
+                  </div>
+                </button>
+              );
+            })}
           </div>
         </section>
 
@@ -367,7 +491,8 @@ export function ConfiguracionWebView() {
           <button
             type="submit"
             disabled={saving}
-            className="px-6 py-3 rounded-xl bg-black hover:bg-gray-800 text-white font-bold text-sm tracking-wide transition shadow-sm disabled:opacity-50"
+            style={{ backgroundColor: currentTheme.hex }}
+            className="px-6 py-3 rounded-xl text-white font-bold text-sm tracking-wide transition shadow-sm hover:opacity-90 disabled:opacity-50"
           >
             {saving ? 'Guardando cambios...' : 'Guardar cambios'}
           </button>

@@ -1,3 +1,5 @@
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+
 export type ViewKey = 'tomar-pedido' | 'comandas' | 'historial' | 'estadisticas' | 'clientes' | 'configuracion-web';
 
 const NAV_ITEMS: { key: ViewKey; label: string }[] = [
@@ -6,7 +8,7 @@ const NAV_ITEMS: { key: ViewKey; label: string }[] = [
   { key: 'historial', label: 'Historial' },
   { key: 'estadisticas', label: 'Estadísticas' },
   { key: 'clientes', label: 'Clientes' },
-  { key: 'configuracion-web', label: 'Configuración Web' },
+  { key: 'configuracion-web', label: 'Configuración' },
 ];
 
 interface SidebarProps {
@@ -14,9 +16,12 @@ interface SidebarProps {
   onClose: () => void;
   activeView: ViewKey;
   onSelect: (view: ViewKey) => void;
+  themeColor?: ThemeColor;
 }
 
-export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
+export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: SidebarProps) {
+  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : '#000000';
+
   return (
     <>
       <div
@@ -33,7 +38,10 @@ export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
         }`}
         aria-hidden={!open}
       >
-        <div className="bg-black text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div
+          className="text-white px-6 py-4 flex items-center justify-between shrink-0 transition-colors duration-200"
+          style={{ backgroundColor: themeHex }}
+        >
           <h2 className="text-lg font-bold">Menú</h2>
           <button
             type="button"
@@ -46,18 +54,22 @@ export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
         </div>
 
         <nav className="flex-1 overflow-y-auto p-3 space-y-1">
-          {NAV_ITEMS.map((item) => (
-            <button
-              key={item.key}
-              type="button"
-              onClick={() => onSelect(item.key)}
-              className={`w-full text-left rounded-xl px-4 py-3 text-sm font-semibold transition ${
-                activeView === item.key ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'
-              }`}
-            >
-              {item.label}
-            </button>
-          ))}
+          {NAV_ITEMS.map((item) => {
+            const isActive = activeView === item.key;
+            return (
+              <button
+                key={item.key}
+                type="button"
+                onClick={() => onSelect(item.key)}
+                style={isActive ? { backgroundColor: themeHex } : undefined}
+                className={`w-full text-left rounded-xl px-4 py-3 text-sm font-semibold transition ${
+                  isActive ? 'text-white shadow-xs' : 'text-gray-700 hover:bg-gray-200'
+                }`}
+              >
+                {item.label}
+              </button>
+            );
+          })}
         </nav>
       </aside>
     </>

@@ -58,6 +58,28 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
 };
 
+export type LoginBgOption = 'bistro' | 'kitchen' | 'trattoria';
+
+export interface LoginBgInfo {
+  id: LoginBgOption;
+  name: string;
+}
+
+export const LOGIN_BG_OPTIONS: Record<LoginBgOption, LoginBgInfo> = {
+  bistro: {
+    id: 'bistro',
+    name: 'Salón',
+  },
+  kitchen: {
+    id: 'kitchen',
+    name: 'Cocina',
+  },
+  trattoria: {
+    id: 'trattoria',
+    name: 'Platos',
+  },
+};
+
 export interface StoreConfig {
   id?: number;
   store_name: string;
@@ -66,6 +88,7 @@ export interface StoreConfig {
   contact_phone: string | null;
   logo_url: string | null;
   theme_color: ThemeColor;
+  login_bg?: LoginBgOption;
 }
 
 export interface StoreConfigUpdatePayload {
@@ -75,5 +98,6 @@ export interface StoreConfigUpdatePayload {
   contact_phone?: string | null;
   logo_url?: string | null;
   theme_color: ThemeColor;
+  login_bg?: LoginBgOption;
 }
 

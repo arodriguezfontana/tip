@@ -2,6 +2,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 THEME_COLOR_PATTERN = r"^(black|red|blue|emerald|orange)$"
+LOGIN_BG_PATTERN = r"^(bistro|kitchen|trattoria)$"
 
 
 class StoreConfigResponse(BaseModel):
@@ -12,6 +13,7 @@ class StoreConfigResponse(BaseModel):
     contact_phone: str | None = None
     logo_url: str | None = None
     theme_color: str
+    login_bg: str = "bistro"
     created_at: datetime
     updated_at: datetime
 
@@ -27,4 +29,5 @@ class StoreConfigUpdate(BaseModel):
     contact_phone: str | None = Field(None, max_length=100, description="Teléfonos de contacto")
     logo_url: str | None = Field(None, description="Logo principal en formato Data URL o URL")
     theme_color: str = Field("black", pattern=THEME_COLOR_PATTERN, description="Color principal seleccionado")
+    login_bg: str = Field("bistro", pattern=LOGIN_BG_PATTERN, description="Fondo del login")
 

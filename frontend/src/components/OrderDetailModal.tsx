@@ -265,7 +265,8 @@ export function OrderDetailModal({ order, simulated = false, onClose }: OrderDet
           <button
             type="button"
             onClick={onClose}
-            className="px-5 py-2 rounded-xl bg-black hover:bg-gray-800 text-white text-sm font-bold transition"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="px-5 py-2 rounded-xl text-white text-sm font-bold transition hover:opacity-90 shadow-xs"
           >
             Cerrar
           </button>

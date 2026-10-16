@@ -327,18 +327,19 @@ export function TomarPedidoView() {
                   ['domicilio', 'Envío a domicilio'],
                 ] as const
               ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={deliveryMethod === value}
-                  onClick={() => setDeliveryMethod(value)}
-                  className={`flex-1 py-2 font-medium transition ${
-                    deliveryMethod === value ? 'bg-black text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {label}
-                </button>
+                  <button
+                    key={value}
+                    type="button"
+                    role="radio"
+                    aria-checked={deliveryMethod === value}
+                    onClick={() => setDeliveryMethod(value)}
+                    style={deliveryMethod === value ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
+                    className={`flex-1 py-2 font-medium transition ${
+                      deliveryMethod === value ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                    }`}
+                  >
+                    {label}
+                  </button>
               ))}
             </div>
           </div>
@@ -399,9 +400,10 @@ export function TomarPedidoView() {
                 key={category.id}
                 type="button"
                 onClick={() => setActiveCategory(category.id)}
+                style={activeCategory === category.id ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
                 className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
                   activeCategory === category.id
-                    ? 'bg-black text-white shadow-md'
+                    ? 'text-white shadow-md'
                     : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
                 }`}
               >
@@ -448,7 +450,10 @@ export function TomarPedidoView() {
                         }`}
                       >
                         {quantity > 0 && (
-                          <span className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full bg-black text-white text-[11px] font-bold flex items-center justify-center">
+                          <span
+                            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+                            className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
+                          >
                             {quantity}
                           </span>
                         )}
@@ -547,8 +552,9 @@ export function TomarPedidoView() {
                   aria-checked={paymentMethod === method}
                   // Un segundo clic lo deja sin especificar.
                   onClick={() => setPaymentMethod((current) => (current === method ? null : method))}
+                  style={paymentMethod === method ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
                   className={`flex-1 py-1.5 font-medium transition ${
-                    paymentMethod === method ? 'bg-black text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                    paymentMethod === method ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
                   }`}
                 >
                   {PAYMENT_METHOD_LABEL[method]}

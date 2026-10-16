@@ -105,7 +105,8 @@ export function ClientEditModal({ client, onClose, onSave }: ClientEditModalProp
             <button
               type="submit"
               disabled={saving}
-              className="flex-1 bg-black text-white rounded-xl py-2.5 text-xs font-semibold hover:bg-gray-800 transition disabled:opacity-60"
+              style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+              className="flex-1 text-white rounded-xl py-2.5 text-xs font-semibold hover:opacity-90 transition disabled:opacity-60 shadow-xs"
             >
               {saving ? 'Guardando...' : 'Guardar cambios'}
             </button>

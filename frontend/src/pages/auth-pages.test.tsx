@@ -6,6 +6,19 @@ import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
 import { ADMIN, CUSTOMER, fakeAuth, renderWithProviders } from '@/test/utils';
 
+vi.mock('@/services/storeConfigService', () => ({
+  fetchStoreConfig: vi.fn().mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: null,
+    opening_hours: null,
+    contact_phone: null,
+    logo_url: null,
+    theme_color: 'black',
+    login_bg: 'bistro',
+  }),
+}));
+
 const PANEL = <div>Panel del admin</div>;
 
 describe('ProtectedRoute', () => {

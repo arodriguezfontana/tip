@@ -61,7 +61,8 @@ export function OrderSuccess({
       <button
         type="button"
         onClick={onNewOrder}
-        className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition mt-6"
+        style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+        className="w-full text-white rounded-xl py-2.5 font-semibold hover:opacity-90 transition mt-6 shadow-xs"
       >
         Realizar otro pedido
       </button>

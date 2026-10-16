@@ -43,6 +43,7 @@ def test_admin_can_update_store_config(client, public_client):
     assert data["contact_phone"] == "11 9999-8888"
     assert data["logo_url"] == "data:image/png;base64,test-logo-base64"
     assert data["theme_color"] == "emerald"
+    assert data["login_bg"] == "bistro"
 
     # Inmediatamente visible para clientes sin autenticación
     pub_res = public_client.get(CONFIG_URL)
@@ -50,6 +51,7 @@ def test_admin_can_update_store_config(client, public_client):
     pub_data = pub_res.json()
     assert pub_data["store_name"] == "Pizzería Bella Vista"
     assert pub_data["theme_color"] == "emerald"
+    assert pub_data["login_bg"] == "bistro"
     assert pub_data["logo_url"] == "data:image/png;base64,test-logo-base64"
 
 
@@ -70,6 +72,16 @@ def test_update_store_config_validates_store_name(client):
     payload = {
         "store_name": "   ",
         "theme_color": "blue",
+    }
+    response = client.put(CONFIG_URL, json=payload)
+    assert response.status_code == 422
+
+
+def test_update_store_config_validates_login_bg(client):
+    payload = {
+        "store_name": "Pizzería Central",
+        "theme_color": "blue",
+        "login_bg": "pizza",  # pizza is no longer allowed, only bistro, kitchen, trattoria
     }
     response = client.put(CONFIG_URL, json=payload)
     assert response.status_code == 422

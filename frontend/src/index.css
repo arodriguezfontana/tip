@@ -5,6 +5,10 @@
   --font-bebas: 'Bebas Neue', sans-serif;
 }
 
+:root {
+  --primary-color: #18181b;
+}
+
 /* Barras de scroll finas y siempre visibles. */
 ::-webkit-scrollbar {
   width: 6px;

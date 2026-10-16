@@ -176,7 +176,8 @@ export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCard
               type="button"
               disabled={pending}
               onClick={() => handleClick('Finalizado')}
-              className="w-full bg-black hover:bg-gray-800 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+              className="w-full hover:opacity-90 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
             >
               Finalizar
             </button>

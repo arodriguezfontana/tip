@@ -37,7 +37,10 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export function HistorialView() {
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+
+export function HistorialView({ themeColor }: { themeColor?: ThemeColor } = {}) {
+  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : '#000000';
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
@@ -125,9 +128,10 @@ export function HistorialView() {
               key={option.value}
               type="button"
               onClick={() => setGroupBy(option.value)}
+              style={groupBy === option.value ? { backgroundColor: themeHex } : undefined}
               className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
                 groupBy === option.value
-                  ? 'bg-black text-white'
+                  ? 'text-white shadow-xs'
                   : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
               }`}
             >

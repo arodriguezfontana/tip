@@ -223,6 +223,7 @@ def seed_store_config(db: Session) -> StoreConfig:
             "opening_hours": "Martes a Domingo: 19:30 a 00:00",
             "contact_phone": "11 4444-5555",
             "theme_color": "black",
+            "login_bg": "bistro",
             "logo_url": None,
         },
     )

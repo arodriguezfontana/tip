@@ -78,8 +78,8 @@ describe('AdminDashboardPage', () => {
     await goTo(user, 'Clientes');
     expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
 
-    await goTo(user, 'Configuración Web');
-    expect(await screen.findByRole('heading', { name: 'Configuración Web' })).toBeInTheDocument();
+    await goTo(user, 'Configuración');
+    expect(await screen.findByRole('heading', { name: 'Configuración' })).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {

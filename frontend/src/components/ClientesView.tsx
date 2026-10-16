@@ -95,7 +95,8 @@ export function ClientesView() {
                 key={size}
                 type="button"
                 onClick={() => { setPerPage(size); setPage(1); }}
-                className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${perPage === size ? 'bg-black text-white' : 'text-gray-600 hover:bg-gray-200'}`}
+                style={perPage === size ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
+                className={`text-xs px-2 py-0.5 rounded-lg font-bold transition ${perPage === size ? 'text-white' : 'text-gray-600 hover:bg-gray-200'}`}
               >
                 {size}
               </button>

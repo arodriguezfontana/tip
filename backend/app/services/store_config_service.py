@@ -14,6 +14,7 @@ def get_or_create_store_config(db: Session) -> StoreConfig:
             opening_hours="Martes a Domingo: 19:30 a 00:00",
             contact_phone="11 4444-5555",
             theme_color="black",
+            login_bg="bistro",
             logo_url=None,
         )
         db.add(config)
@@ -31,6 +32,8 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
     config.contact_phone = data.contact_phone
     config.logo_url = data.logo_url
     config.theme_color = data.theme_color
+    if data.login_bg:
+        config.login_bg = data.login_bg
     db.commit()
     db.refresh(config)
     return config
