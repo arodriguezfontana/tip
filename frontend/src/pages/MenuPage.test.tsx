@@ -5,6 +5,7 @@ import MenuPage from '@/pages/MenuPage';
 import * as businessHoursService from '@/services/businessHoursService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
+import * as storeConfigService from '@/services/storeConfigService';
 import type { BusinessHoursStatus } from '@/types/businessHours';
 import type { WebOrderCreated } from '@/types/order';
 import { COCA, CUSTOMER, FUGAZZETA, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
@@ -12,10 +13,12 @@ import { COCA, CUSTOMER, FUGAZZETA, MUZZA, fakeAuth, renderWithProviders } from 
 vi.mock('@/services/menuService');
 vi.mock('@/services/orderService');
 vi.mock('@/services/businessHoursService');
+vi.mock('@/services/storeConfigService');
 
 const menu = vi.mocked(menuService);
 const orders = vi.mocked(orderService);
 const businessHours = vi.mocked(businessHoursService);
+const storeConfig = vi.mocked(storeConfigService);
 
 const OPEN: BusinessHoursStatus = {
   configured: true,
@@ -72,6 +75,16 @@ beforeEach(() => {
   vi.resetAllMocks();
   menu.fetchMenuProducts.mockResolvedValue([MUZZA, FUGAZZETA, COCA]);
   businessHours.fetchBusinessHours.mockResolvedValue(OPEN);
+  storeConfig.fetchStoreConfig.mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: 'Av. Corrientes 1234, CABA',
+    opening_hours: 'Mar a Dom 19:00 a 00:00',
+    contact_phone: '11 4444-1234',
+    logo_url: null,
+    theme_color: 'black',
+    login_bg: 'bistro',
+  });
 });
 
 describe('MenuPage', () => {

@@ -32,8 +32,9 @@ export function DateRangeFilter({
             type="button"
             onClick={() => onPresetChange(p)}
             className={`rounded-xl px-3 py-1.5 text-xs font-semibold transition ${
-              preset === p ? 'bg-black text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
+              preset === p ? 'text-white' : 'bg-white border border-gray-300 text-gray-700 hover:bg-gray-100'
             }`}
+            style={preset === p ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
           >
             {presetLabel(p)}
           </button>

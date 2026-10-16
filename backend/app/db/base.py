@@ -9,6 +9,7 @@ from app.models.business_hours import BusinessHours
 from app.models.client import Client
 from app.models.menu import Category, Ingredient, Product, ProductImage, ProductIngredient
 from app.models.order import Order, OrderItem
+from app.models.store_config import StoreConfig
 from app.models.user import User
 
 __all__ = [
@@ -22,5 +23,6 @@ __all__ = [
     "Product",
     "ProductImage",
     "ProductIngredient",
+    "StoreConfig",
     "User",
 ]

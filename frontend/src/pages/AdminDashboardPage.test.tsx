@@ -9,6 +9,7 @@ import * as ingredientService from '@/services/ingredientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
 import * as statsService from '@/services/statsService';
+import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/orderService');
@@ -18,6 +19,7 @@ vi.mock('@/services/clientService');
 vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
 vi.mock('@/services/businessHoursService');
+vi.mock('@/services/storeConfigService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -46,6 +48,16 @@ beforeEach(() => {
     next_opening_label: null,
     ranges: [],
   });
+  vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: 'Av. Corrientes 1234, CABA',
+    opening_hours: 'Mar a Dom 19:00 a 00:00',
+    contact_phone: '11 4444-1234',
+    logo_url: null,
+    theme_color: 'black',
+    login_bg: 'bistro',
+  });
 });
 
 function renderDashboard(auth = fakeAuth(ADMIN)) {
@@ -60,7 +72,9 @@ function renderDashboard(auth = fakeAuth(ADMIN)) {
 
 async function goTo(user: ReturnType<typeof userEvent.setup>, section: string) {
   await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
-  await user.click(screen.getByRole('button', { name: section }));
+  const buttons = screen.getAllByRole('button', { name: section });
+  const target = buttons.find((btn) => !btn.hasAttribute('aria-controls')) ?? buttons[0];
+  await user.click(target);
   // Al elegir una sección el menú lateral se cierra solo.
   expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute('aria-expanded', 'false');
 }
@@ -85,7 +99,7 @@ describe('AdminDashboardPage', () => {
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Configuración']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });
@@ -142,6 +156,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Horarios');
     expect(await screen.findByText(/se aceptan pedidos a cualquier hora/)).toBeInTheDocument();
+
+    await goTo(user, 'Configuración');
+    expect(await screen.findByRole('heading', { name: 'Configuración' })).toBeInTheDocument();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {

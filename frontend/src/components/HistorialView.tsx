@@ -8,6 +8,8 @@ import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 
+import type { ThemeColor } from '@/types/storeConfig';
+
 function statusBadgeClasses(status: string): string {
   const normalized = status.trim().toLowerCase();
   if (normalized.includes('pendiente')) return 'bg-yellow-100 text-yellow-800';
@@ -27,7 +29,12 @@ function formatDateTime(iso: string): string {
   });
 }
 
-export function HistorialView() {
+interface HistorialViewProps {
+  themeColor?: ThemeColor;
+}
+
+export function HistorialView({ themeColor }: HistorialViewProps = {}) {
+  void themeColor;
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');

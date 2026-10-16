@@ -1,10 +1,13 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Link, Navigate } from 'react-router-dom';
 import { TopBar } from '@/components/TopBar';
 import { CustomerAccountActions } from '@/components/CustomerAccountActions';
 import { useAuth } from '@/hooks/useAuth';
 import type { Me } from '@/services/authService';
+import { fetchStoreConfig } from '@/services/storeConfigService';
+import { applyThemeColor } from '@/utils/theme';
+import type { StoreConfig } from '@/types/storeConfig';
 import { validateCustomerData } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
 import type { CustomerDataErrors } from '@/utils/customerValidation';
@@ -115,7 +118,8 @@ function ProfileForm({ user }: { user: Me }) {
       <button
         type="submit"
         disabled={saving}
-        className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
+        style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+        className="w-full text-white rounded-xl py-2.5 font-semibold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
       >
         {saving ? 'Guardando...' : 'Guardar cambios'}
       </button>
@@ -125,6 +129,24 @@ function ProfileForm({ user }: { user: Me }) {
 
 export default function ProfilePage() {
   const { user, isCustomer, isLoading } = useAuth();
+  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreConfig()
+      .then((data) => {
+        if (!cancelled) {
+          setStoreConfig(data);
+          if (data?.theme_color) {
+            applyThemeColor(data.theme_color);
+          }
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (!isLoading && !isCustomer) {
     return <Navigate to="/menu" replace />;
@@ -132,7 +154,12 @@ export default function ProfilePage() {
 
   return (
     <div className="min-h-screen bg-gray-50 flex flex-col">
-      <TopBar actions={<CustomerAccountActions />} />
+      <TopBar
+        title={storeConfig?.store_name}
+        logoUrl={storeConfig?.logo_url}
+        themeColor={storeConfig?.theme_color}
+        actions={<CustomerAccountActions />}
+      />
       <main className="flex-1 px-4 py-10">
         <div className="bg-white rounded-2xl shadow-md p-6 max-w-lg mx-auto">
           <Link to="/menu" className="text-sm text-gray-500 hover:text-gray-900 transition">

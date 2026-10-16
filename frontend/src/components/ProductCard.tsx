@@ -56,7 +56,8 @@ export function ProductCard({ product }: { product: Product }) {
             <button
               type="button"
               onClick={() => addItem(product)}
-              className="bg-black text-white rounded-xl px-4 py-1.5 text-sm font-semibold hover:bg-gray-800 transition"
+              style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+              className="text-white rounded-xl px-4 py-1.5 text-sm font-semibold hover:opacity-90 transition shadow-xs"
             >
               Agregar
             </button>

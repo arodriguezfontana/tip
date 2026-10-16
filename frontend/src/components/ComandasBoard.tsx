@@ -6,6 +6,7 @@ import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -40,9 +41,11 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 interface ComandasBoardProps {
   /** Acceso rápido a la sección para cargar pedidos presenciales. */
   onTakeOrder?: () => void;
+  themeColor?: ThemeColor;
 }
 
-export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
+export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
+  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -189,7 +192,10 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
             <button
               type="button"
               onClick={onTakeOrder}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition shadow-xs"
+              style={themeHex ? { backgroundColor: themeHex } : undefined}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl text-white transition shadow-xs ${
+                themeHex ? 'hover:opacity-90' : 'bg-orange-500 hover:bg-orange-600'
+              }`}
             >
               <span className="text-sm leading-none">+</span>
               Tomar pedido

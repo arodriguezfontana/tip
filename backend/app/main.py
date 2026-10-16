@@ -18,6 +18,7 @@ from app.api import (
     order_router,
     product_router,
     stats_router,
+    store_config_router,
     telegram_router,
 )
 from app.api.errors import register_error_handlers
@@ -74,6 +75,7 @@ api_router.include_router(product_router.router, prefix="/products", tags=["Prod
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
 api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
+api_router.include_router(store_config_router.router, prefix="/store-config", tags=["Store Config"])
 
 app.include_router(api_router)
 
