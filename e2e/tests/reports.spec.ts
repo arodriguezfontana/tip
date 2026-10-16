@@ -20,8 +20,9 @@ test.describe('Reportes del panel', () => {
     await expect(page.getByRole('row', { name: /Agua Mineral 500ml/ })).toBeHidden();
     await expect(page.getByText('Rechazado', { exact: true })).toBeVisible();
 
-    await goToSection(page, 'Ingresos');
+    await goToSection(page, 'Historial');
     await page.getByRole('button', { name: 'Hoy' }).click();
+    await page.getByRole('button', { name: 'Día' }).click();
     const fila = page.getByRole('row').nth(1);
     await expect(fila).toBeVisible();
     // El total del día incluye la venta y no el pedido rechazado.
