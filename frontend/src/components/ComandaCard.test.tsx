@@ -11,6 +11,7 @@ function renderCard(
   extraProps: {
     activeDrivers?: DeliveryDriver[];
     onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
+    onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
   } = {}
 ) {
   const onStatusChange = vi.fn().mockResolvedValue(undefined);
@@ -22,6 +23,7 @@ function renderCard(
       order={order}
       onStatusChange={onStatusChange}
       onAssignDriver={onAssignDriver}
+      onMarkPaid={extraProps.onMarkPaid}
       activeDrivers={extraProps.activeDrivers}
       onOpenDetail={onOpenDetail}
     />
@@ -207,5 +209,18 @@ describe('ComandaCard', () => {
     );
 
     expect(screen.queryByRole('combobox', { name: 'Asignar repartidor' })).not.toBeInTheDocument();
+  });
+
+  it('permite marcar como abonado un pedido de MercadoPago pendiente', async () => {
+    const onMarkPaid = vi.fn().mockResolvedValue(undefined);
+    const { user } = renderCard(
+      { id: 42, payment_method: 'mercadopago', is_paid: false },
+      { onMarkPaid }
+    );
+
+    const button = screen.getByRole('button', { name: /Marcar abonado/i });
+    expect(button).toBeInTheDocument();
+    await user.click(button);
+    expect(onMarkPaid).toHaveBeenCalledWith(42, true);
   });
 });

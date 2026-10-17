@@ -164,3 +164,9 @@ class OrderDetailResponse(OrderResponse):
             subtotal=order.subtotal,
             shipping_cost=order.shipping_cost or 0,
         )
+
+
+class OrderPaymentUpdate(BaseModel):
+    """Payload para actualizar manualmente el estado de cobro de un pedido."""
+
+    is_paid: bool = True

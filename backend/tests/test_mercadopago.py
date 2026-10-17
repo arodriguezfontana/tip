@@ -100,3 +100,15 @@ def test_webhook_get_ping(client):
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
 
+
+def test_manual_mark_order_as_paid(client, db_session, sample_order):
+    assert sample_order.is_paid is False
+    with patch("app.api.order_router.send_telegram_message"):
+        response = client.patch(f"/api/v1/orders/{sample_order.id}/payment", json={"is_paid": True})
+        assert response.status_code == 200
+        data = response.json()
+        assert data["is_paid"] is True
+
+    db_session.refresh(sample_order)
+    assert sample_order.is_paid is True
+

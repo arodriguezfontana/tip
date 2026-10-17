@@ -20,9 +20,13 @@ const ORDER = makeOrder({
   total_amount: 19500,
 });
 
-function renderModal(order: AdminOrder = ORDER, simulated = false) {
+function renderModal(
+  order: AdminOrder = ORDER,
+  simulated = false,
+  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>
+) {
   const onClose = vi.fn();
-  render(<OrderDetailModal order={order} simulated={simulated} onClose={onClose} />);
+  render(<OrderDetailModal order={order} simulated={simulated} onMarkPaid={onMarkPaid} onClose={onClose} />);
   return { onClose, user: userEvent.setup() };
 }
 
@@ -134,5 +138,22 @@ describe('OrderDetailModal', () => {
 
     unmount();
     expect(document.body.style.overflow).toBe('');
+  });
+
+  it('permite marcar como abonado un pedido pendiente de pago', async () => {
+    service.fetchOrderDetail.mockResolvedValueOnce(
+      makeOrderDetail({
+        ...ORDER,
+        payment_method: 'mercadopago',
+        is_paid: false,
+      })
+    );
+    const onMarkPaid = vi.fn().mockResolvedValue(undefined);
+    const { user } = renderModal(ORDER, false, onMarkPaid);
+
+    const button = await screen.findByRole('button', { name: 'Marcar como abonado' });
+    expect(button).toBeInTheDocument();
+    await user.click(button);
+    expect(onMarkPaid).toHaveBeenCalledWith(55, true);
   });
 });

@@ -240,3 +240,14 @@ def assign_delivery_driver(
         pass
     db.refresh(order)
     return order
+
+
+def update_order_payment(db: Session, order_id: int, is_paid: bool) -> Order:
+    """Actualiza manualmente el estado de cobro de un pedido."""
+    order = get_order(db, order_id)
+    order.is_paid = is_paid
+    with transaction(db):
+        pass
+    db.refresh(order)
+    return order
+

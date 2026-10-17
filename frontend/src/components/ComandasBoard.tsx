@@ -2,7 +2,7 @@ import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import { assignDeliveryDriver, fetchOrders, updateOrderStatus } from '@/services/orderService';
+import { assignDeliveryDriver, fetchOrders, updateOrderPayment, updateOrderStatus } from '@/services/orderService';
 import { fetchDeliveryDrivers } from '@/services/deliveryDriverService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
@@ -215,6 +215,20 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     }
   };
 
+  const handleMarkPaid = async (orderId: number, isPaid: boolean = true) => {
+    if (isSimulating) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, is_paid: isPaid } : o)));
+      return;
+    }
+    try {
+      const updated = await updateOrderPayment(orderId, isPaid);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, is_paid: updated.is_paid } : o)));
+      setError(null);
+    } catch {
+      setError('No se pudo actualizar el estado de pago del pedido.');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 lg:h-full">
       <div className="shrink-0 flex flex-wrap items-center justify-between bg-white px-5 py-3 rounded-2xl shadow-xs border border-gray-100 gap-3">
@@ -345,6 +359,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                       activeDrivers={activeDrivers}
                       onAssignDriver={handleAssignDriver}
                       onStatusChange={handleStatusChange}
+                      onMarkPaid={handleMarkPaid}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
                     />
                   ))
@@ -380,7 +395,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       )}
 
       {detailOrder && (
-        <OrderDetailModal key={detailOrder.id} order={detailOrder} simulated={isSimulating} onClose={closeDetail} />
+        <OrderDetailModal
+          key={detailOrder.id}
+          order={detailOrder}
+          simulated={isSimulating}
+          onMarkPaid={handleMarkPaid}
+          onClose={closeDetail}
+        />
       )}
     </div>
   );

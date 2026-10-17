@@ -30,6 +30,8 @@ interface ComandaCardProps {
   onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
   /** Asigna un repartidor al pedido. */
   onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
+  /** Marca el pedido como abonado. */
+  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
   /** Lista de repartidores activos disponibles para asignar. */
   activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
@@ -43,6 +45,7 @@ export function ComandaCard({
   order,
   onStatusChange,
   onAssignDriver,
+  onMarkPaid,
   activeDrivers = [],
   onOpenDetail,
 }: ComandaCardProps) {
@@ -140,9 +143,23 @@ export function ComandaCard({
               Abonado
             </span>
           ) : order.payment_method === 'mercadopago' ? (
-            <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-xl font-semibold">
-              MP Pendiente
-            </span>
+            onMarkPaid ? (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await onMarkPaid(order.id, true);
+                }}
+                title="Hacé clic para marcar como abonado"
+                className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 hover:border-sky-300 px-2.5 py-1 rounded-xl font-semibold transition cursor-pointer"
+              >
+                MP Pendiente · Marcar abonado
+              </button>
+            ) : (
+              <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-xl font-semibold">
+                MP Pendiente
+              </span>
+            )
           ) : null}
 
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>

@@ -66,3 +66,15 @@ export async function assignDeliveryDriver(
   });
   return data;
 }
+
+/** Actualiza manualmente el estado de cobro de un pedido (Abonado). */
+export async function updateOrderPayment(
+  orderId: number,
+  isPaid: boolean = true
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/payment`, {
+    is_paid: isPaid,
+  });
+  return data;
+}
+
