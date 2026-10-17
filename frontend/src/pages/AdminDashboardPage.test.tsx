@@ -5,6 +5,7 @@ import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import * as businessHoursService from '@/services/businessHoursService';
 import * as catalogService from '@/services/catalogService';
 import * as clientService from '@/services/clientService';
+import * as deliveryDriverService from '@/services/deliveryDriverService';
 import * as ingredientService from '@/services/ingredientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
@@ -13,6 +14,7 @@ import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/orderService');
+vi.mock('@/services/deliveryDriverService');
 vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
@@ -27,6 +29,7 @@ vi.mock('@/hooks/useNewOrderAlert', () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(orderService.fetchOrders).mockResolvedValue([]);
+  vi.mocked(deliveryDriverService.fetchDeliveryDrivers).mockResolvedValue([]);
   vi.mocked(menuService.fetchMenuProducts).mockResolvedValue([MUZZA]);
   vi.mocked(statsService.fetchStatusDistribution).mockResolvedValue({});
   vi.mocked(statsService.fetchTopProducts).mockResolvedValue([]);
@@ -96,7 +99,7 @@ describe('AdminDashboardPage', () => {
       within(screen.getByRole('group', { name: group }))
         .getAllByRole('button')
         .map((button) => button.textContent);
-    expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes']);
+    expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes', 'Repartidores']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
     expect(labels('Configuración')).toEqual(['Horarios', 'Configuración']);
@@ -143,6 +146,9 @@ describe('AdminDashboardPage', () => {
 
     await goTo(user, 'Clientes');
     expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
+
+    await goTo(user, 'Repartidores');
+    expect(await screen.findByText('Aún no hay repartidores registrados en el sistema.')).toBeInTheDocument();
 
     await goTo(user, 'Ingredientes');
     expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument();

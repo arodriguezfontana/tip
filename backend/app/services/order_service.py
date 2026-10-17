@@ -13,7 +13,7 @@ from app.db.session import transaction
 from app.models.menu import Product
 from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
 from app.models.user import User
-from app.repositories import order_repository, product_repository
+from app.repositories import delivery_driver_repository, order_repository, product_repository
 from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 
@@ -188,11 +188,49 @@ def get_order(db: Session, order_id: int) -> Order:
 
 
 def change_order_status(
-    db: Session, order_id: int, new_status: OrderStatus | str, estimated_minutes: int | None = None
+    db: Session,
+    order_id: int,
+    new_status: OrderStatus | str,
+    estimated_minutes: int | None = None,
+    delivery_driver_id: int | None = None,
 ) -> Order:
     """Avanza el pedido al nuevo estado según las reglas de su ciclo de vida (ver Order.transition_to)."""
     order = get_order(db, order_id)
+    if delivery_driver_id is not None:
+        if order.delivery_method != DeliveryMethod.DELIVERY.value:
+            raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+        driver = delivery_driver_repository.get(db, delivery_driver_id)
+        if driver is None:
+            raise NotFoundError("Repartidor no encontrado.")
+        if not driver.is_active:
+            raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
+        order.delivery_driver_id = driver.id
+
     with transaction(db):
         order.transition_to(new_status, estimated_minutes, current_delay_minutes=estimate_delay_minutes(db))
+    db.refresh(order)
+    return order
+
+
+def assign_delivery_driver(
+    db: Session, order_id: int, delivery_driver_id: int | None
+) -> Order:
+    """Asigna (o desasigna) un repartidor de la lista de personal activo a un pedido con envío a domicilio."""
+    order = get_order(db, order_id)
+    if order.delivery_method != DeliveryMethod.DELIVERY.value:
+        raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+
+    if delivery_driver_id is not None:
+        driver = delivery_driver_repository.get(db, delivery_driver_id)
+        if driver is None:
+            raise NotFoundError("Repartidor no encontrado.")
+        if not driver.is_active:
+            raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
+        order.delivery_driver_id = driver.id
+    else:
+        order.delivery_driver_id = None
+
+    with transaction(db):
+        pass
     db.refresh(order)
     return order

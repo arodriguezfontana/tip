@@ -1,7 +1,9 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
-import { fetchOrders, updateOrderStatus } from '@/services/orderService';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
+import { assignDeliveryDriver, fetchOrders, updateOrderStatus } from '@/services/orderService';
+import { fetchDeliveryDrivers } from '@/services/deliveryDriverService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
@@ -47,6 +49,7 @@ interface ComandasBoardProps {
 export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -71,9 +74,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await fetchOrders({ status: ACTIVE_ORDER_STATUSES });
+        const [ordersData, driversData] = await Promise.all([
+          fetchOrders({ status: ACTIVE_ORDER_STATUSES }),
+          fetchDeliveryDrivers({ active_only: true }).catch(() => [] as DeliveryDriver[]),
+        ]);
         if (!cancelled) {
-          setOrders(data);
+          setOrders(ordersData);
+          setActiveDrivers(driversData);
           setError(null);
         }
       } catch {
@@ -97,6 +104,10 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       setIsSimulating(false);
     } else {
       setOrders(generarMockOrders(55));
+      setActiveDrivers([
+        { id: 1, name: 'Juan Repartidor', phone: '11 4444-1111', is_active: true, created_at: '', updated_at: '' },
+        { id: 2, name: 'Marcos Envíos', phone: '11 4444-2222', is_active: true, created_at: '', updated_at: '' },
+      ]);
       setIsSimulating(true);
       setError(null);
     }
@@ -174,6 +185,33 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
       setError(message || 'No se pudo actualizar el estado del pedido.');
+    }
+  };
+
+  const handleAssignDriver = async (orderId: number, driverId: number | null) => {
+    if (isSimulating) {
+      const driver = activeDrivers.find((d) => d.id === driverId);
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? {
+                ...order,
+                delivery_driver_id: driverId,
+                delivery_driver_name: driver ? driver.name : null,
+              }
+            : order
+        )
+      );
+      return;
+    }
+
+    try {
+      const updated = await assignDeliveryDriver(orderId, driverId);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? updated : order)));
+      setError(null);
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
+      setError(message || 'No se pudo asignar el repartidor.');
     }
   };
 
@@ -304,6 +342,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                     <ComandaCard
                       key={order.id}
                       order={order}
+                      activeDrivers={activeDrivers}
+                      onAssignDriver={handleAssignDriver}
                       onStatusChange={handleStatusChange}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
                     />

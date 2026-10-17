@@ -118,6 +118,8 @@ export interface AdminOrder {
   scheduled_for: string | null;
   created_at: string;
   item_count: number;
+  delivery_driver_id?: number | null;
+  delivery_driver_name?: string | null;
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */

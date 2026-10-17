@@ -172,6 +172,9 @@ export function OrderDetailModal({ order, simulated = false, onClose }: OrderDet
               <Row label="Teléfono">{current.customer_phone || '—'}</Row>
               <Row label="Modalidad">{isDelivery ? 'Envío a domicilio' : 'Retiro en el local'}</Row>
               {isDelivery && <Row label="Dirección">{current.shipping_address}</Row>}
+              {current.delivery_driver_name && (
+                <Row label="Repartidor">{current.delivery_driver_name}</Row>
+              )}
               {current.scheduled_for ? (
                 <Row label="Programado para">
                   {formatDate(current.scheduled_for)} {formatTime(current.scheduled_for)} hs

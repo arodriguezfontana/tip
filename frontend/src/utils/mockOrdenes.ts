@@ -36,6 +36,8 @@ export function generarMockOrders(cantidad: number = 55): AdminOrder[] {
       scheduled_for,
       created_at: createdAtDate.toISOString(),
       item_count: (index % 4) + 1,
+      delivery_driver_id: null,
+      delivery_driver_name: null,
     };
   });
 }

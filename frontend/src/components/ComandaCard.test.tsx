@@ -2,15 +2,31 @@ import { render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ComandaCard } from '@/components/ComandaCard';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
 import type { AdminOrder } from '@/types/order';
 import { makeOrder } from '@/test/utils';
 
-function renderCard(overrides: Partial<AdminOrder> = {}) {
+function renderCard(
+  overrides: Partial<AdminOrder> = {},
+  extraProps: {
+    activeDrivers?: DeliveryDriver[];
+    onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
+  } = {}
+) {
   const onStatusChange = vi.fn().mockResolvedValue(undefined);
+  const onAssignDriver = extraProps.onAssignDriver ?? vi.fn().mockResolvedValue(undefined);
   const onOpenDetail = vi.fn();
   const order = makeOrder(overrides);
-  render(<ComandaCard order={order} onStatusChange={onStatusChange} onOpenDetail={onOpenDetail} />);
-  return { order, onStatusChange, onOpenDetail, user: userEvent.setup() };
+  render(
+    <ComandaCard
+      order={order}
+      onStatusChange={onStatusChange}
+      onAssignDriver={onAssignDriver}
+      activeDrivers={extraProps.activeDrivers}
+      onOpenDetail={onOpenDetail}
+    />
+  );
+  return { order, onStatusChange, onAssignDriver, onOpenDetail, user: userEvent.setup() };
 }
 
 const minutes = (n: number) => new Date(Date.now() - n * 60000).toISOString();
@@ -136,5 +152,55 @@ describe('ComandaCard', () => {
 
     expect(screen.getByText('25min')).toHaveClass('bg-red-100');
     expect(screen.getByText('25min')).not.toHaveClass('animate-pulse');
+  });
+
+  it('muestra de forma visible el nombre del repartidor responsable si está asignado', () => {
+    renderCard({ delivery_driver_name: 'Gonzalo Repartos' });
+
+    expect(screen.getByText('Gonzalo Repartos')).toBeInTheDocument();
+    expect(screen.getByText(/Repartidor:/)).toBeInTheDocument();
+  });
+
+  it('cuando pasa a En Camino para domicilio muestra opción para asignar repartidor activo', async () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+      { id: 2, name: 'Juan Moto', phone: '11 3333-4444', is_active: true, created_at: '', updated_at: '' },
+    ];
+    const { onAssignDriver, user } = renderCard(
+      { status: 'En Camino', delivery_method: 'domicilio' },
+      { activeDrivers: drivers }
+    );
+
+    const select = screen.getByRole('combobox', { name: 'Asignar repartidor' });
+    expect(select).toBeInTheDocument();
+    expect(screen.getByText('Marcos Envíos (11 1111-2222)')).toBeInTheDocument();
+
+    await user.selectOptions(select, '1');
+
+    expect(onAssignDriver).toHaveBeenCalledWith(101, 1);
+  });
+
+  it('un pedido en En Camino con retiro en local no muestra opción para asignar repartidor', () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+    ];
+    renderCard(
+      { status: 'En Camino', delivery_method: 'retiro' },
+      { activeDrivers: drivers }
+    );
+
+    expect(screen.queryByRole('combobox', { name: 'Asignar repartidor' })).not.toBeInTheDocument();
+  });
+
+  it('un pedido en Confirmado o Pendiente no muestra opción para asignar repartidor', () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+    ];
+    renderCard(
+      { status: 'Confirmado', delivery_method: 'domicilio' },
+      { activeDrivers: drivers }
+    );
+
+    expect(screen.queryByRole('combobox', { name: 'Asignar repartidor' })).not.toBeInTheDocument();
   });
 });

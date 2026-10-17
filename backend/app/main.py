@@ -13,6 +13,7 @@ from app.api import (
     chat_router,
     client_router,
     customer_router,
+    delivery_driver_router,
     ingredient_router,
     menu_router,
     order_router,
@@ -69,6 +70,7 @@ api_router.include_router(category_router.router, prefix="/categories", tags=["C
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
+api_router.include_router(delivery_driver_router.router, prefix="/delivery-drivers", tags=["Delivery Drivers"])
 api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])

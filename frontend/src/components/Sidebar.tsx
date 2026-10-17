@@ -8,6 +8,7 @@ export type ViewKey =
   | 'estadisticas'
   | 'reporte-ingredientes'
   | 'clientes'
+  | 'repartidores'
   | 'productos'
   | 'ingredientes'
   | 'horarios'
@@ -22,6 +23,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
       { key: 'tomar-pedido', label: 'Tomar pedido' },
       { key: 'historial', label: 'Historial' },
       { key: 'clientes', label: 'Clientes' },
+      { key: 'repartidores', label: 'Repartidores' },
     ],
   },
   {

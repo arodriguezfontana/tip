@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
     CounterOrderCreate,
     OrderDetailResponse,
@@ -93,6 +94,24 @@ def update_order_status(
     current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por Telegram."""
-    order = order_service.change_order_status(db, order_id, status_update.status, status_update.estimated_minutes)
+    order = order_service.change_order_status(
+        db,
+        order_id,
+        status_update.status,
+        status_update.estimated_minutes,
+        status_update.delivery_driver_id,
+    )
     background_tasks.add_task(notify_order_status_change, OrderSnapshot.of(order), status_update.status)
+    return OrderResponse.from_model(order)
+
+
+@router.patch("/{order_id}/delivery-driver", response_model=OrderResponse)
+def assign_order_delivery_driver(
+    order_id: int,
+    payload: OrderAssignDriverPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Asigna o desasigna un repartidor de la lista de personal activo a un pedido con envío a domicilio."""
+    order = order_service.assign_delivery_driver(db, order_id, payload.delivery_driver_id)
     return OrderResponse.from_model(order)

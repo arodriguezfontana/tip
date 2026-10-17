@@ -23,6 +23,8 @@ class OrderResponse(BaseModel):
     scheduled_for: datetime | None = None
     created_at: datetime
     item_count: int
+    delivery_driver_id: int | None = None
+    delivery_driver_name: str | None = None
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderResponse":
@@ -40,12 +42,15 @@ class OrderResponse(BaseModel):
             scheduled_for=order.scheduled_for,
             created_at=order.created_at,
             item_count=len(order.items),
+            delivery_driver_id=order.delivery_driver_id,
+            delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
         )
 
 
 class OrderStatusUpdate(BaseModel):
     status: OrderStatus
     estimated_minutes: int | None = Field(None, gt=0)
+    delivery_driver_id: int | None = None
 
 
 class WebOrderItemCreate(BaseModel):

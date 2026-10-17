@@ -104,6 +104,9 @@ class Order(Base):
     delivery_method = Column(String(20), nullable=False, server_default=DeliveryMethod.DELIVERY.value)
     telegram_chat_id = Column(String(32), nullable=True)
     customer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    delivery_driver_id = Column(
+        Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
     source = Column(String(20), nullable=False, default=OrderSource.BOT.value, server_default=OrderSource.BOT.value)
     customer_phone = Column(String(30), nullable=True)
     notes = Column(Text, nullable=True)
@@ -112,6 +115,7 @@ class Order(Base):
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    delivery_driver = relationship("DeliveryDriver", back_populates="orders")
 
     @validates("total_amount", "shipping_cost")
     def _as_money(self, _key: str, value) -> Decimal | None:

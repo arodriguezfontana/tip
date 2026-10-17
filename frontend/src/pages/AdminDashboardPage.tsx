@@ -9,6 +9,7 @@ import { HistorialView } from '@/components/HistorialView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ClientesView } from '@/components/ClientesView';
+import { RepartidoresView } from '@/components/RepartidoresView';
 import { CatalogoView } from '@/components/CatalogoView';
 import { IngredientesView } from '@/components/IngredientesView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
@@ -70,6 +71,7 @@ export default function AdminDashboardPage() {
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
+          {activeView === 'repartidores' && <RepartidoresView themeColor={storeConfig?.theme_color} />}
           {activeView === 'productos' && <CatalogoView />}
           {activeView === 'ingredientes' && <IngredientesView />}
           {activeView === 'horarios' && <HorariosView />}
