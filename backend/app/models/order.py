@@ -47,6 +47,7 @@ class PaymentMethod(_StrEnum):
     CASH = "efectivo"
     TRANSFER = "transferencia"
     CARD = "tarjeta"
+    MERCADOPAGO = "mercadopago"
 
 
 def _values(enum: type[Enum]) -> tuple[str, ...]:
@@ -112,6 +113,8 @@ class Order(Base):
     notes = Column(Text, nullable=True)
     estimated_minutes = Column(Integer, nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
+    mp_preference_id = Column(String(100), nullable=True)
+    mp_payment_id = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")

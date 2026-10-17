@@ -17,6 +17,7 @@ class StoreConfig(Base):
     logo_url = Column(Text, nullable=True)
     theme_color = Column(String(30), nullable=False, default="black")
     login_bg = Column(String(50), nullable=False, default="bistro")
+    mp_alias = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

@@ -77,6 +77,17 @@ describe('OrderDetailModal', () => {
     expect(screen.getByText('Total a pagar')).toBeInTheDocument();
   });
 
+  it('un pedido con mercadopago abonado muestra el estado Abonado', async () => {
+    service.fetchOrderDetail.mockResolvedValue(
+      makeOrderDetail({ ...ORDER, payment_method: 'mercadopago', is_paid: true })
+    );
+    renderModal();
+
+    expect(await screen.findByText('MercadoPago')).toBeInTheDocument();
+    expect(screen.getByText('Abonado')).toBeInTheDocument();
+    expect(screen.getByText('Total (abonado)')).toBeInTheDocument();
+  });
+
   it('un programado muestra su horario en vez de la demora', () => {
     renderModal(makeOrder({ ...ORDER, scheduled_for: '2026-10-04T00:30:00Z', estimated_minutes: null }));
 

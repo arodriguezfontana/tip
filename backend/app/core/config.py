@@ -36,6 +36,11 @@ class Settings(BaseSettings):
     # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
     RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"
 
+    # Integración con MercadoPago
+    MERCADOPAGO_ACCESS_TOKEN: str = ""
+    MERCADOPAGO_PUBLIC_KEY: str = ""
+    MERCADOPAGO_WEBHOOK_SECRET: str = ""
+
     model_config = SettingsConfigDict(
         env_file=".env",
         env_file_encoding="utf-8",

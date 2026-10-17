@@ -135,6 +135,16 @@ export function ComandaCard({
             )
           )}
 
+          {order.is_paid ? (
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-xl font-semibold">
+              Abonado
+            </span>
+          ) : order.payment_method === 'mercadopago' ? (
+            <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-xl font-semibold">
+              MP Pendiente
+            </span>
+          ) : null}
+
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
         </div>
 

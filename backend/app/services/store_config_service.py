@@ -13,6 +13,7 @@ DEFAULT_STORE_CONFIG = {
     "theme_color": "black",
     "login_bg": "bistro",
     "logo_url": None,
+    "mp_alias": None,
 }
 
 
@@ -36,6 +37,7 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
         config.contact_phone = data.contact_phone
         config.logo_url = data.logo_url
         config.theme_color = data.theme_color
+        config.mp_alias = data.mp_alias
         if data.login_bg:
             config.login_bg = data.login_bg
     db.refresh(config)

@@ -25,6 +25,8 @@ class OrderResponse(BaseModel):
     item_count: int
     delivery_driver_id: int | None = None
     delivery_driver_name: str | None = None
+    payment_method: PaymentMethod | None = None
+    is_paid: bool = False
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderResponse":
@@ -44,6 +46,8 @@ class OrderResponse(BaseModel):
             item_count=len(order.items),
             delivery_driver_id=order.delivery_driver_id,
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
+            payment_method=order.payment_method,
+            is_paid=bool(order.is_paid),
         )
 
 
@@ -151,8 +155,6 @@ class OrderDetailResponse(OrderResponse):
     items: list[WebOrderItemResponse]
     subtotal: float
     shipping_cost: float
-    payment_method: PaymentMethod | None
-    is_paid: bool
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderDetailResponse":
@@ -161,6 +163,4 @@ class OrderDetailResponse(OrderResponse):
             items=[WebOrderItemResponse.from_model(item) for item in order.items],
             subtotal=order.subtotal,
             shipping_cost=order.shipping_cost or 0,
-            payment_method=order.payment_method,
-            is_paid=bool(order.is_paid),
         )

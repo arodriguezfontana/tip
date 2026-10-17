@@ -143,12 +143,18 @@ def create_counter_order(db: Session, request: OrderRequest, payment: CounterPay
 
 
 def create_bot_order(
-    db: Session, request: OrderRequest, telegram_chat_id: str | None, scheduled_for: datetime | None
+    db: Session,
+    request: OrderRequest,
+    telegram_chat_id: str | None,
+    scheduled_for: datetime | None,
+    payment_method: str | None = None,
 ) -> Order:
     """Pedido confirmado por el cliente en el chat del bot: queda 'Pendiente' como los de la web."""
     order = _new_order(db, request, OrderSource.BOT)
     order.telegram_chat_id = telegram_chat_id
     order.scheduled_for = scheduled_for
+    order.payment_method = payment_method
+    order.is_paid = False
     return _save(db, order)
 
 

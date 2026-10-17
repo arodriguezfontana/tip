@@ -44,6 +44,11 @@ describe('ComandaCard', () => {
     expect(screen.getByText(/19\.500,00/)).toBeInTheDocument();
   });
 
+  it('muestra la insignia de Abonado cuando el pedido ya está pagado', () => {
+    renderCard({ is_paid: true });
+    expect(screen.getByText('Abonado')).toBeInTheDocument();
+  });
+
   it('sin teléfono ni observaciones muestra marcadores', () => {
     renderCard({ customer_phone: null, notes: null, source: 'mostrador' });
 

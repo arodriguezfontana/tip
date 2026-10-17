@@ -89,6 +89,7 @@ export interface StoreConfig {
   logo_url: string | null;
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
+  mp_alias?: string | null;
 }
 
 export interface StoreConfigUpdatePayload {
@@ -99,5 +100,6 @@ export interface StoreConfigUpdatePayload {
   logo_url?: string | null;
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
+  mp_alias?: string | null;
 }
 

@@ -271,3 +271,45 @@ def test_json_invalido_no_rompe_la_conversacion(db_session):
 
     assert "Error al procesar el registro del pedido" in resultado
     assert db_session.query(Order).count() == 0
+
+
+def test_calcular_y_preparar_pedido_ofrece_efectivo_y_mercadopago(products):
+    res = _calcular(
+        items_solicitados="1 Pizza Muzzarella",
+        customer_name="Juan",
+        customer_phone="1144445555",
+        shipping_address="Calle 123",
+        metodo_entrega="domicilio",
+    )
+    assert res["datos_temporales"]["faltan_datos"] is False
+    assert "Efectivo" in res["mensaje_para_usuario"]
+    assert "MercadoPago" in res["mensaje_para_usuario"]
+
+
+def test_confirmar_y_guardar_pedido_con_mercadopago_genera_link_y_guarda_metodo(db_session, products):
+    datos = _datos(products, metodo_pago="mercadopago")
+    resultado = _confirmar(datos)
+
+    assert "Recibimos tu pedido" in resultado
+    assert "MercadoPago" in resultado
+    assert "Link de pago" in resultado
+    assert "mercadopago.com.ar" in resultado
+    assert "$17,000.00" in resultado or "$ 17,000.00" in resultado or "17,000.00" in resultado
+
+    order = db_session.query(Order).one()
+    assert order.payment_method == "mercadopago"
+    assert order.is_paid is False
+    assert order.mp_preference_id is not None
+
+
+def test_confirmar_y_guardar_pedido_con_alias_lo_incluye_en_respuesta(db_session, products):
+    from app.services.store_config_service import get_or_create_store_config
+
+    config = get_or_create_store_config(db_session)
+    config.mp_alias = "mipizzeria.mp"
+    db_session.commit()
+
+    datos = _datos(products, metodo_pago="mercadopago")
+    resultado = _confirmar(datos)
+
+    assert "mipizzeria.mp" in resultado

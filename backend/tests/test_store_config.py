@@ -36,6 +36,7 @@ def test_admin_can_update_store_config(client, public_client):
         "logo_url": "data:image/png;base64,test-logo-base64",
         "theme_color": "emerald",
         "login_bg": "trattoria",
+        "mp_alias": "bellavista.mp",
     }
     response = client.put(CONFIG_URL, json=payload)
     assert response.status_code == 200
@@ -47,6 +48,7 @@ def test_admin_can_update_store_config(client, public_client):
     assert data["logo_url"] == "data:image/png;base64,test-logo-base64"
     assert data["theme_color"] == "emerald"
     assert data["login_bg"] == "trattoria"
+    assert data["mp_alias"] == "bellavista.mp"
 
     # Inmediatamente visible para clientes sin autenticación
     pub_res = public_client.get(CONFIG_URL)
@@ -56,6 +58,7 @@ def test_admin_can_update_store_config(client, public_client):
     assert pub_data["theme_color"] == "emerald"
     assert pub_data["login_bg"] == "trattoria"
     assert pub_data["logo_url"] == "data:image/png;base64,test-logo-base64"
+    assert pub_data["mp_alias"] == "bellavista.mp"
 
 
 def test_update_store_config_validates_theme_color(client):

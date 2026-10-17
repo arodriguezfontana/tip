@@ -251,7 +251,7 @@ export function OrderDetailModal({ order, simulated = false, onClose }: OrderDet
                         detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
                       }`}
                     >
-                      {detail.is_paid ? 'Pagado' : 'Pendiente de pago'}
+                      {detail.is_paid ? (detail.payment_method === 'mercadopago' ? 'Abonado' : 'Pagado') : 'Pendiente de pago'}
                     </span>
                   </Row>
                 </>

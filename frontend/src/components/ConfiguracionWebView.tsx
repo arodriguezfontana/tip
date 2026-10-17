@@ -49,6 +49,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [themeColor, setThemeColor] = useState<ThemeColor>('black');
   const [loginBg, setLoginBg] = useState<LoginBgOption>('bistro');
+  const [mpAlias, setMpAlias] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -65,6 +66,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         setLogoUrl(data.logo_url || null);
         setThemeColor(data.theme_color || 'black');
         setLoginBg(data.login_bg || 'bistro');
+        setMpAlias(data.mp_alias || '');
         applyThemeColor(data.theme_color || 'black');
       })
       .catch((err) => {
@@ -132,6 +134,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         logo_url: logoUrl,
         theme_color: themeColor,
         login_bg: loginBg,
+        mp_alias: mpAlias.trim() || null,
       });
 
       setStoreName(updated.store_name);
@@ -141,6 +144,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
       setLogoUrl(updated.logo_url || null);
       setThemeColor(updated.theme_color || 'black');
       setLoginBg(updated.login_bg || 'bistro');
+      setMpAlias(updated.mp_alias || '');
       applyThemeColor(updated.theme_color || 'black');
       setFeedback({
         type: 'success',
@@ -261,6 +265,24 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 placeholder="Ej. Mar a Dom: 19:30 a 00:00"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               />
+            </div>
+
+            <div className="md:col-span-2">
+              <label htmlFor="mp-alias" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
+                Alias de MercadoPago
+              </label>
+              <input
+                id="mp-alias"
+                type="text"
+                value={mpAlias}
+                onChange={(e) => setMpAlias(e.target.value)}
+                maxLength={100}
+                placeholder="Ej. restoit.mp"
+                className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
+              />
+              <p className="text-[11px] text-gray-400 mt-1">
+                Alias de tu cuenta de MercadoPago al cual los clientes abonarán o transferirán en los pedidos del chatbot.
+              </p>
             </div>
           </div>
         </section>
@@ -422,7 +444,21 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                     </div>
                   </div>
                 )}
-                {!address && !openingHours && !contactPhone && (
+                {mpAlias && (
+                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
+                    <span
+                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
+                      style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
+                    >
+                      💳
+                    </span>
+                    <div className="min-w-0">
+                      <span className="block text-[10px] font-medium uppercase text-gray-500">Alias MercadoPago</span>
+                      <span className="font-medium text-gray-900 break-words">{mpAlias}</span>
+                    </div>
+                  </div>
+                )}
+                {!address && !openingHours && !contactPhone && !mpAlias && (
                   <span className="italic text-gray-400 text-xs py-2 sm:col-span-3">Completá los datos de contacto para verlos aquí.</span>
                 )}
               </div>

@@ -24,12 +24,13 @@ export interface CartItem {
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
 
-export type PaymentMethod = 'efectivo' | 'transferencia' | 'tarjeta';
+export type PaymentMethod = 'efectivo' | 'transferencia' | 'tarjeta' | 'mercadopago';
 
 export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   efectivo: 'Efectivo',
   transferencia: 'Transferencia',
   tarjeta: 'Tarjeta',
+  mercadopago: 'MercadoPago',
 };
 
 export interface CheckoutFormData {
@@ -120,6 +121,8 @@ export interface AdminOrder {
   item_count: number;
   delivery_driver_id?: number | null;
   delivery_driver_name?: string | null;
+  payment_method?: PaymentMethod | null;
+  is_paid?: boolean;
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */
