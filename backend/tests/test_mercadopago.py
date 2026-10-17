@@ -1,5 +1,6 @@
-import pytest
 from unittest.mock import MagicMock, patch
+
+import pytest
 
 from app.models.order import DeliveryMethod, Order, PaymentMethod
 from app.services.mercadopago_service import create_payment_preference, process_payment_notification
@@ -85,7 +86,7 @@ def test_webhook_endpoint_updates_order_and_triggers_notification(client, db_ses
         "data": {"id": "pay_11111"},
     }
 
-    with patch("app.api.mercadopago_router.send_telegram_message") as mock_tg:
+    with patch("app.api.mercadopago_router.send_telegram_message"):
         response = client.post("/api/v1/mercadopago/webhook", json=payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}

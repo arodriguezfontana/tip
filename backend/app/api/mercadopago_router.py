@@ -1,3 +1,4 @@
+import contextlib
 import logging
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -24,10 +25,8 @@ async def mercadopago_webhook(
     (is_paid = True) y notifica al cliente si el pedido se originó vía Telegram.
     """
     payload = {}
-    try:
+    with contextlib.suppress(Exception):
         payload = await request.json()
-    except Exception:
-        pass
 
     query_params = dict(request.query_params)
     order = process_payment_notification(db, payload=payload, query_params=query_params)
