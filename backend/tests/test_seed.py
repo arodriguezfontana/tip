@@ -6,6 +6,7 @@ from app.core.config import settings
 from app.core.security import verify_password
 from app.db import seed
 from app.models.menu import Category, Ingredient, Product, ProductIngredient
+from app.models.store_config import StoreConfig
 from app.models.user import User
 from tests.conftest import TestingSessionLocal
 
@@ -27,6 +28,11 @@ def test_seed_carga_admin_categorias_y_menu(run_seed, db_session):
     assert admin.role == "ADMIN"
     assert verify_password(settings.ADMIN_PASSWORD, admin.hashed_password)
 
+    config = db_session.query(StoreConfig).one()
+    assert config.store_name == "RestoIT"
+    assert config.theme_color == "black"
+    assert config.login_bg == "bistro"
+
     assert {c.name for c in db_session.query(Category)} == {"Pizzas", "Bebidas", "Postres"}
     productos = db_session.query(Product).all()
     assert len(productos) > 5
@@ -39,11 +45,21 @@ def test_seed_carga_admin_categorias_y_menu(run_seed, db_session):
 
 def test_seed_se_puede_correr_varias_veces_sin_duplicar(run_seed, db_session):
     run_seed()
-    cantidades = (db_session.query(User).count(), db_session.query(Product).count(), db_session.query(ProductIngredient).count())
+    cantidades = (
+        db_session.query(User).count(),
+        db_session.query(StoreConfig).count(),
+        db_session.query(Product).count(),
+        db_session.query(ProductIngredient).count(),
+    )
 
     run_seed()
 
-    assert (db_session.query(User).count(), db_session.query(Product).count(), db_session.query(ProductIngredient).count()) == cantidades
+    assert (
+        db_session.query(User).count(),
+        db_session.query(StoreConfig).count(),
+        db_session.query(Product).count(),
+        db_session.query(ProductIngredient).count(),
+    ) == cantidades
 
 
 def test_menu_cargado_por_el_seed_se_ve_en_la_web(run_seed, public_client):

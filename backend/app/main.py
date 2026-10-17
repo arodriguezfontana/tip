@@ -13,11 +13,14 @@ from app.api import (
     chat_router,
     client_router,
     customer_router,
+    delivery_driver_router,
     ingredient_router,
     menu_router,
+    mercadopago_router,
     order_router,
     product_router,
     stats_router,
+    store_config_router,
     telegram_router,
 )
 from app.api.errors import register_error_handlers
@@ -68,12 +71,15 @@ api_router.include_router(category_router.router, prefix="/categories", tags=["C
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
+api_router.include_router(delivery_driver_router.router, prefix="/delivery-drivers", tags=["Delivery Drivers"])
 api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
+api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags=["MercadoPago"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
 api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
+api_router.include_router(store_config_router.router, prefix="/store-config", tags=["Store Config"])
 
 app.include_router(api_router)
 

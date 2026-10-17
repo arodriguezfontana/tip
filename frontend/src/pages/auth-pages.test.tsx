@@ -1,10 +1,27 @@
 import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ProtectedRoute } from '@/components/ProtectedRoute';
 import LoginPage from '@/pages/LoginPage';
 import ProfilePage from '@/pages/ProfilePage';
+import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, CUSTOMER, fakeAuth, renderWithProviders } from '@/test/utils';
+
+vi.mock('@/services/storeConfigService');
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+    id: 1,
+    store_name: 'RestoIT',
+    address: 'Av. Corrientes 1234, CABA',
+    opening_hours: 'Mar a Dom 19:00 a 00:00',
+    contact_phone: '11 4444-1234',
+    logo_url: null,
+    theme_color: 'black',
+    login_bg: 'bistro',
+  });
+});
 
 const PANEL = <div>Panel del admin</div>;
 

@@ -1,10 +1,21 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { FormEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/TopBar';
 import type { ApiErrorResponse } from '@/services/api';
-import backgroundLogin from '@/assets/background_login.webp';
+import { fetchStoreConfig } from '@/services/storeConfigService';
+import { applyThemeColor } from '@/utils/theme';
+import type { StoreConfig } from '@/types/storeConfig';
+import backgroundBistro from '@/assets/background_bistro.jpg';
+import backgroundKitchen from '@/assets/background_kitchen.jpg';
+import backgroundTrattoria from '@/assets/background_trattoria.jpg';
+
+const LOGIN_BACKGROUND_IMAGES: Record<string, string> = {
+  bistro: backgroundBistro,
+  kitchen: backgroundKitchen,
+  trattoria: backgroundTrattoria,
+};
 
 export default function LoginPage() {
   const { login, logout, isAdmin } = useAuth();
@@ -15,6 +26,23 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
+  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+
+  useEffect(() => {
+    let cancelled = false;
+    fetchStoreConfig()
+      .then((data) => {
+        if (cancelled) return;
+        setStoreConfig(data);
+        if (data?.theme_color) {
+          applyThemeColor(data.theme_color);
+        }
+      })
+      .catch(() => {});
+    return () => {
+      cancelled = true;
+    };
+  }, []);
 
   if (isAdmin) {
     const redirectTo = (location.state as { from?: string } | null)?.from ?? '/admin';
@@ -41,14 +69,21 @@ export default function LoginPage() {
     }
   };
 
+  const activeBg =
+    (storeConfig?.login_bg && LOGIN_BACKGROUND_IMAGES[storeConfig.login_bg]) || backgroundBistro;
+
   return (
     <div
-      className="min-h-screen bg-gray-900 bg-cover bg-center"
-      style={{ backgroundImage: `url(${backgroundLogin})` }}
+      className="min-h-screen bg-gray-900 bg-cover bg-center transition-all duration-700 ease-in-out relative"
+      style={{ backgroundImage: `url(${activeBg})` }}
     >
       <div className="min-h-screen flex flex-col bg-black/60">
-        <TopBar />
-        <main className="flex-1 flex items-center justify-center px-4">
+        <TopBar
+          title={storeConfig?.store_name}
+          logoUrl={storeConfig?.logo_url}
+          themeColor={storeConfig?.theme_color}
+        />
+        <main className="flex-1 flex items-center justify-center px-4 relative">
           <div className="w-full max-w-sm bg-white rounded-2xl shadow-xl p-8">
             <h2 className="text-xl font-bold text-gray-900 mb-1">Iniciar sesión</h2>
             <p className="text-sm text-gray-500 mb-6">Acceso exclusivo para administradores</p>
@@ -89,7 +124,8 @@ export default function LoginPage() {
               <button
                 type="submit"
                 disabled={isSubmitting}
-                className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 disabled:opacity-50 transition"
+                style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+                className="w-full text-white rounded-xl py-2.5 font-semibold hover:opacity-90 disabled:opacity-50 transition shadow-xs"
               >
                 {isSubmitting ? 'Ingresando...' : 'Ingresar'}
               </button>

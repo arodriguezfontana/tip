@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
-from app.models.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError
+from app.models.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError, PaymentMethod
 from app.schemas.common import PHONE_PATTERN
 from app.services.business_hours_service import (
     DIAS_SEMANA,
@@ -32,9 +32,22 @@ from app.services.business_hours_service import (
     proxima_fecha_abierta_a_la_hora,
 )
 from app.services.catalog_service import find_available_products_by_name
+from app.services.mercadopago_service import create_payment_preference
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
+from app.services.store_config_service import get_or_create_store_config
 
 logger = logging.getLogger(__name__)
+
+
+def _normalizar_metodo_pago(metodo: str | None) -> str | None:
+    if not metodo:
+        return None
+    texto = _sin_acentos(str(metodo).strip().lower())
+    if any(k in texto for k in ("mercado", "mp", "link", "digital")):
+        return PaymentMethod.MERCADOPAGO.value
+    if any(k in texto for k in ("efectivo", "cash", "pesos")):
+        return PaymentMethod.CASH.value
+    return None
 
 # Margen para no rechazar al confirmar un horario que era válido cuando se le propuso al cliente
 # y quedó apenas por debajo del mínimo por el tiempo que pasó en la conversación.
@@ -220,6 +233,7 @@ def calcular_y_preparar_pedido(
     hora_programada: str | None = None,
     dia_programado: str | None = None,
     observaciones: str | None = None,
+    metodo_pago: str | None = None,
 ) -> str:
     """Calcula de forma exacta el total de un pedido consultando los precios reales.
 
@@ -235,6 +249,7 @@ def calcular_y_preparar_pedido(
         observaciones: Aclaraciones del cliente sobre la comida o la entrega (ej: "sin cebolla",
             "timbre 2B", "paga con $20000"). Incluí cualquier aclaración de este tipo que el cliente
             haya mencionado en cualquier momento de la conversación, aunque no se la hayas preguntado.
+        metodo_pago: "efectivo" o "mercadopago". Si el cliente indicó cómo desea abonar, pasalo acá.
     """
     db = SessionLocal()
     try:
@@ -301,6 +316,7 @@ def calcular_y_preparar_pedido(
         telefono = (customer_phone or "").strip()
         falta_telefono = not _telefono_valido(telefono)
         notas = _limpiar_observaciones(observaciones)
+        pago_normalizado = _normalizar_metodo_pago(metodo_pago)
         faltan_datos = (
             metodo_entrega is None or not customer_name or falta_telefono or falta_direccion or hay_ambiguos
         )
@@ -317,6 +333,7 @@ def calcular_y_preparar_pedido(
             "hora_programada": f"{horario_programado:%H:%M}" if horario_programado else None,
             "dia_programado": f"{horario_programado:%Y-%m-%d}" if horario_programado else None,
             "observaciones": notas,
+            "metodo_pago": pago_normalizado,
             "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
@@ -342,6 +359,15 @@ def calcular_y_preparar_pedido(
         else:
             entrega = PICKUP_ADDRESS if es_retiro else f"Envío a domicilio: {shipping_address}"
             horario = describir_horario_programado(horario_programado, ahora_local())
+
+            if pago_normalizado:
+                pago_label = "MercadoPago" if pago_normalizado == PaymentMethod.MERCADOPAGO.value else "Efectivo"
+                pago_linea = f"- Método de pago: {pago_label}"
+                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+            else:
+                pago_linea = '💳 Método de pago: ¿Qué método de pago preferís? Ofrecemos "Efectivo" y "MercadoPago".'
+                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
                 "",
@@ -355,8 +381,10 @@ def calcular_y_preparar_pedido(
                 f"- {entrega}",
                 f"- Horario: {horario}",
                 f"- Observaciones: {notas or 'sin observaciones'}",
+                *( [pago_linea] if pago_normalizado else [] ),
                 "",
-                "¿Está todo bien para confirmar el pedido?",
+                *( [pago_linea, ""] if not pago_normalizado else [] ),
+                pregunta_final,
             ])
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
@@ -411,6 +439,9 @@ def confirmar_y_guardar_pedido(
         if items is None:
             return "El pedido NO se registró todavía. No pude identificar los productos del pedido."
 
+        raw_pago = datos.get("metodo_pago") or datos.get("payment_method")
+        metodo_pago = _normalizar_metodo_pago(raw_pago) or PaymentMethod.CASH.value
+
         pedido = OrderRequest(
             customer_name=cliente,
             customer_phone=telefono,
@@ -421,18 +452,43 @@ def confirmar_y_guardar_pedido(
         )
         # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
         try:
-            create_bot_order(
+            order = create_bot_order(
                 db,
                 pedido,
                 telegram_chat_id=telegram_chat_id,
                 scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
+                payment_method=metodo_pago,
             )
         except InvalidOrderError as exc:
             return f"El pedido NO se registró todavía. {exc}"
 
         horario_texto = f" {describir_horario_programado(scheduled_dt, ahora_local())}" if scheduled_dt else ""
+
+        if metodo_pago == PaymentMethod.MERCADOPAGO.value:
+            store_config = get_or_create_store_config(db)
+            pref = create_payment_preference(order, store_name=store_config.store_name)
+            order.mp_preference_id = pref.get("preference_id")
+            db.commit()
+
+            link_pago_texto = (
+                f"\n\n💳 Link de pago de MercadoPago por el total exacto de ${order.total_amount:,.2f}:\n"
+                f"{pref['init_point']}\n"
+                "(Ingresá al link para abonar tu pedido de forma digital)"
+            )
+            if store_config.mp_alias:
+                link_pago_texto += f"\nAlias de cobro: {store_config.mp_alias}"
+
+            return (
+                f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
+                f"Método de pago: MercadoPago.{link_pago_texto}\n\n"
+                "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
+                "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
+                "¡Muchas gracias por elegirnos!"
+            )
+
         return (
             f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
+            "Método de pago: Efectivo (abonás al recibir o retirar tu pedido).\n\n"
             "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
             "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
             "¡Muchas gracias por elegirnos!"

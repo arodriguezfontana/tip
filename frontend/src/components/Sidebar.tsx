@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
 
 export type ViewKey =
   | 'tomar-pedido'
@@ -7,9 +8,11 @@ export type ViewKey =
   | 'estadisticas'
   | 'reporte-ingredientes'
   | 'clientes'
+  | 'repartidores'
   | 'productos'
   | 'ingredientes'
-  | 'horarios';
+  | 'horarios'
+  | 'configuracion-web';
 
 /** Secciones del panel agrupadas por tarea: el día a día, el catálogo, los reportes y la configuración del local. */
 const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] = [
@@ -20,6 +23,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
       { key: 'tomar-pedido', label: 'Tomar pedido' },
       { key: 'historial', label: 'Historial' },
       { key: 'clientes', label: 'Clientes' },
+      { key: 'repartidores', label: 'Repartidores' },
     ],
   },
   {
@@ -38,7 +42,10 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
   },
   {
     title: 'Configuración',
-    items: [{ key: 'horarios', label: 'Horarios' }],
+    items: [
+      { key: 'horarios', label: 'Horarios' },
+      { key: 'configuracion-web', label: 'Configuración' },
+    ],
   },
 ];
 
@@ -47,6 +54,7 @@ interface SidebarProps {
   onClose: () => void;
   activeView: ViewKey;
   onSelect: (view: ViewKey) => void;
+  themeColor?: ThemeColor;
 }
 
 /** Grupos plegados, recordados en este navegador. Si no hay almacenamiento disponible, arrancan todos abiertos. */
@@ -69,8 +77,9 @@ function saveCollapsedGroups(titles: string[]) {
   }
 }
 
-export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
+export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsedGroups);
+  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
 
   const toggleGroup = (title: string) => {
     const next = collapsed.includes(title) ? collapsed.filter((t) => t !== title) : [...collapsed, title];
@@ -94,7 +103,10 @@ export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
         }`}
         aria-hidden={!open}
       >
-        <div className="bg-black text-white px-6 py-4 flex items-center justify-between shrink-0">
+        <div
+          className="bg-black text-white px-6 py-4 flex items-center justify-between shrink-0"
+          style={themeHex ? { backgroundColor: themeHex } : undefined}
+        >
           <h2 className="text-lg font-bold">Menú</h2>
           <button
             type="button"
@@ -146,8 +158,13 @@ export function Sidebar({ open, onClose, activeView, onSelect }: SidebarProps) {
                       type="button"
                       onClick={() => onSelect(item.key)}
                       aria-current={activeView === item.key ? 'page' : undefined}
+                      style={activeView === item.key && themeHex ? { backgroundColor: themeHex } : undefined}
                       className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
-                        activeView === item.key ? 'bg-black text-white' : 'text-gray-700 hover:bg-gray-200'
+                        activeView === item.key
+                          ? themeHex
+                            ? 'text-white shadow-xs'
+                            : 'bg-black text-white'
+                          : 'text-gray-700 hover:bg-gray-200'
                       }`}
                     >
                       {item.label}

@@ -60,16 +60,35 @@ interface OrderDetailModalProps {
   order: AdminOrder;
   /** En el modo simulación los pedidos no existen en el servidor: no se busca su detalle. */
   simulated?: boolean;
+  /** Marca el pedido como abonado. */
+  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
   onClose: () => void;
 }
 
-export function OrderDetailModal({ order, simulated = false, onClose }: OrderDetailModalProps) {
+export function OrderDetailModal({
+  order,
+  simulated = false,
+  onMarkPaid,
+  onClose,
+}: OrderDetailModalProps) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
   const [loading, setLoading] = useState(!simulated);
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
+
+  const handleMarkAsPaid = async () => {
+    if (!onMarkPaid) return;
+    setMarkingPaid(true);
+    try {
+      await onMarkPaid(order.id, true);
+      setDetail((prev) => (prev ? { ...prev, is_paid: true } : prev));
+    } finally {
+      setMarkingPaid(false);
+    }
+  };
 
   useEffect(() => {
     onCloseRef.current = onClose;
@@ -172,6 +191,9 @@ export function OrderDetailModal({ order, simulated = false, onClose }: OrderDet
               <Row label="Teléfono">{current.customer_phone || '—'}</Row>
               <Row label="Modalidad">{isDelivery ? 'Envío a domicilio' : 'Retiro en el local'}</Row>
               {isDelivery && <Row label="Dirección">{current.shipping_address}</Row>}
+              {current.delivery_driver_name && (
+                <Row label="Repartidor">{current.delivery_driver_name}</Row>
+              )}
               {current.scheduled_for ? (
                 <Row label="Programado para">
                   {formatDate(current.scheduled_for)} {formatTime(current.scheduled_for)} hs
@@ -243,13 +265,25 @@ export function OrderDetailModal({ order, simulated = false, onClose }: OrderDet
                     {detail.payment_method ? PAYMENT_METHOD_LABEL[detail.payment_method] : 'No informado'}
                   </Row>
                   <Row label="Estado del pago">
-                    <span
-                      className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-                        detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
-                      }`}
-                    >
-                      {detail.is_paid ? 'Pagado' : 'Pendiente de pago'}
-                    </span>
+                    <div className="flex items-center justify-end gap-2">
+                      <span
+                        className={`text-xs font-bold px-2 py-0.5 rounded-full ${
+                          detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+                        }`}
+                      >
+                        {detail.is_paid ? (detail.payment_method === 'mercadopago' ? 'Abonado' : 'Pagado') : 'Pendiente de pago'}
+                      </span>
+                      {!detail.is_paid && onMarkPaid && (
+                        <button
+                          type="button"
+                          onClick={handleMarkAsPaid}
+                          disabled={markingPaid}
+                          className="text-xs font-semibold px-2 py-0.5 rounded-lg bg-emerald-600 hover:bg-emerald-700 text-white transition disabled:opacity-50 cursor-pointer"
+                        >
+                          {markingPaid ? 'Guardando...' : 'Marcar como abonado'}
+                        </button>
+                      )}
+                    </div>
                   </Row>
                 </>
               )}

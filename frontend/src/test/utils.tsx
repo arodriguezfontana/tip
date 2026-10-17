@@ -46,6 +46,8 @@ export function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
     scheduled_for: null,
     created_at: new Date().toISOString(),
     item_count: 1,
+    delivery_driver_id: null,
+    delivery_driver_name: null,
     ...overrides,
   };
 }

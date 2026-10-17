@@ -1,11 +1,14 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
-import { fetchOrders, updateOrderStatus } from '@/services/orderService';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
+import { assignDeliveryDriver, fetchOrders, updateOrderPayment, updateOrderStatus } from '@/services/orderService';
+import { fetchDeliveryDrivers } from '@/services/deliveryDriverService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -40,10 +43,13 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
 interface ComandasBoardProps {
   /** Acceso rápido a la sección para cargar pedidos presenciales. */
   onTakeOrder?: () => void;
+  themeColor?: ThemeColor;
 }
 
-export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
+export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
+  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
+  const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
@@ -68,9 +74,13 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
     const load = async () => {
       setLoading(true);
       try {
-        const data = await fetchOrders({ status: ACTIVE_ORDER_STATUSES });
+        const [ordersData, driversData] = await Promise.all([
+          fetchOrders({ status: ACTIVE_ORDER_STATUSES }),
+          fetchDeliveryDrivers({ active_only: true }).catch(() => [] as DeliveryDriver[]),
+        ]);
         if (!cancelled) {
-          setOrders(data);
+          setOrders(ordersData);
+          setActiveDrivers(driversData);
           setError(null);
         }
       } catch {
@@ -94,6 +104,10 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       setIsSimulating(false);
     } else {
       setOrders(generarMockOrders(55));
+      setActiveDrivers([
+        { id: 1, name: 'Juan Repartidor', phone: '11 4444-1111', is_active: true, created_at: '', updated_at: '' },
+        { id: 2, name: 'Marcos Envíos', phone: '11 4444-2222', is_active: true, created_at: '', updated_at: '' },
+      ]);
       setIsSimulating(true);
       setError(null);
     }
@@ -174,6 +188,47 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
     }
   };
 
+  const handleAssignDriver = async (orderId: number, driverId: number | null) => {
+    if (isSimulating) {
+      const driver = activeDrivers.find((d) => d.id === driverId);
+      setOrders((prev) =>
+        prev.map((order) =>
+          order.id === orderId
+            ? {
+                ...order,
+                delivery_driver_id: driverId,
+                delivery_driver_name: driver ? driver.name : null,
+              }
+            : order
+        )
+      );
+      return;
+    }
+
+    try {
+      const updated = await assignDeliveryDriver(orderId, driverId);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? updated : order)));
+      setError(null);
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
+      setError(message || 'No se pudo asignar el repartidor.');
+    }
+  };
+
+  const handleMarkPaid = async (orderId: number, isPaid: boolean = true) => {
+    if (isSimulating) {
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, is_paid: isPaid } : o)));
+      return;
+    }
+    try {
+      const updated = await updateOrderPayment(orderId, isPaid);
+      setOrders((prev) => prev.map((o) => (o.id === orderId ? { ...o, is_paid: updated.is_paid } : o)));
+      setError(null);
+    } catch {
+      setError('No se pudo actualizar el estado de pago del pedido.');
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 lg:h-full">
       <div className="shrink-0 flex flex-wrap items-center justify-between bg-white px-5 py-3 rounded-2xl shadow-xs border border-gray-100 gap-3">
@@ -189,7 +244,10 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
             <button
               type="button"
               onClick={onTakeOrder}
-              className="flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl bg-orange-500 hover:bg-orange-600 text-white transition shadow-xs"
+              style={themeHex ? { backgroundColor: themeHex } : undefined}
+              className={`flex items-center gap-1.5 text-xs font-bold px-3 py-1.5 rounded-xl text-white transition shadow-xs ${
+                themeHex ? 'hover:opacity-90' : 'bg-orange-500 hover:bg-orange-600'
+              }`}
             >
               <span className="text-sm leading-none">+</span>
               Tomar pedido
@@ -298,7 +356,10 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
                     <ComandaCard
                       key={order.id}
                       order={order}
+                      activeDrivers={activeDrivers}
+                      onAssignDriver={handleAssignDriver}
                       onStatusChange={handleStatusChange}
+                      onMarkPaid={handleMarkPaid}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
                     />
                   ))
@@ -334,7 +395,13 @@ export function ComandasBoard({ onTakeOrder }: ComandasBoardProps) {
       )}
 
       {detailOrder && (
-        <OrderDetailModal key={detailOrder.id} order={detailOrder} simulated={isSimulating} onClose={closeDetail} />
+        <OrderDetailModal
+          key={detailOrder.id}
+          order={detailOrder}
+          simulated={isSimulating}
+          onMarkPaid={handleMarkPaid}
+          onClose={closeDetail}
+        />
       )}
     </div>
   );

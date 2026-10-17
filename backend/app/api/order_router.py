@@ -9,9 +9,11 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
 from app.models.user import User
+from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
     CounterOrderCreate,
     OrderDetailResponse,
+    OrderPaymentUpdate,
     OrderResponse,
     OrderStatusUpdate,
     WebOrderCreate,
@@ -19,6 +21,7 @@ from app.schemas.order_schemas import (
 )
 from app.services import order_service
 from app.services.order_notification_service import OrderSnapshot, notify_order_status_change
+from app.services.telegram_service import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -93,6 +96,43 @@ def update_order_status(
     current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por Telegram."""
-    order = order_service.change_order_status(db, order_id, status_update.status, status_update.estimated_minutes)
+    order = order_service.change_order_status(
+        db,
+        order_id,
+        status_update.status,
+        status_update.estimated_minutes,
+        status_update.delivery_driver_id,
+    )
     background_tasks.add_task(notify_order_status_change, OrderSnapshot.of(order), status_update.status)
+    return OrderResponse.from_model(order)
+
+
+@router.patch("/{order_id}/delivery-driver", response_model=OrderResponse)
+def assign_order_delivery_driver(
+    order_id: int,
+    payload: OrderAssignDriverPayload,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Asigna o desasigna un repartidor de la lista de personal activo a un pedido con envío a domicilio."""
+    order = order_service.assign_delivery_driver(db, order_id, payload.delivery_driver_id)
+    return OrderResponse.from_model(order)
+
+
+@router.patch("/{order_id}/payment", response_model=OrderResponse)
+def update_order_payment(
+    order_id: int,
+    payload: OrderPaymentUpdate,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Actualiza manualmente el estado de pago del pedido (Abonado)."""
+    order = order_service.update_order_payment(db, order_id, payload.is_paid)
+    if order.is_paid and order.telegram_chat_id:
+        mensaje = (
+            f"✅ ¡Tu pedido #{order.id} fue marcado como Abonado!\n"
+            f"Registramos el pago en el sistema. ¡Muchas gracias!"
+        )
+        background_tasks.add_task(send_telegram_message, int(order.telegram_chat_id), mensaje)
     return OrderResponse.from_model(order)

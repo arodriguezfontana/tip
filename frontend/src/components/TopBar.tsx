@@ -1,4 +1,5 @@
 import type { ReactNode } from 'react';
+import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
 
 interface TopBarProps {
   onToggleMenu?: () => void;
@@ -6,12 +7,41 @@ interface TopBarProps {
   onLogout?: () => void;
   /** Acciones extra alineadas a la derecha (por ejemplo, la cuenta del cliente en la web). */
   actions?: ReactNode;
+  /** Nombre personalizado del local o marca */
+  title?: string;
+  /** Logotipo principal */
+  logoUrl?: string | null;
+  /** Color temático principal */
+  themeColor?: ThemeColor;
 }
 
-export function TopBar({ onToggleMenu, menuOpen, onLogout, actions }: TopBarProps) {
+export function TopBar({
+  onToggleMenu,
+  menuOpen,
+  onLogout,
+  actions,
+  title,
+  logoUrl,
+  themeColor,
+}: TopBarProps) {
+  const brandName = title?.trim() || 'RestoIT';
+  const bgColor = themeColor ? THEME_OPTIONS[themeColor]?.hex : '#000000';
+
   return (
-    <header className="w-full bg-black text-white py-4 relative">
-      <h1 className="text-center text-3xl font-bebas uppercase tracking-widest">RestoIT</h1>
+    <header
+      className="w-full text-white py-4 relative transition-colors duration-200"
+      style={{ backgroundColor: bgColor }}
+    >
+      <div className="flex items-center justify-center gap-3 px-12">
+        {logoUrl && (
+          <img
+            src={logoUrl}
+            alt={`Logo de ${brandName}`}
+            className="h-9 w-auto max-w-[120px] object-contain rounded-lg"
+          />
+        )}
+        <h1 className="text-center text-3xl font-bebas uppercase tracking-widest">{brandName}</h1>
+      </div>
 
       {onToggleMenu && (
         <button

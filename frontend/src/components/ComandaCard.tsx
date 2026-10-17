@@ -23,9 +23,17 @@ const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
   retiro: 'Retiro en local',
 };
 
+import type { DeliveryDriver } from '@/types/deliveryDriver';
+
 interface ComandaCardProps {
   order: AdminOrder;
   onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
+  /** Asigna un repartidor al pedido. */
+  onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
+  /** Marca el pedido como abonado. */
+  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Lista de repartidores activos disponibles para asignar. */
+  activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
   onOpenDetail?: (order: AdminOrder) => void;
 }
@@ -33,7 +41,14 @@ interface ComandaCardProps {
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
 const stopPropagation = (event: MouseEvent) => event.stopPropagation();
 
-export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCardProps) {
+export function ComandaCard({
+  order,
+  onStatusChange,
+  onAssignDriver,
+  onMarkPaid,
+  activeDrivers = [],
+  onOpenDetail,
+}: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
@@ -99,6 +114,12 @@ export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCard
           <p className="font-medium text-gray-900">{order.customer_name}</p>
           <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
           <p className="text-xs text-gray-500">Tel: {order.customer_phone || '—'}</p>
+          {order.delivery_driver_name && (
+            <p className="text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
+              <span>🛵 Repartidor:</span>
+              <span className="font-bold">{order.delivery_driver_name}</span>
+            </p>
+          )}
           <p className={`text-xs break-words ${order.notes ? 'text-gray-600 italic' : 'text-gray-400'}`}>
             {order.notes ? `“${order.notes}”` : 'Sin observaciones'}
           </p>
@@ -116,6 +137,30 @@ export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCard
               </span>
             )
           )}
+
+          {order.is_paid ? (
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-xl font-semibold">
+              Abonado
+            </span>
+          ) : order.payment_method === 'mercadopago' ? (
+            onMarkPaid ? (
+              <button
+                type="button"
+                onClick={async (e) => {
+                  e.stopPropagation();
+                  await onMarkPaid(order.id, true);
+                }}
+                title="Hacé clic para marcar como abonado"
+                className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 hover:border-sky-300 px-2.5 py-1 rounded-xl font-semibold transition cursor-pointer"
+              >
+                MP Pendiente · Marcar abonado
+              </button>
+            ) : (
+              <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-xl font-semibold">
+                MP Pendiente
+              </span>
+            )
+          ) : null}
 
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
         </div>
@@ -167,6 +212,39 @@ export function ComandaCard({ order, onStatusChange, onOpenDetail }: ComandaCard
             >
               {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
             </button>
+          </div>
+        )}
+
+        {order.status === 'En Camino' && order.delivery_method === 'domicilio' && (
+          <div className="pt-2 border-t border-gray-50 space-y-1.5" onClick={stopPropagation}>
+            <label htmlFor={`assign-driver-${order.id}`} className="block text-[11px] font-bold text-gray-700">
+              {order.delivery_driver_name ? 'Reasignar repartidor:' : 'Asignar repartidor:'}
+            </label>
+            <select
+              id={`assign-driver-${order.id}`}
+              aria-label="Asignar repartidor"
+              value={order.delivery_driver_id ?? ''}
+              disabled={pending}
+              onChange={async (e) => {
+                const val = e.target.value;
+                setPending(true);
+                try {
+                  await onAssignDriver?.(order.id, val ? Number(val) : null);
+                } finally {
+                  setPending(false);
+                }
+              }}
+              className="w-full rounded-xl border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
+            >
+              <option value="">
+                {order.delivery_driver_name ? '-- Quitar asignación --' : '-- Seleccionar repartidor --'}
+              </option>
+              {activeDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name} ({driver.phone})
+                </option>
+              ))}
+            </select>
           </div>
         )}
 

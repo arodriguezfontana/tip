@@ -16,7 +16,10 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
     """Pedido con sus ítems y los productos de cada uno."""
     return (
         db.query(Order)
-        .options(joinedload(Order.items).joinedload(OrderItem.product))
+        .options(
+            joinedload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.delivery_driver),
+        )
         .filter(Order.id == order_id)
         .first()
     )
@@ -26,7 +29,14 @@ def list_orders(
     db: Session, date_from: datetime | None, date_to: datetime | None, statuses: list[str] | None
 ) -> list[Order]:
     """Del más reciente al más antiguo."""
-    query = created_between(db.query(Order).options(joinedload(Order.items)), date_from, date_to)
+    query = created_between(
+        db.query(Order).options(
+            joinedload(Order.items),
+            joinedload(Order.delivery_driver),
+        ),
+        date_from,
+        date_to,
+    )
     if statuses:
         query = query.filter(Order.status.in_(statuses))
     return query.order_by(Order.created_at.desc()).all()

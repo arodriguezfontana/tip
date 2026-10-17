@@ -151,8 +151,9 @@ export function CustomerAuthModal({
               key={option}
               type="button"
               onClick={() => switchMode(option)}
+              style={mode === option ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
               className={`flex-1 py-2 font-medium transition ${
-                mode === option ? 'bg-black text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
+                mode === option ? 'text-white shadow-xs' : 'bg-white text-gray-700 hover:bg-gray-100'
               }`}
             >
               {option === 'login' ? 'Ingresar' : 'Registrarme'}
@@ -230,7 +231,8 @@ export function CustomerAuthModal({
           <button
             type="submit"
             disabled={submitting}
-            className="w-full bg-black text-white rounded-xl py-2.5 font-semibold hover:bg-gray-800 transition disabled:opacity-60 disabled:cursor-not-allowed"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="w-full text-white rounded-xl py-2.5 font-semibold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
           >
             {submitting
               ? mode === 'login'

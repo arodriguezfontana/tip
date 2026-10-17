@@ -55,3 +55,26 @@ export async function createWebOrder(payload: WebOrderPayload): Promise<WebOrder
   const { data } = await api.post<WebOrderCreated>('/orders/web', payload);
   return data;
 }
+
+/** Asigna o desasigna un repartidor a un pedido con envío a domicilio. */
+export async function assignDeliveryDriver(
+  orderId: number,
+  deliveryDriverId: number | null
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/delivery-driver`, {
+    delivery_driver_id: deliveryDriverId,
+  });
+  return data;
+}
+
+/** Actualiza manualmente el estado de cobro de un pedido (Abonado). */
+export async function updateOrderPayment(
+  orderId: number,
+  isPaid: boolean = true
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/payment`, {
+    is_paid: isPaid,
+  });
+  return data;
+}
+
