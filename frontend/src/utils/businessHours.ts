@@ -25,3 +25,28 @@ export function describeDayRanges(ranges: BusinessHoursRange[]): string {
   if (ranges.length === 0) return 'Cerrado';
   return ranges.map((range) => `${range.opens_at} a ${range.closes_at}`).join(' y ');
 }
+
+/**
+ * Resumen de la semana en una línea, agrupando los días seguidos que tienen el mismo horario:
+ * "Martes a Domingo: 19:30 a 00:00". Null si no hay franjas cargadas.
+ */
+export function summarizeWeeklySchedule(ranges: BusinessHoursRange[]): string | null {
+  const days = groupRangesByDay(ranges);
+  const parts: string[] = [];
+  let start = 0;
+  while (start < days.length) {
+    if (days[start].ranges.length === 0) {
+      start++;
+      continue;
+    }
+    const description = describeDayRanges(days[start].ranges);
+    let end = start;
+    while (end + 1 < days.length && days[end + 1].ranges.length > 0 && describeDayRanges(days[end + 1].ranges) === description) {
+      end++;
+    }
+    const label = start === end ? days[start].name : `${days[start].name} a ${days[end].name}`;
+    parts.push(`${label}: ${description}`);
+    start = end + 1;
+  }
+  return parts.length > 0 ? parts.join(' · ') : null;
+}

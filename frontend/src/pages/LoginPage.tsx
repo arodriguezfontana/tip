@@ -70,12 +70,14 @@ export default function LoginPage() {
   };
 
   const activeBg =
-    (storeConfig?.login_bg && LOGIN_BACKGROUND_IMAGES[storeConfig.login_bg]) || backgroundBistro;
+    (storeConfig?.login_bg === 'custom' && storeConfig.login_bg_image) ||
+    (storeConfig?.login_bg && LOGIN_BACKGROUND_IMAGES[storeConfig.login_bg]) ||
+    backgroundBistro;
 
   return (
     <div
       className="min-h-screen bg-gray-900 bg-cover bg-center transition-all duration-700 ease-in-out relative"
-      style={{ backgroundImage: `url(${activeBg})` }}
+      style={{ backgroundImage: `url("${activeBg}")` }}
     >
       <div className="min-h-screen flex flex-col bg-black/60">
         <TopBar

@@ -9,10 +9,11 @@ import {
   type StoreConfig,
   type ThemeColor,
 } from '@/types/storeConfig';
+import { resizeImageToDataUrl } from '@/utils/images';
 import { applyThemeColor } from '@/utils/theme';
 
 const LOGIN_BG_CHOICES: {
-  id: LoginBgOption;
+  id: Exclude<LoginBgOption, 'custom'>;
   name: string;
   image: string;
 }[] = [
@@ -44,14 +45,15 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
 
   const [storeName, setStoreName] = useState('RestoIT');
   const [address, setAddress] = useState('');
-  const [openingHours, setOpeningHours] = useState('');
   const [contactPhone, setContactPhone] = useState('');
   const [logoUrl, setLogoUrl] = useState<string | null>(null);
   const [themeColor, setThemeColor] = useState<ThemeColor>('black');
   const [loginBg, setLoginBg] = useState<LoginBgOption>('bistro');
+  const [loginBgImage, setLoginBgImage] = useState<string | null>(null);
   const [mpAlias, setMpAlias] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const bgFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
     let cancelled = false;
@@ -61,11 +63,11 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         if (cancelled) return;
         setStoreName(data.store_name || 'RestoIT');
         setAddress(data.address || '');
-        setOpeningHours(data.opening_hours || '');
         setContactPhone(data.contact_phone || '');
         setLogoUrl(data.logo_url || null);
         setThemeColor(data.theme_color || 'black');
         setLoginBg(data.login_bg || 'bistro');
+        setLoginBgImage(data.login_bg_image || null);
         setMpAlias(data.mp_alias || '');
         applyThemeColor(data.theme_color || 'black');
       })
@@ -108,6 +110,35 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
     reader.readAsDataURL(file);
   };
 
+  const handleBgFileChange = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    e.target.value = '';
+    if (!file) return;
+
+    if (!file.type.startsWith('image/')) {
+      setFeedback({ type: 'error', message: 'Por favor seleccioná un archivo de imagen válido (PNG, JPG o WebP).' });
+      return;
+    }
+    // La imagen se achica antes de guardarla, así que se acepta una foto pesada del celular.
+    if (file.size > 15 * 1024 * 1024) {
+      setFeedback({ type: 'error', message: 'La imagen de fondo no debe superar los 15 MB.' });
+      return;
+    }
+
+    try {
+      setLoginBgImage(await resizeImageToDataUrl(file));
+      setLoginBg('custom');
+      setFeedback(null);
+    } catch {
+      setFeedback({ type: 'error', message: 'No se pudo leer la imagen seleccionada.' });
+    }
+  };
+
+  const handleRemoveBgImage = () => {
+    setLoginBgImage(null);
+    if (loginBg === 'custom') setLoginBg('bistro');
+  };
+
   const handleRemoveLogo = () => {
     setLogoUrl(null);
     if (fileInputRef.current) {
@@ -129,21 +160,21 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
       const updated = await updateStoreConfig({
         store_name: storeName.trim(),
         address: address.trim() || null,
-        opening_hours: openingHours.trim() || null,
         contact_phone: contactPhone.trim() || null,
         logo_url: logoUrl,
         theme_color: themeColor,
         login_bg: loginBg,
+        login_bg_image: loginBgImage,
         mp_alias: mpAlias.trim() || null,
       });
 
       setStoreName(updated.store_name);
       setAddress(updated.address || '');
-      setOpeningHours(updated.opening_hours || '');
       setContactPhone(updated.contact_phone || '');
       setLogoUrl(updated.logo_url || null);
       setThemeColor(updated.theme_color || 'black');
       setLoginBg(updated.login_bg || 'bistro');
+      setLoginBgImage(updated.login_bg_image || null);
       setMpAlias(updated.mp_alias || '');
       applyThemeColor(updated.theme_color || 'black');
       setFeedback({
@@ -237,7 +268,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
               />
             </div>
 
-            <div>
+            <div className="md:col-span-2">
               <label htmlFor="address" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
                 Dirección
               </label>
@@ -248,21 +279,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 onChange={(e) => setAddress(e.target.value)}
                 maxLength={255}
                 placeholder="Ej. Av. Corrientes 1234, CABA"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-              />
-            </div>
-
-            <div>
-              <label htmlFor="opening-hours" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
-                Horarios de atención
-              </label>
-              <input
-                id="opening-hours"
-                type="text"
-                value={openingHours}
-                onChange={(e) => setOpeningHours(e.target.value)}
-                maxLength={255}
-                placeholder="Ej. Mar a Dom: 19:30 a 00:00"
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
@@ -416,20 +432,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                     </div>
                   </div>
                 )}
-                {openingHours && (
-                  <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                    <span
-                      className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                      style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
-                    >
-                      🕒
-                    </span>
-                    <div className="min-w-0">
-                      <span className="block text-[10px] font-medium uppercase text-gray-500">Horarios</span>
-                      <span className="font-medium text-gray-900 break-words">{openingHours}</span>
-                    </div>
-                  </div>
-                )}
                 {contactPhone && (
                   <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
                     <span
@@ -458,7 +460,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                     </div>
                   </div>
                 )}
-                {!address && !openingHours && !contactPhone && !mpAlias && (
+                {!address && !contactPhone && !mpAlias && (
                   <span className="italic text-gray-400 text-xs py-2 sm:col-span-3">Completá los datos de contacto para verlos aquí.</span>
                 )}
               </div>
@@ -471,11 +473,11 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
           <div>
             <h2 className="text-base font-bold text-gray-900">Imagen de Fondo para Inicio de Sesión</h2>
             <p className="text-xs text-gray-500 mt-1">
-              Elegí la imagen gastronómica que se mostrará como fondo en la pantalla de ingreso al sistema. Por defecto está seleccionada Salón Bistro.
+              Elegí la imagen que se mostrará como fondo en la pantalla de ingreso al sistema, o subí una propia desde tu dispositivo. Por defecto está seleccionada Salón.
             </p>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 pt-1">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 pt-1">
             {LOGIN_BG_CHOICES.map((choice) => {
               const isSelected = loginBg === choice.id;
               return (
@@ -519,6 +521,75 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 </button>
               );
             })}
+
+            {/* Imagen propia subida desde el dispositivo */}
+            <div
+              className={`relative text-left rounded-2xl overflow-hidden border-2 transition-all p-3 flex flex-col ${
+                loginBg === 'custom'
+                  ? 'border-black bg-gray-50 shadow-md ring-2 ring-black/10'
+                  : 'border-gray-200 hover:border-gray-300 bg-white'
+              }`}
+            >
+              <input
+                ref={bgFileInputRef}
+                type="file"
+                accept="image/*"
+                aria-label="Subir imagen de fondo"
+                className="hidden"
+                onChange={handleBgFileChange}
+              />
+              <button
+                type="button"
+                onClick={() => (loginBgImage ? setLoginBg('custom') : bgFileInputRef.current?.click())}
+                aria-pressed={loginBg === 'custom'}
+                aria-label="Imagen propia"
+                className="group relative aspect-video w-full rounded-xl overflow-hidden bg-gray-100 mb-2.5"
+              >
+                {loginBgImage ? (
+                  <img
+                    src={loginBgImage}
+                    alt="Imagen propia"
+                    className="w-full h-full object-cover group-hover:scale-105 transition duration-300"
+                  />
+                ) : (
+                  <span className="absolute inset-0 flex flex-col items-center justify-center gap-1 border-2 border-dashed border-gray-300 rounded-xl text-gray-500">
+                    <span className="text-xl leading-none">+</span>
+                    <span className="text-xs font-medium">Subir desde el dispositivo</span>
+                  </span>
+                )}
+                {loginBg === 'custom' && (
+                  <span
+                    className="absolute top-2 right-2 rounded-full p-1 text-white shadow"
+                    style={{ backgroundColor: currentTheme.hex }}
+                  >
+                    <svg className="w-3.5 h-3.5" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="3" d="M5 13l4 4L19 7" />
+                    </svg>
+                  </span>
+                )}
+              </button>
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-sm font-bold text-gray-900">Imagen propia</span>
+                {loginBgImage && (
+                  <div className="flex gap-2">
+                    <button
+                      type="button"
+                      onClick={() => bgFileInputRef.current?.click()}
+                      className="text-[11px] font-semibold text-gray-600 hover:text-gray-900 underline"
+                    >
+                      Cambiar
+                    </button>
+                    <button
+                      type="button"
+                      onClick={handleRemoveBgImage}
+                      className="text-[11px] font-semibold text-red-600 hover:text-red-700 underline"
+                    >
+                      Quitar
+                    </button>
+                  </div>
+                )}
+              </div>
+            </div>
           </div>
         </section>
 

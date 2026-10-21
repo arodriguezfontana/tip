@@ -95,6 +95,22 @@ def test_webhook_endpoint_updates_order_and_triggers_notification(client, db_ses
     assert sample_order.is_paid is True
 
 
+def test_webhook_notifies_telegram_only_once_for_repeated_notifications(client, sample_order):
+    created = {
+        "action": "payment.created",
+        "status": "approved",
+        "external_reference": str(sample_order.id),
+        "data": {"id": "pay_22222"},
+    }
+    updated = {**created, "action": "payment.updated"}
+
+    with patch("app.api.mercadopago_router.send_telegram_message") as send:
+        client.post("/api/v1/mercadopago/webhook", json=created)
+        client.post("/api/v1/mercadopago/webhook", json=updated)
+
+    assert send.call_count == 1
+
+
 def test_webhook_get_ping(client):
     response = client.get("/api/v1/mercadopago/webhook")
     assert response.status_code == 200

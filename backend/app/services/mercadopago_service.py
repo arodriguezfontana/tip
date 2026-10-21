@@ -104,6 +104,8 @@ def process_payment_notification(
 
     Identifica el pedido correspondiente, verifica que el pago haya sido exitoso ('approved')
     y actualiza su estado de pago a 'Abonado' (is_paid = True).
+    Devuelve el pedido solo si esta notificación fue la que lo marcó como abonado; las
+    notificaciones repetidas de un pago ya registrado devuelven None.
     """
     payload = payload or {}
     query_params = query_params or {}
@@ -163,12 +165,23 @@ def process_payment_notification(
     )
 
     if is_approved:
-        order.is_paid = True
+        # MercadoPago suele avisar varias veces el mismo pago (payment.created, payment.updated,
+        # IPN + webhook). El UPDATE condicional hace que solo una notificación concrete el cambio,
+        # aunque lleguen en simultáneo, y así el cliente recibe un único aviso.
+        values: dict[str, Any] = {Order.is_paid: True}
         if not order.payment_method:
-            order.payment_method = PaymentMethod.MERCADOPAGO.value
+            values[Order.payment_method] = PaymentMethod.MERCADOPAGO.value
         if payment_id:
-            order.mp_payment_id = str(payment_id)
+            values[Order.mp_payment_id] = str(payment_id)
+        updated = (
+            db.query(Order)
+            .filter(Order.id == order.id, Order.is_paid.is_(False))
+            .update(values, synchronize_session=False)
+        )
         db.commit()
+        if not updated:
+            logger.info("Pedido #%s ya figuraba abonado; se ignora la notificación repetida.", order.id)
+            return None
         db.refresh(order)
         logger.info("Pedido #%s marcado como abonado por webhook de MercadoPago.", order.id)
         return order

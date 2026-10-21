@@ -33,6 +33,9 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   mercadopago: 'MercadoPago',
 };
 
+/** Medios que se ofrecen al tomar un pedido (los demás quedan solo para mostrar pedidos viejos). */
+export const COUNTER_PAYMENT_METHODS: PaymentMethod[] = ['efectivo', 'mercadopago'];
+
 export interface CheckoutFormData {
   name: string;
   phone: string;

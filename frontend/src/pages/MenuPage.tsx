@@ -15,6 +15,7 @@ import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { groupByCategory } from '@/utils/productGrouping';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
+import { summarizeWeeklySchedule } from '@/utils/businessHours';
 import { THEME_OPTIONS, type StoreConfig } from '@/types/storeConfig';
 import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 
@@ -28,6 +29,8 @@ export default function MenuPage() {
   const { user, isCustomer } = useAuth();
   const businessHours = useBusinessHours();
   const storeClosed = businessHours !== null && businessHours.configured && !businessHours.is_open;
+  // Los horarios se cargan solo desde la sección Horarios del panel; acá se muestra su resumen.
+  const openingHours = businessHours?.configured ? summarizeWeeklySchedule(businessHours.ranges) : null;
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
@@ -91,7 +94,7 @@ export default function MenuPage() {
                 </p>
               </div>
 
-              {(storeConfig?.address || storeConfig?.opening_hours || storeConfig?.contact_phone) && (
+              {(storeConfig?.address || openingHours || storeConfig?.contact_phone) && (
                 <section
                   aria-label="Información de contacto del local"
                   className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
@@ -102,7 +105,7 @@ export default function MenuPage() {
                   />
                   <div className="p-4 sm:p-5">
                     <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {storeConfig.address && (
+                      {storeConfig?.address && (
                         <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
                           <div
                             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
@@ -118,13 +121,13 @@ export default function MenuPage() {
                               Dirección
                             </span>
                             <span className="text-sm font-semibold text-gray-900 break-words block">
-                              {storeConfig.address}
+                              {storeConfig?.address}
                             </span>
                           </div>
                         </div>
                       )}
 
-                      {storeConfig.opening_hours && (
+                      {openingHours && (
                         <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
                           <div
                             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
@@ -139,13 +142,13 @@ export default function MenuPage() {
                               Horarios
                             </span>
                             <span className="text-sm font-semibold text-gray-900 break-words block">
-                              {storeConfig.opening_hours}
+                              {openingHours}
                             </span>
                           </div>
                         </div>
                       )}
 
-                      {storeConfig.contact_phone && (
+                      {storeConfig?.contact_phone && (
                         <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
                           <div
                             className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
@@ -160,10 +163,10 @@ export default function MenuPage() {
                               Teléfonos
                             </span>
                             <a
-                              href={`tel:${storeConfig.contact_phone.split('/')[0].trim()}`}
+                              href={`tel:${storeConfig?.contact_phone.split('/')[0].trim()}`}
                               className="text-sm font-bold text-gray-900 hover:underline break-words block"
                             >
-                              {storeConfig.contact_phone}
+                              {storeConfig?.contact_phone}
                             </a>
                           </div>
                         </div>

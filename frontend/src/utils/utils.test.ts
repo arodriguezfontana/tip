@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { summarizeWeeklySchedule } from '@/utils/businessHours';
 import { formatCurrency } from '@/utils/currency';
 import { PHONE_PATTERN, validateCustomerData } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
@@ -146,5 +147,25 @@ describe('groupByCategory', () => {
       ['Pizzas', ['Pizza Muzzarella', 'Fugazzeta']],
       ['Bebidas', ['Coca-Cola 500ml']],
     ]);
+  });
+});
+
+describe('summarizeWeeklySchedule', () => {
+  const range = (day_of_week: number, opens_at: string, closes_at: string) => ({ day_of_week, opens_at, closes_at });
+
+  it('agrupa los días seguidos con el mismo horario y omite los cerrados', () => {
+    const ranges = [1, 2, 3, 4, 5, 6].map((day) => range(day, '19:30', '00:00'));
+    expect(summarizeWeeklySchedule(ranges)).toBe('Martes a Domingo: 19:30 a 00:00');
+  });
+
+  it('separa los días con horarios distintos', () => {
+    const ranges = [range(0, '12:00', '15:00'), range(0, '20:00', '00:00'), range(1, '20:00', '00:00'), range(4, '20:00', '00:00')];
+    expect(summarizeWeeklySchedule(ranges)).toBe(
+      'Lunes: 12:00 a 15:00 y 20:00 a 00:00 · Martes: 20:00 a 00:00 · Viernes: 20:00 a 00:00'
+    );
+  });
+
+  it('devuelve null si no hay franjas', () => {
+    expect(summarizeWeeklySchedule([])).toBeNull();
   });
 });

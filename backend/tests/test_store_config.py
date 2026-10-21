@@ -9,7 +9,8 @@ def test_public_get_store_config_returns_default(public_client):
     assert data["theme_color"] == "black"
     assert data["login_bg"] == "bistro"
     assert "address" in data
-    assert "opening_hours" in data
+    assert "opening_hours" not in data
+    assert data["login_bg_image"] is None
     assert "contact_phone" in data
 
 
@@ -17,7 +18,6 @@ def test_modify_store_config_requires_admin(public_client):
     payload = {
         "store_name": "Pizzería Nápoles",
         "address": "Av. Corrientes 500",
-        "opening_hours": "Todos los días 20:00 a 01:00",
         "contact_phone": "11 5555-4321",
         "logo_url": "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==",
         "theme_color": "red",
@@ -31,7 +31,6 @@ def test_admin_can_update_store_config(client, public_client):
     payload = {
         "store_name": "Pizzería Bella Vista",
         "address": "Calle Falsa 123",
-        "opening_hours": "Lun a Dom 19:00 a 00:30",
         "contact_phone": "11 9999-8888",
         "logo_url": "data:image/png;base64,test-logo-base64",
         "theme_color": "emerald",
@@ -43,7 +42,6 @@ def test_admin_can_update_store_config(client, public_client):
     data = response.json()
     assert data["store_name"] == "Pizzería Bella Vista"
     assert data["address"] == "Calle Falsa 123"
-    assert data["opening_hours"] == "Lun a Dom 19:00 a 00:30"
     assert data["contact_phone"] == "11 9999-8888"
     assert data["logo_url"] == "data:image/png;base64,test-logo-base64"
     assert data["theme_color"] == "emerald"
@@ -65,7 +63,6 @@ def test_update_store_config_validates_theme_color(client):
     payload = {
         "store_name": "Pizzería Central",
         "address": "Av. Siempre Viva 742",
-        "opening_hours": "20 a 24",
         "contact_phone": "11 1111-2222",
         "logo_url": None,
         "theme_color": "color_invalido",
@@ -92,3 +89,28 @@ def test_update_store_config_validates_login_bg(client):
     response = client.put(CONFIG_URL, json=payload)
     assert response.status_code == 422
 
+
+def test_admin_can_upload_custom_login_background(client, public_client):
+    image = "data:image/jpeg;base64,/9j/4AAQSkZJRgABAQ=="
+    response = client.put(
+        CONFIG_URL,
+        json={"store_name": "RestoIT", "theme_color": "black", "login_bg": "custom", "login_bg_image": image},
+    )
+    assert response.status_code == 200
+
+    pub_data = public_client.get(CONFIG_URL).json()
+    assert pub_data["login_bg"] == "custom"
+    assert pub_data["login_bg_image"] == image
+
+
+def test_custom_login_background_requires_an_image(client):
+    response = client.put(CONFIG_URL, json={"store_name": "RestoIT", "theme_color": "black", "login_bg": "custom"})
+    assert response.status_code == 422
+
+
+def test_login_background_image_must_be_an_image_data_url(client):
+    response = client.put(
+        CONFIG_URL,
+        json={"store_name": "RestoIT", "theme_color": "black", "login_bg": "custom", "login_bg_image": "https://x.com/a.js"},
+    )
+    assert response.status_code == 422
