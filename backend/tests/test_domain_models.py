@@ -81,9 +81,11 @@ def test_un_retiro_usa_la_direccion_del_local_y_un_envio_exige_direccion():
         order.set_delivery("domicilio", "   ")
 
 
-def test_los_rechazados_no_cuentan_como_venta():
+def test_los_rechazados_y_cancelados_no_cuentan_como_venta():
     assert Order(status=OrderStatus.CONFIRMED.value).is_billable
+    assert Order(status=OrderStatus.COMPLETED.value).is_billable
     assert not Order(status=OrderStatus.REJECTED.value).is_billable
+    assert not Order(status=OrderStatus.CANCELLED.value).is_billable
 
 
 # --- Pedido: ciclo de vida ----------------------------------------------------------------------------

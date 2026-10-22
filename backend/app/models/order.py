@@ -52,6 +52,10 @@ class PaymentMethod(_StrEnum):
     MERCADOPAGO = "mercadopago"
 
 
+# Estados en los que el pedido no se llegó a vender: no suman a las ventas ni a las estadísticas.
+_NOT_BILLABLE_STATUSES = (OrderStatus.REJECTED, OrderStatus.CANCELLED)
+
+
 def _values(enum: type[Enum]) -> tuple[str, ...]:
     return tuple(member.value for member in enum)
 
@@ -178,13 +182,13 @@ class Order(Base):
 
     @hybrid_property
     def is_billable(self) -> bool:
-        """Cuenta como venta: todos los pedidos menos los rechazados."""
-        return self.status != OrderStatus.REJECTED
+        """Cuenta como venta: todos los pedidos menos los rechazados y los cancelados."""
+        return self.status not in _NOT_BILLABLE_STATUSES
 
     @is_billable.inplace.expression
     @classmethod
     def _is_billable_expression(cls):
-        return cls.status != OrderStatus.REJECTED.value
+        return cls.status.notin_([status.value for status in _NOT_BILLABLE_STATUSES])
 
     # --- Estado -------------------------------------------------------------------------------------
 
