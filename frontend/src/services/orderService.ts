@@ -1,0 +1,80 @@
+import { api } from './api';
+import type {
+  AdminOrder,
+  CounterOrderPayload,
+  OrderDetail,
+  OrderStatus,
+  WebOrderCreated,
+  WebOrderPayload,
+} from '@/types/order';
+
+export interface FetchOrdersParams {
+  dateFrom?: Date;
+  dateTo?: Date;
+  status?: OrderStatus[];
+}
+
+export async function fetchOrders(params: FetchOrdersParams = {}): Promise<AdminOrder[]> {
+  const { data } = await api.get<AdminOrder[]>('/orders', {
+    params: {
+      date_from: params.dateFrom?.toISOString(),
+      date_to: params.dateTo?.toISOString(),
+      status: params.status,
+    },
+    // FastAPI's `status: list[str] = Query(None)` binds repeated `status=a&status=b`,
+    // not axios's default bracketed `status[]=a&status[]=b`.
+    paramsSerializer: { indexes: null },
+  });
+  return data;
+}
+
+export async function fetchOrderDetail(orderId: number, signal?: AbortSignal): Promise<OrderDetail> {
+  const { data } = await api.get<OrderDetail>(`/orders/${orderId}`, { signal });
+  return data;
+}
+
+export async function updateOrderStatus(
+  orderId: number,
+  status: OrderStatus,
+  estimatedMinutes?: number
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/status`, {
+    status,
+    ...(estimatedMinutes !== undefined ? { estimated_minutes: estimatedMinutes } : {}),
+  });
+  return data;
+}
+
+/** Pedido presencial cargado por el personal desde el panel (entra directamente confirmado). */
+export async function createCounterOrder(payload: CounterOrderPayload): Promise<WebOrderCreated> {
+  const { data } = await api.post<WebOrderCreated>('/orders/counter', payload);
+  return data;
+}
+
+export async function createWebOrder(payload: WebOrderPayload): Promise<WebOrderCreated> {
+  const { data } = await api.post<WebOrderCreated>('/orders/web', payload);
+  return data;
+}
+
+/** Asigna o desasigna un repartidor a un pedido con envío a domicilio. */
+export async function assignDeliveryDriver(
+  orderId: number,
+  deliveryDriverId: number | null
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/delivery-driver`, {
+    delivery_driver_id: deliveryDriverId,
+  });
+  return data;
+}
+
+/** Actualiza manualmente el estado de cobro de un pedido (Abonado). */
+export async function updateOrderPayment(
+  orderId: number,
+  isPaid: boolean = true
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/payment`, {
+    is_paid: isPaid,
+  });
+  return data;
+}
+

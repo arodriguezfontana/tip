@@ -1,0 +1,24 @@
+# Linter del backend (se corre en el CI: `ruff check .`).
+target-version = "py310"
+line-length = 120
+extend-exclude = ["alembic/versions"]
+
+[lint]
+select = [
+    "E",   # estilo (pycodestyle)
+    "W",   # espacios sobrantes
+    "F",   # errores (pyflakes): imports y variables sin usar, nombres indefinidos
+    "I",   # orden de los imports
+    "UP",  # sintaxis moderna de Python (ej. list[...] en vez de typing.List)
+    "B",   # errores comunes (bugbear)
+    "SIM", # simplificaciones
+]
+ignore = [
+    "B008",  # FastAPI declara las dependencias con Depends(...) en los valores por defecto
+    "B904",  # los routers traducen excepciones a HTTPException a propósito
+    "E501",  # el largo de línea lo cuida el formato; hay textos para el usuario que conviene no cortar
+]
+
+[lint.per-file-ignores]
+# conftest define las variables de entorno antes de importar la app.
+"tests/conftest.py" = ["E402"]

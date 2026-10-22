@@ -1,0 +1,143 @@
+import { useCallback, useMemo, useState } from 'react';
+import { useAsyncData } from '@/hooks/useAsyncData';
+import type { AdminOrder } from '@/types/order';
+import { fetchOrders } from '@/services/orderService';
+import { formatCurrency } from '@/utils/currency';
+import type { DateRangePreset } from '@/utils/dateRange';
+import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
+import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { OrderDetailModal } from '@/components/OrderDetailModal';
+
+import type { ThemeColor } from '@/types/storeConfig';
+
+function statusBadgeClasses(status: string): string {
+  const normalized = status.trim().toLowerCase();
+  if (normalized.includes('pendiente')) return 'bg-yellow-100 text-yellow-800';
+  if (normalized.includes('confirm')) return 'bg-green-100 text-green-800';
+  if (normalized.includes('entreg') || normalized.includes('complet')) return 'bg-green-100 text-green-800';
+  if (normalized.includes('cancel') || normalized.includes('rechaz')) return 'bg-red-100 text-red-800';
+  return 'bg-gray-100 text-gray-800';
+}
+
+function formatDateTime(iso: string): string {
+  return new Date(iso).toLocaleString('es-AR', {
+    day: '2-digit',
+    month: '2-digit',
+    year: 'numeric',
+    hour: '2-digit',
+    minute: '2-digit',
+  });
+}
+
+interface HistorialViewProps {
+  themeColor?: ThemeColor;
+}
+
+export function HistorialView({ themeColor }: HistorialViewProps = {}) {
+  void themeColor;
+  const [preset, setPreset] = useState<DateRangePreset>('week');
+  const [customFrom, setCustomFrom] = useState('');
+  const [customTo, setCustomTo] = useState('');
+
+  const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
+  const closeDetail = useCallback(() => setDetailOrder(null), []);
+
+  const range = useMemo(
+    () =>
+      rangeForPreset(preset, {
+        from: customFrom ? parseDateInputValue(customFrom) : undefined,
+        to: customTo ? parseDateInputValue(customTo) : undefined,
+      }),
+    [preset, customFrom, customTo]
+  );
+
+  // Con un rango personalizado incompleto no se pide nada (se siguen mostrando los últimos pedidos).
+  const rangeIncomplete = preset === 'custom' && (!customFrom || !customTo);
+  const load = useCallback(() => fetchOrders({ dateFrom: range.from, dateTo: range.to }), [range.from, range.to]);
+  const { data: orders = [], loading, error } = useAsyncData(rangeIncomplete ? null : load, 'No se pudieron cargar los pedidos.');
+
+  const facturedOrders = useMemo(() => orders.filter((order) => order.status !== 'Rechazado' && order.status !== 'Cancelado'), [orders]);
+  const totalRevenue = useMemo(
+    () => facturedOrders.reduce((sum, order) => sum + order.total_amount, 0),
+    [facturedOrders]
+  );
+
+  return (
+    <div className="flex flex-col gap-4 lg:h-full">
+      <DateRangeFilter
+        preset={preset}
+        customFrom={customFrom}
+        customTo={customTo}
+        onPresetChange={setPreset}
+        onCustomFromChange={setCustomFrom}
+        onCustomToChange={setCustomTo}
+      />
+
+      <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 flex items-center justify-between">
+        <div>
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Dinero facturado</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{formatCurrency(totalRevenue)}</p>
+        </div>
+        <div className="text-right">
+          <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pedidos</p>
+          <p className="text-2xl font-bold text-gray-900 mt-1">{facturedOrders.length}</p>
+        </div>
+      </div>
+
+      {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+
+      {loading ? (
+        <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
+      ) : orders.length === 0 ? (
+        <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
+      ) : (
+        <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+          <div className="overflow-auto lg:min-h-0">
+            <table className="w-full text-sm">
+              <thead className="sticky top-0">
+                <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
+                  <th className="px-4 py-3">ID</th>
+                  <th className="px-4 py-3">Fecha</th>
+                  <th className="px-4 py-3">Cliente</th>
+                  <th className="px-4 py-3 text-right">Total</th>
+                  <th className="px-4 py-3">Estado</th>
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-100">
+                {orders.map((order) => (
+                  <tr key={order.id} onClick={() => setDetailOrder(order)} className="hover:bg-gray-50 cursor-pointer">
+                    <td className="px-4 py-3 font-medium text-gray-900">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          setDetailOrder(order);
+                        }}
+                        aria-label={`Ver detalle del pedido #${order.id}`}
+                        className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
+                      >
+                        #{order.id}
+                      </button>
+                    </td>
+                    <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
+                    <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
+                    <td className="px-4 py-3 text-right font-medium text-gray-900">
+                      {formatCurrency(order.total_amount)}
+                    </td>
+                    <td className="px-4 py-3">
+                      <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(order.status)}`}>
+                        {order.status}
+                      </span>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      )}
+
+      {detailOrder && <OrderDetailModal key={detailOrder.id} order={detailOrder} onClose={closeDetail} />}
+    </div>
+  );
+}
