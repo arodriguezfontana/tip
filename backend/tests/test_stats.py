@@ -72,8 +72,9 @@ def test_top_productos_ordena_por_cantidad_y_suma_ingresos(client, db_session, p
     ]
 
 
-def test_top_productos_no_cuenta_pedidos_rechazados(client, db_session, products):
-    _order(db_session, status="Rechazado", items=[(products["coca"], 10)])
+@pytest.mark.parametrize("status", ["Rechazado", "Cancelado"])
+def test_top_productos_no_cuenta_pedidos_rechazados_ni_cancelados(client, db_session, products, status):
+    _order(db_session, status=status, items=[(products["coca"], 10)])
     _order(db_session, status="Finalizado", items=[(products["muzza"], 1)])
 
     nombres = [p["product_name"] for p in client.get(f"{STATS_URL}/top-products").json()]
@@ -110,8 +111,9 @@ def test_dia_mas_rentable_suma_la_facturacion_por_dia_de_la_semana(client, db_se
     assert response.json() == {"best_selling_day": "Sábado", "total_revenue": 5000.0}
 
 
-def test_dia_mas_rentable_no_cuenta_pedidos_rechazados(client, db_session):
-    _order(db_session, status="Rechazado", created_at=SABADO_MEDIODIA, total=99999)
+@pytest.mark.parametrize("status", ["Rechazado", "Cancelado"])
+def test_dia_mas_rentable_no_cuenta_pedidos_rechazados_ni_cancelados(client, db_session, status):
+    _order(db_session, status=status, created_at=SABADO_MEDIODIA, total=99999)
     _order(db_session, status="Finalizado", created_at=LUNES_MEDIODIA, total=100)
 
     assert client.get(f"{STATS_URL}/best-selling-day").json()["best_selling_day"] == "Lunes"

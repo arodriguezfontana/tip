@@ -4,14 +4,15 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
 import * as storeConfigService from '@/services/storeConfigService';
 import type { StoreConfig } from '@/types/storeConfig';
+import { resizeImageToDataUrl } from '@/utils/images';
 
 vi.mock('@/services/storeConfigService');
+vi.mock('@/utils/images');
 
 const initialConfig: StoreConfig = {
   id: 1,
   store_name: 'Pizzería Los Troncos',
   address: 'Av. San Martín 450',
-  opening_hours: 'Mar a Dom 19:00 a 00:00',
   contact_phone: '11 4444-1234',
   logo_url: null,
   theme_color: 'black',
@@ -21,11 +22,11 @@ const initialConfig: StoreConfig = {
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue(initialConfig);
+  vi.mocked(resizeImageToDataUrl).mockResolvedValue('data:image/jpeg;base64,fondo-propio');
   vi.mocked(storeConfigService.updateStoreConfig).mockImplementation(async (payload) => ({
     id: 1,
     ...payload,
     address: payload.address ?? null,
-    opening_hours: payload.opening_hours ?? null,
     contact_phone: payload.contact_phone ?? null,
     logo_url: payload.logo_url ?? null,
     login_bg: payload.login_bg ?? 'bistro',
@@ -38,7 +39,8 @@ describe('ConfiguracionWebView', () => {
 
     expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
     expect(screen.getByDisplayValue('Av. San Martín 450')).toBeInTheDocument();
-    expect(screen.getByDisplayValue('Mar a Dom 19:00 a 00:00')).toBeInTheDocument();
+    // Los horarios se configuran solo desde la sección Horarios.
+    expect(screen.queryByLabelText('Horarios de atención')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('11 4444-1234')).toBeInTheDocument();
     expect(screen.getByText('Sin logo')).toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Negro Clásico' })).toHaveAttribute('aria-pressed', 'true');
@@ -190,5 +192,40 @@ describe('ConfiguracionWebView', () => {
       );
     });
   });
-});
 
+  it('permite subir una imagen propia desde el dispositivo como fondo de inicio de sesión', async () => {
+    const user = userEvent.setup();
+    render(<ConfiguracionWebView />);
+    expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
+
+    const file = new File(['fake-image-bytes'], 'fondo.jpg', { type: 'image/jpeg' });
+    fireEvent.change(screen.getByLabelText('Subir imagen de fondo'), { target: { files: [file] } });
+
+    expect(await screen.findByAltText('Imagen propia')).toHaveAttribute('src', 'data:image/jpeg;base64,fondo-propio');
+    expect(screen.getByRole('button', { name: 'Imagen propia' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Salón' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+    await waitFor(() =>
+      expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+        expect.objectContaining({ login_bg: 'custom', login_bg_image: 'data:image/jpeg;base64,fondo-propio' })
+      )
+    );
+  });
+
+  it('al quitar la imagen propia vuelve al fondo por defecto', async () => {
+    vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+      ...initialConfig,
+      login_bg: 'custom',
+      login_bg_image: 'data:image/jpeg;base64,guardada',
+    });
+    const user = userEvent.setup();
+    render(<ConfiguracionWebView />);
+
+    expect(await screen.findByAltText('Imagen propia')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Quitar' }));
+
+    expect(screen.queryByAltText('Imagen propia')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Salón' })).toHaveAttribute('aria-pressed', 'true');
+  });
+});

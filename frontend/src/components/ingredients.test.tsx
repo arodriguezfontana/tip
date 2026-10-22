@@ -200,8 +200,10 @@ describe('ProductosView', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Quitar el ingrediente 2' }));
     await user.click(within(dialog).getByRole('button', { name: '+ Agregar ingrediente' }));
     // El ingrediente que ya está en otra fila no se ofrece de nuevo.
-    expect(within(within(dialog).getByLabelText('Ingrediente 2')).queryByRole('option', { name: 'Muzzarella' })).toBeNull();
-    await user.selectOptions(within(dialog).getByLabelText('Ingrediente 2'), 'Huevo');
+    await user.click(within(dialog).getByLabelText('Ingrediente 2'));
+    expect(screen.queryByRole('option', { name: 'Muzzarella' })).toBeNull();
+    await user.type(within(dialog).getByLabelText('Ingrediente 2'), 'hue');
+    await user.click(screen.getByRole('option', { name: 'Huevo' }));
     expect(within(dialog).getByText('unidades')).toBeInTheDocument();
     await user.type(within(dialog).getByLabelText('Cantidad del ingrediente 2'), '0,5');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar receta' }));
@@ -226,7 +228,7 @@ describe('ProductosView', () => {
     await user.click(within(dialog).getByRole('button', { name: 'Guardar receta' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Elegí el ingrediente de cada fila');
 
-    await user.selectOptions(within(dialog).getByLabelText('Ingrediente 1'), 'Huevo');
+    await user.type(within(dialog).getByLabelText('Ingrediente 1'), 'Huevo{Enter}');
     await user.type(within(dialog).getByLabelText('Cantidad del ingrediente 1'), '0');
     await user.click(within(dialog).getByRole('button', { name: 'Guardar receta' }));
     expect(within(dialog).getByRole('alert')).toHaveTextContent('Ingresá una cantidad mayor a cero');
@@ -254,7 +256,7 @@ describe('ReporteIngredientesView', () => {
     vi.setSystemTime(new Date(2026, 9, 3, 15, 0));
   });
 
-  it('muestra el consumo de la última semana y avisa los productos sin receta', async () => {
+  it('muestra el consumo de la última semana', async () => {
     render(<ReporteIngredientesView />);
 
     expect(await screen.findByRole('cell', { name: 'Muzzarella' })).toBeInTheDocument();
@@ -265,7 +267,7 @@ describe('ReporteIngredientesView', () => {
     });
     expect(plain(within(row('Muzzarella')).getAllByRole('cell')[1].textContent)).toBe('1.250,5 gramos');
     expect(screen.getByText('Pedidos finalizados').nextElementSibling).toHaveTextContent('3');
-    expect(screen.getByText(/no tienen receta/)).toHaveTextContent('Coca-Cola 500ml');
+    expect(screen.queryByText(/no tienen receta/)).toBeNull();
   });
 
   it('filtra por día y por mes', async () => {
@@ -294,9 +296,13 @@ describe('ReporteIngredientesView', () => {
     );
     render(<ReporteIngredientesView />);
     const user = userEvent.setup();
-    await screen.findByRole('option', { name: 'Salsa de tomate' });
+    await screen.findByRole('cell', { name: 'Muzzarella' });
 
-    await user.selectOptions(screen.getByLabelText('Ingrediente'), 'Salsa de tomate');
+    await user.click(screen.getByLabelText('Ingrediente'));
+    await user.type(screen.getByLabelText('Ingrediente'), 'salsa');
+    // La búsqueda filtra en el momento: solo queda la opción que coincide.
+    expect(screen.getAllByRole('option').map((option) => option.textContent)).toEqual(['Salsa de tomate']);
+    await user.click(screen.getByRole('option', { name: 'Salsa de tomate' }));
 
     await waitFor(() =>
       expect(service.fetchIngredientConsumption).toHaveBeenLastCalledWith(expect.objectContaining({ ingredientId: 2 }))

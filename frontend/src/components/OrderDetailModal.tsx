@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchOrderDetail } from '@/services/orderService';
-import { PAYMENT_METHOD_LABEL } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { AdminOrder, OrderDetail, OrderStatus } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
@@ -16,6 +16,7 @@ const STATUS_BADGE_CLASS: Record<OrderStatus, string> = {
   'Listo para Retirar': 'bg-teal-100 text-teal-800',
   Finalizado: 'bg-green-100 text-green-800',
   Rechazado: 'bg-red-100 text-red-700',
+  Cancelado: 'bg-red-100 text-red-700',
 };
 
 const SOURCE_LABEL: Record<AdminOrder['source'], string> = {
@@ -62,6 +63,8 @@ interface OrderDetailModalProps {
   simulated?: boolean;
   /** Marca el pedido como abonado. */
   onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Cancela el pedido (si se indica, el modal ofrece el botón mientras el pedido siga en curso). */
+  onCancel?: (orderId: number) => Promise<void>;
   onClose: () => void;
 }
 
@@ -69,6 +72,7 @@ export function OrderDetailModal({
   order,
   simulated = false,
   onMarkPaid,
+  onCancel,
   onClose,
 }: OrderDetailModalProps) {
   const [detail, setDetail] = useState<OrderDetail | null>(null);
@@ -76,6 +80,8 @@ export function OrderDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [confirmingCancel, setConfirmingCancel] = useState(false);
+  const [cancelling, setCancelling] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   const onCloseRef = useRef(onClose);
 
@@ -87,6 +93,18 @@ export function OrderDetailModal({
       setDetail((prev) => (prev ? { ...prev, is_paid: true } : prev));
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  const handleCancel = async () => {
+    if (!onCancel) return;
+    setCancelling(true);
+    try {
+      // Si se cancela, el pedido sale del tablero y esta ventana se cierra sola.
+      await onCancel(order.id);
+    } finally {
+      setCancelling(false);
+      setConfirmingCancel(false);
     }
   };
 
@@ -173,15 +191,48 @@ export function OrderDetailModal({
               Recibido el {formatDate(current.created_at)} a las {formatTime(current.created_at)} hs
             </p>
           </div>
-          <button
-            ref={closeButtonRef}
-            type="button"
-            onClick={onClose}
-            aria-label="Cerrar detalle del pedido"
-            className="shrink-0 w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 text-2xl leading-none transition"
-          >
-            ×
-          </button>
+          <div className="shrink-0 flex items-center gap-2">
+            {/* Cualquier pedido en curso se puede cancelar (al cliente del bot se le avisa por Telegram). */}
+            {onCancel && ACTIVE_ORDER_STATUSES.includes(current.status) &&
+              (confirmingCancel ? (
+                <div className="flex items-center gap-2 text-xs">
+                  <span className="font-semibold text-red-700">¿Cancelar el pedido?</span>
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={handleCancel}
+                    className="bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white px-3 py-1.5 rounded-lg font-bold transition"
+                  >
+                    Sí, cancelar
+                  </button>
+                  <button
+                    type="button"
+                    disabled={cancelling}
+                    onClick={() => setConfirmingCancel(false)}
+                    className="px-3 py-1.5 rounded-lg font-semibold text-gray-600 border border-gray-200 hover:bg-gray-100 transition"
+                  >
+                    No
+                  </button>
+                </div>
+              ) : (
+                <button
+                  type="button"
+                  onClick={() => setConfirmingCancel(true)}
+                  className="text-xs font-semibold text-red-600 hover:text-red-700 hover:bg-red-50 px-3 py-1.5 rounded-lg transition"
+                >
+                  Cancelar pedido
+                </button>
+              ))}
+            <button
+              ref={closeButtonRef}
+              type="button"
+              onClick={onClose}
+              aria-label="Cerrar detalle del pedido"
+              className="w-8 h-8 rounded-lg text-gray-500 hover:bg-gray-100 hover:text-gray-900 text-2xl leading-none transition"
+            >
+              ×
+            </button>
+          </div>
         </header>
 
         <div className="overflow-y-auto px-6 py-5 space-y-6">

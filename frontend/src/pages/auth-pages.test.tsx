@@ -15,7 +15,6 @@ beforeEach(() => {
     id: 1,
     store_name: 'RestoIT',
     address: 'Av. Corrientes 1234, CABA',
-    opening_hours: 'Mar a Dom 19:00 a 00:00',
     contact_phone: '11 4444-1234',
     logo_url: null,
     theme_color: 'black',

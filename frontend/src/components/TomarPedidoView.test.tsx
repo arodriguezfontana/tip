@@ -48,6 +48,9 @@ beforeEach(() => {
     customer_phone: '1144445555',
     delivery_method: 'retiro',
     shipping_address: 'Retiro en el local',
+    payment_method: null,
+    is_paid: false,
+    payment_url: null,
     notes: null,
     total_amount: 0,
     created_at: new Date().toISOString(),
@@ -146,10 +149,16 @@ describe('TomarPedidoView', () => {
   it('un segundo clic en el método de pago lo deja sin especificar', async () => {
     const user = await renderView();
 
-    await user.click(screen.getByRole('radio', { name: 'Tarjeta' }));
-    expect(screen.getByRole('radio', { name: 'Tarjeta' })).toHaveAttribute('aria-checked', 'true');
-    await user.click(screen.getByRole('radio', { name: 'Tarjeta' }));
-    expect(screen.getByRole('radio', { name: 'Tarjeta' })).toHaveAttribute('aria-checked', 'false');
+    // Solo se ofrecen Efectivo y MercadoPago.
+    expect(screen.getAllByRole('radio', { name: /Efectivo|MercadoPago|Transferencia|Tarjeta/ }).map((r) => r.textContent)).toEqual([
+      'Efectivo',
+      'MercadoPago',
+    ]);
+
+    await user.click(screen.getByRole('radio', { name: 'MercadoPago' }));
+    expect(screen.getByRole('radio', { name: 'MercadoPago' })).toHaveAttribute('aria-checked', 'true');
+    await user.click(screen.getByRole('radio', { name: 'MercadoPago' }));
+    expect(screen.getByRole('radio', { name: 'MercadoPago' })).toHaveAttribute('aria-checked', 'false');
   });
 
   it('autocompleta los datos de un cliente registrado y avisa si se modifican', async () => {

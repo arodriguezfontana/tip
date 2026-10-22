@@ -10,6 +10,11 @@ _TEST_ENV = {
     "JWT_SECRET_KEY": "test-jwt-secret-key-con-largo-suficiente",
     "ADMIN_EMAIL": "admin@restoit.com",
     "ADMIN_PASSWORD": "admin-password-de-test",
+    # Sin credenciales de MercadoPago se usa el link simulado y nunca se llama a la API real.
+    "MERCADOPAGO_ACCESS_TOKEN": "",
+    "MERCADOPAGO_PUBLIC_KEY": "",
+    "MERCADOPAGO_WEBHOOK_SECRET": "",
+    "PUBLIC_URL": "",
 }
 for _key, _value in _TEST_ENV.items():
     os.environ.setdefault(_key, _value)

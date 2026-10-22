@@ -33,6 +33,11 @@ class Settings(BaseSettings):
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str
 
+    # Los mensajes que un cliente manda seguidos al bot se esperan este tiempo y se responden juntos, de una vez.
+    # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
+    TELEGRAM_BATCH_WINDOW_SECONDS: float = 2.0
+    TELEGRAM_BATCH_MAX_WAIT_SECONDS: float = 6.0
+
     # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
     RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"
 
@@ -40,6 +45,8 @@ class Settings(BaseSettings):
     MERCADOPAGO_ACCESS_TOKEN: str = ""
     MERCADOPAGO_PUBLIC_KEY: str = ""
     MERCADOPAGO_WEBHOOK_SECRET: str = ""
+    # URL de la web de pedidos: MercadoPago devuelve ahí al cliente después de pagar.
+    FRONTEND_URL: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
         env_file=".env",

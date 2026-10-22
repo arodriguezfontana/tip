@@ -92,6 +92,12 @@ describe('ComandaCard', () => {
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Rechazado', undefined);
   });
 
+  it('no ofrece cancelar en la tarjeta: eso se hace desde el detalle', () => {
+    renderCard({ status: 'Confirmado' });
+
+    expect(screen.queryByRole('button', { name: /Cancelar/ })).not.toBeInTheDocument();
+  });
+
   it('un programado muestra su horario y se confirma sin demora', async () => {
     const { onStatusChange, user } = renderCard({ scheduled_for: '2026-10-04T00:30:00Z' }); // 21:30 en Argentina
 
@@ -168,6 +174,17 @@ describe('ComandaCard', () => {
     expect(screen.getByText(/Repartidor:/)).toBeInTheDocument();
   });
 
+  it('el cartel del repartidor va debajo de las observaciones y arriba de la demora estimada', () => {
+    renderCard({ delivery_driver_name: 'Gonzalo Repartos', notes: 'Sin cebolla', estimated_minutes: 25, status: 'En Camino' });
+
+    const notes = screen.getByText('“Sin cebolla”');
+    const driver = screen.getByText(/Repartidor:/);
+    const estimated = screen.getByText('Estimado: 25 min');
+    const before = (a: Element, b: Element) => Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(notes, driver)).toBe(true);
+    expect(before(driver, estimated)).toBe(true);
+  });
+
   it('cuando pasa a En Camino para domicilio muestra opción para asignar repartidor activo', async () => {
     const drivers: DeliveryDriver[] = [
       { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
@@ -185,6 +202,61 @@ describe('ComandaCard', () => {
     await user.selectOptions(select, '1');
 
     expect(onAssignDriver).toHaveBeenCalledWith(101, 1);
+  });
+
+  it('sin repartidor muestra el cartel "Asignar repartidor" y ya no hay una sección aparte debajo', () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+    ];
+    renderCard(
+      { status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: null, delivery_driver_name: null, notes: 'Sin cebolla', estimated_minutes: 25 },
+      { activeDrivers: drivers }
+    );
+
+    const label = screen.getByText('Asignar repartidor');
+    expect(label.parentElement).toHaveTextContent('🛵');
+    // Va en el mismo lugar que el cartel del repartidor: debajo de las observaciones y arriba de la demora.
+    const before = (x: Element, y: Element) => Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(before(screen.getByText('“Sin cebolla”'), label)).toBe(true);
+    expect(before(label, screen.getByText('Estimado: 25 min'))).toBe(true);
+    // La sección vieja de abajo ya no existe.
+    expect(screen.queryByText(/Reasignar repartidor/)).not.toBeInTheDocument();
+    expect(screen.queryByText('Asignar repartidor:')).not.toBeInTheDocument();
+    expect(screen.getAllByRole('combobox')).toHaveLength(1);
+  });
+
+  it('con repartidor asignado el mismo cartel muestra su nombre y permite cambiarlo o quitarlo', async () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+      { id: 2, name: 'Juan Moto', phone: '11 3333-4444', is_active: true, created_at: '', updated_at: '' },
+    ];
+    const { onAssignDriver, user } = renderCard(
+      { status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: 1, delivery_driver_name: 'Marcos Envíos' },
+      { activeDrivers: drivers }
+    );
+
+    expect(screen.getByText('Repartidor:')).toBeInTheDocument();
+    expect(screen.getByText('Marcos Envíos', { selector: 'span' })).toBeInTheDocument();
+    const select = screen.getByRole('combobox', { name: 'Cambiar repartidor' });
+    expect(select).toHaveValue('1');
+
+    await user.selectOptions(select, '2');
+    expect(onAssignDriver).toHaveBeenCalledWith(101, 2);
+
+    await user.selectOptions(select, 'Quitar asignación');
+    expect(onAssignDriver).toHaveBeenLastCalledWith(101, null);
+  });
+
+  it('abrir el selector del repartidor no abre el detalle del pedido', async () => {
+    const drivers: DeliveryDriver[] = [
+      { id: 1, name: 'Marcos Envíos', phone: '11 1111-2222', is_active: true, created_at: '', updated_at: '' },
+    ];
+    const { onOpenDetail, user } = renderCard({ status: 'En Camino', delivery_method: 'domicilio' }, { activeDrivers: drivers });
+
+    await user.click(screen.getByText('Asignar repartidor'));
+    await user.click(screen.getByRole('combobox', { name: 'Asignar repartidor' }));
+
+    expect(onOpenDetail).not.toHaveBeenCalled();
   });
 
   it('un pedido en En Camino con retiro en local no muestra opción para asignar repartidor', () => {
@@ -211,16 +283,60 @@ describe('ComandaCard', () => {
     expect(screen.queryByRole('combobox', { name: 'Asignar repartidor' })).not.toBeInTheDocument();
   });
 
-  it('permite marcar como abonado un pedido de MercadoPago pendiente', async () => {
-    const onMarkPaid = vi.fn().mockResolvedValue(undefined);
-    const { user } = renderCard(
-      { id: 42, payment_method: 'mercadopago', is_paid: false },
-      { onMarkPaid }
-    );
+  it.each([
+    ['efectivo', 'Efectivo'],
+    ['mercadopago', 'MercadoPago'],
+  ] as const)('muestra el medio de pago %s en la comanda', (payment_method, label) => {
+    renderCard({ payment_method });
 
-    const button = screen.getByRole('button', { name: /Marcar abonado/i });
-    expect(button).toBeInTheDocument();
-    await user.click(button);
-    expect(onMarkPaid).toHaveBeenCalledWith(42, true);
+    expect(screen.getByText(label)).toBeInTheDocument();
+  });
+
+  it('si no hay medio de pago definido lo indica', () => {
+    renderCard({ payment_method: null });
+
+    expect(screen.getByText('Medio de pago sin definir')).toBeInTheDocument();
+  });
+
+  it.each(['Pendiente', 'Confirmado', 'En Camino', 'Listo para Retirar'] as const)(
+    'una comanda %s muestra si está abonada o pendiente de pago',
+    (status) => {
+      const { unmount } = render(
+        <ComandaCard order={makeOrder({ status, payment_method: 'efectivo', is_paid: true })} onStatusChange={vi.fn()} />
+      );
+      expect(screen.getByText('Abonado')).toBeInTheDocument();
+      expect(screen.queryByText('Pago Pendiente')).not.toBeInTheDocument();
+      unmount();
+
+      render(<ComandaCard order={makeOrder({ status, payment_method: 'efectivo', is_paid: false })} onStatusChange={vi.fn()} />);
+      expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
+      expect(screen.queryByText('Abonado')).not.toBeInTheDocument();
+    }
+  );
+
+  it.each(['efectivo', 'mercadopago'] as const)(
+    'al tocar "Pago Pendiente" de un pedido en %s se marca como abonado',
+    async (payment_method) => {
+      const onMarkPaid = vi.fn().mockResolvedValue(undefined);
+      const { onOpenDetail, user } = renderCard({ id: 42, payment_method, is_paid: false }, { onMarkPaid });
+
+      await user.click(screen.getByRole('button', { name: 'Pago pendiente: marcar como abonado' }));
+
+      expect(onMarkPaid).toHaveBeenCalledWith(42, true);
+      expect(onOpenDetail).not.toHaveBeenCalled();
+    }
+  );
+
+  it('un pedido ya abonado no ofrece marcarlo de nuevo', () => {
+    renderCard({ payment_method: 'mercadopago', is_paid: true }, { onMarkPaid: vi.fn() });
+
+    expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
+  });
+
+  it('sin acción para marcar el pago, el estado pendiente se muestra pero no se puede tocar', () => {
+    renderCard({ payment_method: 'efectivo', is_paid: false });
+
+    expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
   });
 });

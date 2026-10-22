@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
 import { CartSummary } from '@/components/CartSummary';
@@ -7,7 +8,10 @@ import { OrderSuccess } from '@/components/OrderSuccess';
 import { CustomerAccountActions } from '@/components/CustomerAccountActions';
 import { CustomerAuthModal } from '@/components/CustomerAuthModal';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
+import { MobileCartBar } from '@/components/MobileCartBar';
 import { StoreClosedNotice } from '@/components/StoreClosedNotice';
+import { StoreInfoCard } from '@/components/StoreInfoCard';
+import { PaymentReturn } from '@/components/PaymentReturn';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useBusinessHours } from '@/hooks/useBusinessHours';
@@ -15,6 +19,8 @@ import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { groupByCategory } from '@/utils/productGrouping';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
+import { clearPendingPaymentOrder, loadPendingPaymentOrder, savePendingPaymentOrder } from '@/utils/pendingPayment';
+import { groupWeeklySchedule } from '@/utils/businessHours';
 import { THEME_OPTIONS, type StoreConfig } from '@/types/storeConfig';
 import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 
@@ -28,9 +34,14 @@ export default function MenuPage() {
   const { user, isCustomer } = useAuth();
   const businessHours = useBusinessHours();
   const storeClosed = businessHours !== null && businessHours.configured && !businessHours.is_open;
+  // Los horarios se cargan solo desde la sección Horarios del panel.
+  const schedule = businessHours?.configured ? groupWeeklySchedule(businessHours.ranges) : [];
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  // Al volver del checkout de MercadoPago la URL trae el pedido y el resultado del pago.
+  const [searchParams, setSearchParams] = useSearchParams();
+  const returningOrderId = searchParams.get('pedido');
 
   const {
     products,
@@ -56,16 +67,21 @@ export default function MenuPage() {
     };
   }, []);
 
+  const showingConfirmation = Boolean(submittedOrder || returningOrderId);
   const productGroups = groupByCategory(products);
   const currentTheme = THEME_OPTIONS[storeConfig?.theme_color || 'black'] || THEME_OPTIONS.black;
 
   const handleOrderCreated = (order: WebOrderCreated, form: CheckoutFormData) => {
+    // Con MercadoPago se sale de la página a pagar: se guarda el pedido para mostrarlo al volver.
+    if (order.payment_url) savePendingPaymentOrder({ order, form });
     setSubmittedOrder({ order, form });
     clearCart();
   };
 
   const handleNewOrder = () => {
+    if (returningOrderId) clearPendingPaymentOrder(returningOrderId);
     setSubmittedOrder(null);
+    setSearchParams({}, { replace: true });
     loadProducts();
   };
 
@@ -77,10 +93,19 @@ export default function MenuPage() {
         themeColor={storeConfig?.theme_color}
         actions={<CustomerAccountActions onLogin={() => setAuthModalMode('login')} />}
       />
-      <main className="flex-1 px-4 py-10">
-        {storeClosed && !submittedOrder && <StoreClosedNotice status={businessHours} />}
+      <main className={`flex-1 px-4 py-6 sm:py-10 ${showingConfirmation ? '' : 'pb-24 lg:pb-10'}`}>
+        {storeClosed && !showingConfirmation && <StoreClosedNotice status={businessHours} />}
         {submittedOrder ? (
           <OrderSuccess order={submittedOrder.order} form={submittedOrder.form} onNewOrder={handleNewOrder} />
+        ) : returningOrderId ? (
+          /* El cliente vuelve del checkout de MercadoPago: se le muestra la confirmación con el estado del pago. */
+          <PaymentReturn
+            orderId={returningOrderId}
+            paymentId={searchParams.get('payment_id')}
+            status={searchParams.get('status') ?? searchParams.get('collection_status')}
+            saved={loadPendingPaymentOrder(returningOrderId)}
+            onNewOrder={handleNewOrder}
+          />
         ) : (
           <div className="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
             <div className="lg:col-span-2 space-y-8">
@@ -91,87 +116,12 @@ export default function MenuPage() {
                 </p>
               </div>
 
-              {(storeConfig?.address || storeConfig?.opening_hours || storeConfig?.contact_phone) && (
-                <section
-                  aria-label="Información de contacto del local"
-                  className="bg-white rounded-2xl shadow-sm border border-gray-100 overflow-hidden"
-                >
-                  <div
-                    className="h-1.5 w-full transition-colors duration-200"
-                    style={{ backgroundColor: currentTheme.hex }}
-                  />
-                  <div className="p-4 sm:p-5">
-                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
-                      {storeConfig.address && (
-                        <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
-                          <div
-                            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
-                            style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" />
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" />
-                            </svg>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                              Dirección
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900 break-words block">
-                              {storeConfig.address}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {storeConfig.opening_hours && (
-                        <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
-                          <div
-                            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
-                            style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
-                            </svg>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                              Horarios
-                            </span>
-                            <span className="text-sm font-semibold text-gray-900 break-words block">
-                              {storeConfig.opening_hours}
-                            </span>
-                          </div>
-                        </div>
-                      )}
-
-                      {storeConfig.contact_phone && (
-                        <div className="flex items-start gap-3 p-3 rounded-xl bg-gray-50/80 border border-gray-100">
-                          <div
-                            className="w-9 h-9 rounded-xl flex items-center justify-center shrink-0 shadow-xs"
-                            style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
-                          >
-                            <svg xmlns="http://www.w3.org/2000/svg" className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" />
-                            </svg>
-                          </div>
-                          <div className="min-w-0">
-                            <span className="block text-[11px] font-bold uppercase tracking-wide text-gray-500">
-                              Teléfonos
-                            </span>
-                            <a
-                              href={`tel:${storeConfig.contact_phone.split('/')[0].trim()}`}
-                              className="text-sm font-bold text-gray-900 hover:underline break-words block"
-                            >
-                              {storeConfig.contact_phone}
-                            </a>
-                          </div>
-                        </div>
-                      )}
-                    </div>
-                  </div>
-                </section>
-              )}
+              <StoreInfoCard
+                address={storeConfig?.address}
+                contactPhone={storeConfig?.contact_phone}
+                schedule={schedule}
+                accentColor={currentTheme.hex}
+              />
 
               {loadingProducts && products.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-12">Cargando menú...</p>
@@ -208,8 +158,10 @@ export default function MenuPage() {
               ))}
             </div>
 
-            <div className="lg:col-span-1">
-              <div className="lg:sticky lg:top-6">
+            <div id="pedido" tabIndex={-1} className="lg:col-span-1 scroll-mt-4 focus:outline-none">
+              {/* En pantallas grandes el panel acompaña al scroll y, si es más alto que la ventana, se desplaza por
+                  dentro (así los datos del pedido y el botón siempre se pueden alcanzar). */}
+              <div className="lg:sticky lg:top-4 lg:max-h-[calc(100dvh-2rem)] lg:overflow-y-auto lg:-m-1 lg:p-1 space-y-4 lg:space-y-5">
                 <CartSummary />
                 {storeClosed ? (
                   <div className="bg-white rounded-2xl shadow-md p-6 mt-6">
@@ -231,6 +183,8 @@ export default function MenuPage() {
           </div>
         )}
       </main>
+
+      {!showingConfirmation && !storeClosed && <MobileCartBar targetId="pedido" />}
 
       {authModalMode && <CustomerAuthModal initialMode={authModalMode} onClose={() => setAuthModalMode(null)} />}
     </div>

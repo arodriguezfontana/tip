@@ -1,6 +1,6 @@
 import hmac
 
-from fastapi import APIRouter, BackgroundTasks, Header, HTTPException, Request
+from fastapi import APIRouter, Header, HTTPException, Request
 
 from app.core.config import settings
 from app.services.telegram_service import TelegramService
@@ -12,7 +12,6 @@ telegram_service = TelegramService()
 @router.post("/webhook")
 async def recibir_mensaje(
     request: Request,
-    background_tasks: BackgroundTasks,
     x_telegram_bot_api_secret_token: str | None = Header(default=None),
 ):
     recibido = x_telegram_bot_api_secret_token or ""
@@ -25,8 +24,7 @@ async def recibir_mensaje(
         chat_id = str(data["message"]["chat"]["id"])
         mensaje_usuario = data["message"]["text"]
 
-        background_tasks.add_task(
-            telegram_service.procesar_y_enviar, chat_id, mensaje_usuario
-        )
+        # Responde 200 enseguida; el mensaje espera un instante por si el cliente manda más (se contestan juntos).
+        telegram_service.recibir_mensaje(chat_id, mensaje_usuario)
 
     return {"status": "ok"}

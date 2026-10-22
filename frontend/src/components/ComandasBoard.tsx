@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ACTIVE_ORDER_STATUSES } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, FINISHED_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
 import { assignDeliveryDriver, fetchOrders, updateOrderPayment, updateOrderStatus } from '@/services/orderService';
@@ -19,6 +19,7 @@ const COLUMN_LABELS: Record<OrderStatus, string> = {
   'Listo para Retirar': 'Listo para Retirar',
   Finalizado: 'Finalizado',
   Rechazado: 'Rechazado',
+  Cancelado: 'Cancelado',
 };
 
 function SpeakerIcon({ muted }: { muted: boolean }) {
@@ -163,7 +164,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const handleStatusChange = async (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => {
     if (isSimulating) {
       setOrders((prev) => {
-        const isTerminal = newStatus === 'Finalizado' || newStatus === 'Rechazado';
+        const isTerminal = FINISHED_ORDER_STATUSES.includes(newStatus);
         if (isTerminal) {
           return prev.filter((order) => order.id !== orderId);
         }
@@ -175,7 +176,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     try {
       const updated = await updateOrderStatus(orderId, newStatus, estimatedMinutes);
       setOrders((prev) => {
-        const isTerminal = updated.status === 'Finalizado' || updated.status === 'Rechazado';
+        const isTerminal = FINISHED_ORDER_STATUSES.includes(updated.status);
         if (isTerminal) {
           return prev.filter((order) => order.id !== orderId);
         }
@@ -400,6 +401,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
           order={detailOrder}
           simulated={isSimulating}
           onMarkPaid={handleMarkPaid}
+          onCancel={(orderId) => handleStatusChange(orderId, 'Cancelado')}
           onClose={closeDetail}
         />
       )}

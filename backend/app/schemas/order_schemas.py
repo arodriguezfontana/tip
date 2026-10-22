@@ -7,6 +7,7 @@ from app.schemas.common import PHONE_PATTERN
 from app.services.order_service import CounterPayment, OrderRequest
 
 MAX_ITEMS_PER_ORDER = 30
+WEB_PAYMENT_METHODS = (PaymentMethod.CASH, PaymentMethod.MERCADOPAGO)
 
 
 class OrderResponse(BaseModel):
@@ -25,8 +26,13 @@ class OrderResponse(BaseModel):
     item_count: int
     delivery_driver_id: int | None = None
     delivery_driver_name: str | None = None
-    payment_method: PaymentMethod | None = None
+    payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
+
+    @model_validator(mode="after")
+    def _web_payment_methods(self) -> "CounterOrderCreate":
+        # En el mostrador el personal puede registrar cualquier medio de pago (o ninguno).
+        return self
 
     @classmethod
     def from_model(cls, order: Order) -> "OrderResponse":
@@ -62,8 +68,8 @@ class WebOrderItemCreate(BaseModel):
     quantity: int = Field(..., ge=1)
 
 
-class WebOrderCreate(BaseModel):
-    """Pedido generado desde la web del cliente. Los precios los calcula el backend."""
+class _OrderCreate(BaseModel):
+    """Datos comunes de un pedido cargado desde la web o el mostrador. Los precios los calcula el backend."""
 
     model_config = ConfigDict(str_strip_whitespace=True)
 
@@ -75,7 +81,7 @@ class WebOrderCreate(BaseModel):
     items: list[WebOrderItemCreate] = Field(..., min_length=1, max_length=MAX_ITEMS_PER_ORDER)
 
     @model_validator(mode="after")
-    def _address_required_for_delivery(self) -> "WebOrderCreate":
+    def _address_required_for_delivery(self) -> "_OrderCreate":
         if self.delivery_method == DeliveryMethod.DELIVERY and not self.shipping_address:
             raise ValueError("La dirección es obligatoria para envíos a domicilio.")
         return self
@@ -91,8 +97,24 @@ class WebOrderCreate(BaseModel):
         )
 
 
-class CounterOrderCreate(WebOrderCreate):
-    """Pedido presencial: además de los datos del pedido web, el personal registra el pago."""
+class WebOrderCreate(_OrderCreate):
+    """Pedido generado desde la web del cliente.
+
+    Solo se ofrece efectivo (al recibir o retirar) o MercadoPago (se paga online al confirmar). Si el pago
+    ya se hizo lo decide el sistema, nunca el cliente: un pedido web siempre arranca sin abonar.
+    """
+
+    payment_method: PaymentMethod = PaymentMethod.CASH
+
+    @model_validator(mode="after")
+    def _web_payment_methods(self) -> "WebOrderCreate":
+        if self.payment_method not in WEB_PAYMENT_METHODS:
+            raise ValueError("En la web se puede pagar solo en efectivo o con MercadoPago.")
+        return self
+
+
+class CounterOrderCreate(_OrderCreate):
+    """Pedido presencial: además de los datos del pedido, el personal registra el pago."""
 
     payment_method: PaymentMethod | None = None
     is_paid: bool = False
@@ -132,9 +154,13 @@ class WebOrderCreatedResponse(BaseModel):
     total_amount: float
     created_at: datetime
     items: list[WebOrderItemResponse]
+    payment_method: str | None = None
+    is_paid: bool = False
+    # Link de Checkout Pro de MercadoPago al que se redirige al cliente para pagar (solo si eligió MercadoPago).
+    payment_url: str | None = None
 
     @classmethod
-    def from_model(cls, order: Order) -> "WebOrderCreatedResponse":
+    def from_model(cls, order: Order, payment_url: str | None = None) -> "WebOrderCreatedResponse":
         return cls(
             id=order.id,
             status=order.status,
@@ -146,6 +172,9 @@ class WebOrderCreatedResponse(BaseModel):
             total_amount=order.total_amount,
             created_at=order.created_at,
             items=[WebOrderItemResponse.from_model(item) for item in order.items],
+            payment_method=order.payment_method,
+            is_paid=bool(order.is_paid),
+            payment_url=payment_url,
         )
 
 

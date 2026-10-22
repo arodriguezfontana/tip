@@ -58,14 +58,15 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
 };
 
-export type LoginBgOption = 'bistro' | 'kitchen' | 'trattoria';
+/** 'custom' = imagen propia subida desde el dispositivo (ver login_bg_image). */
+export type LoginBgOption = 'bistro' | 'kitchen' | 'trattoria' | 'custom';
 
 export interface LoginBgInfo {
   id: LoginBgOption;
   name: string;
 }
 
-export const LOGIN_BG_OPTIONS: Record<LoginBgOption, LoginBgInfo> = {
+export const LOGIN_BG_OPTIONS: Record<Exclude<LoginBgOption, 'custom'>, LoginBgInfo> = {
   bistro: {
     id: 'bistro',
     name: 'Salón',
@@ -84,22 +85,22 @@ export interface StoreConfig {
   id?: number;
   store_name: string;
   address: string | null;
-  opening_hours: string | null;
   contact_phone: string | null;
   logo_url: string | null;
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
+  login_bg_image?: string | null;
   mp_alias?: string | null;
 }
 
 export interface StoreConfigUpdatePayload {
   store_name: string;
   address?: string | null;
-  opening_hours?: string | null;
   contact_phone?: string | null;
   logo_url?: string | null;
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
+  login_bg_image?: string | null;
   mp_alias?: string | null;
 }
 

@@ -7,6 +7,7 @@ import httpx
 
 from app.core.config import settings
 from app.services.chat_service import ChatService
+from app.services.message_batcher import AgrupadorDeMensajes
 
 logger = logging.getLogger(__name__)
 
@@ -96,6 +97,21 @@ async def _mantener_escribiendo(chat_id: int) -> None:
 class TelegramService:
     def __init__(self):
         self.chat_service = ChatService()
+        # Los mensajes seguidos de un mismo chat se responden una sola vez (ver message_batcher).
+        self.agrupador = AgrupadorDeMensajes(
+            procesar=self.procesar_y_enviar,
+            espera_segundos=settings.TELEGRAM_BATCH_WINDOW_SECONDS,
+            espera_maxima_segundos=settings.TELEGRAM_BATCH_MAX_WAIT_SECONDS,
+            al_empezar=self._avisar_que_escribe,
+        )
+
+    def recibir_mensaje(self, chat_id: str, mensaje: str) -> None:
+        """Punto de entrada del webhook: encola el mensaje; la respuesta sale cuando el cliente deja de escribir."""
+        self.agrupador.recibir(chat_id, mensaje)
+
+    async def _avisar_que_escribe(self, chat_id: str) -> None:
+        # Un solo aviso apenas llega el primer mensaje cubre la espera (dura 5 s); después lo renueva procesar_y_enviar.
+        await send_typing_action(int(chat_id))
 
     async def enviar_mensaje(self, chat_id: int, texto: str):
         """Envía la respuesta de la IA de vuelta a Telegram."""

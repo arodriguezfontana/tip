@@ -8,7 +8,6 @@ from app.schemas.store_config_schemas import StoreConfigUpdate
 DEFAULT_STORE_CONFIG = {
     "store_name": "RestoIT",
     "address": "Av. Corrientes 1234, CABA",
-    "opening_hours": "Martes a Domingo: 19:30 a 00:00",
     "contact_phone": "11 4444-5555",
     "theme_color": "black",
     "login_bg": "bistro",
@@ -33,13 +32,13 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
         config = get_or_create_store_config(db)
         config.store_name = data.store_name
         config.address = data.address
-        config.opening_hours = data.opening_hours
         config.contact_phone = data.contact_phone
         config.logo_url = data.logo_url
         config.theme_color = data.theme_color
         config.mp_alias = data.mp_alias
         if data.login_bg:
             config.login_bg = data.login_bg
+        config.login_bg_image = data.login_bg_image
     db.refresh(config)
     return config
 

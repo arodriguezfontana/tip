@@ -1,4 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { groupWeeklySchedule, summarizeWeeklySchedule } from '@/utils/businessHours';
 import { formatCurrency } from '@/utils/currency';
 import { PHONE_PATTERN, validateCustomerData } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
@@ -148,3 +149,49 @@ describe('groupByCategory', () => {
     ]);
   });
 });
+
+describe('summarizeWeeklySchedule', () => {
+  const range = (day_of_week: number, opens_at: string, closes_at: string) => ({ day_of_week, opens_at, closes_at });
+
+  it('agrupa los días seguidos con el mismo horario y omite los cerrados', () => {
+    const ranges = [1, 2, 3, 4, 5, 6].map((day) => range(day, '19:30', '00:00'));
+    expect(summarizeWeeklySchedule(ranges)).toBe('Martes a Domingo: 19:30 a 00:00');
+  });
+
+  it('separa los días con horarios distintos', () => {
+    const ranges = [range(0, '12:00', '15:00'), range(0, '20:00', '00:00'), range(1, '20:00', '00:00'), range(4, '20:00', '00:00')];
+    expect(summarizeWeeklySchedule(ranges)).toBe(
+      'Lunes: 12:00 a 15:00 y 20:00 a 00:00 · Martes: 20:00 a 00:00 · Viernes: 20:00 a 00:00'
+    );
+  });
+
+  it('devuelve null si no hay franjas', () => {
+    expect(summarizeWeeklySchedule([])).toBeNull();
+  });
+});
+
+describe('groupWeeklySchedule', () => {
+  const range = (day_of_week: number, opens_at: string, closes_at: string) => ({ day_of_week, opens_at, closes_at });
+
+  it('devuelve una entrada por grupo de días, con una franja por línea', () => {
+    const ranges = [0, 1, 2].flatMap((day) => [range(day, '11:00', '15:00'), range(day, '19:00', '23:59')]);
+    ranges.push(range(6, '19:00', '23:59'));
+
+    expect(groupWeeklySchedule(ranges)).toEqual([
+      { label: 'Lunes a Miércoles', ranges: ['11:00 a 15:00', '19:00 a 23:59'] },
+      { label: 'Domingo', ranges: ['19:00 a 23:59'] },
+    ]);
+  });
+
+  it('no agrupa días separados por un día cerrado', () => {
+    expect(groupWeeklySchedule([range(0, '20:00', '00:00'), range(2, '20:00', '00:00')]).map((g) => g.label)).toEqual([
+      'Lunes',
+      'Miércoles',
+    ]);
+  });
+
+  it('devuelve una lista vacía si no hay franjas', () => {
+    expect(groupWeeklySchedule([])).toEqual([]);
+  });
+});
+

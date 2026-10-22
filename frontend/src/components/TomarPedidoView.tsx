@@ -5,7 +5,7 @@ import { lookupClientByPhone } from '@/services/clientService';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { createCounterOrder } from '@/services/orderService';
 import type { Client } from '@/types/client';
-import { MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
+import { COUNTER_PAYMENT_METHODS, MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { groupByCategory } from '@/utils/productGrouping';
@@ -515,7 +515,7 @@ export function TomarPedidoView() {
 
           <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-3">
             <div className="flex flex-1 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
-              {(Object.keys(PAYMENT_METHOD_LABEL) as PaymentMethod[]).map((method) => (
+              {COUNTER_PAYMENT_METHODS.map((method) => (
                 <button
                   key={method}
                   type="button"

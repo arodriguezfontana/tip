@@ -220,7 +220,6 @@ def seed_store_config(db: Session) -> StoreConfig:
         defaults={
             "store_name": "RestoIT",
             "address": "Av. Corrientes 1234, CABA",
-            "opening_hours": "Martes a Domingo: 19:30 a 00:00",
             "contact_phone": "11 4444-5555",
             "logo_url": None,
             "theme_color": "black",

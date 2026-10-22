@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { FormEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { INPUT_CLASS } from '@/styles/forms';
 import type { AdminProduct } from '@/types/catalog';
 import type { Ingredient, RecipeItemPayload } from '@/types/ingredient';
@@ -90,21 +91,16 @@ export function RecipeEditModal({ product, ingredients, onClose, onSave }: Recip
               const unit = row.ingredientId !== null ? ingredientsById.get(row.ingredientId)?.unit : null;
               return (
                 <div key={row.key} className="flex items-center gap-2">
-                  <select
-                    aria-label={`Ingrediente ${index + 1}`}
-                    value={row.ingredientId ?? ''}
-                    onChange={(e) => updateRow(row.key, { ingredientId: e.target.value ? Number(e.target.value) : null })}
-                    className={`${INPUT_CLASS} flex-1 min-w-0 bg-white`}
-                  >
-                    <option value="">Elegí un ingrediente</option>
-                    {ingredients
+                  <SearchableSelect
+                    ariaLabel={`Ingrediente ${index + 1}`}
+                    placeholder="Buscá un ingrediente"
+                    value={row.ingredientId}
+                    onChange={(ingredientId) => updateRow(row.key, { ingredientId })}
+                    options={ingredients
                       .filter((ingredient) => !usedByOtherRows.has(ingredient.id))
-                      .map((ingredient) => (
-                        <option key={ingredient.id} value={ingredient.id}>
-                          {ingredient.name}
-                        </option>
-                      ))}
-                  </select>
+                      .map((ingredient) => ({ value: ingredient.id, label: ingredient.name }))}
+                    className="flex-1 min-w-0"
+                  />
                   <input
                     type="text"
                     inputMode="decimal"

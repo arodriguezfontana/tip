@@ -30,6 +30,8 @@ class OrderStatus(_StrEnum):
     READY_FOR_PICKUP = "Listo para Retirar"
     COMPLETED = "Finalizado"
     REJECTED = "Rechazado"
+    # El local da de baja un pedido ya aceptado (o todavía sin responder) antes de entregarlo.
+    CANCELLED = "Cancelado"
 
 
 class DeliveryMethod(_StrEnum):
@@ -48,6 +50,10 @@ class PaymentMethod(_StrEnum):
     TRANSFER = "transferencia"
     CARD = "tarjeta"
     MERCADOPAGO = "mercadopago"
+
+
+# Estados en los que el pedido no se llegó a vender: no suman a las ventas ni a las estadísticas.
+_NOT_BILLABLE_STATUSES = (OrderStatus.REJECTED, OrderStatus.CANCELLED)
 
 
 def _values(enum: type[Enum]) -> tuple[str, ...]:
@@ -83,13 +89,15 @@ class Order(Base):
     )
 
     # Ciclo de vida del pedido: a qué estados puede pasar desde cada uno.
+    # Cualquier pedido que todavía no terminó se puede cancelar.
     ALLOWED_TRANSITIONS: ClassVar[dict[OrderStatus, frozenset[OrderStatus]]] = {
-        OrderStatus.PENDING: frozenset({OrderStatus.CONFIRMED, OrderStatus.REJECTED}),
-        OrderStatus.CONFIRMED: frozenset({OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP}),
-        OrderStatus.ON_THE_WAY: frozenset({OrderStatus.COMPLETED}),
-        OrderStatus.READY_FOR_PICKUP: frozenset({OrderStatus.COMPLETED}),
+        OrderStatus.PENDING: frozenset({OrderStatus.CONFIRMED, OrderStatus.REJECTED, OrderStatus.CANCELLED}),
+        OrderStatus.CONFIRMED: frozenset({OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED}),
+        OrderStatus.ON_THE_WAY: frozenset({OrderStatus.COMPLETED, OrderStatus.CANCELLED}),
+        OrderStatus.READY_FOR_PICKUP: frozenset({OrderStatus.COMPLETED, OrderStatus.CANCELLED}),
         OrderStatus.COMPLETED: frozenset(),
         OrderStatus.REJECTED: frozenset(),
+        OrderStatus.CANCELLED: frozenset(),
     }
 
     id = Column(Integer, primary_key=True, index=True)
@@ -174,13 +182,13 @@ class Order(Base):
 
     @hybrid_property
     def is_billable(self) -> bool:
-        """Cuenta como venta: todos los pedidos menos los rechazados."""
-        return self.status != OrderStatus.REJECTED
+        """Cuenta como venta: todos los pedidos menos los rechazados y los cancelados."""
+        return self.status not in _NOT_BILLABLE_STATUSES
 
     @is_billable.inplace.expression
     @classmethod
     def _is_billable_expression(cls):
-        return cls.status != OrderStatus.REJECTED.value
+        return cls.status.notin_([status.value for status in _NOT_BILLABLE_STATUSES])
 
     # --- Estado -------------------------------------------------------------------------------------
 

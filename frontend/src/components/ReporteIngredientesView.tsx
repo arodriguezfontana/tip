@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
+import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { fetchIngredientConsumption, fetchIngredients } from '@/services/ingredientService';
 import type { Ingredient } from '@/types/ingredient';
@@ -70,19 +71,14 @@ export function ReporteIngredientesView() {
           >
             Ingrediente
           </label>
-          <select
+          <SearchableSelect
             id="ingredient-filter"
-            value={ingredientId ?? ''}
-            onChange={(e) => setIngredientId(e.target.value ? Number(e.target.value) : null)}
-            className="w-full sm:w-56 rounded-xl border border-gray-300 bg-white px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-          >
-            <option value="">Todos los ingredientes</option>
-            {ingredients.map((ingredient) => (
-              <option key={ingredient.id} value={ingredient.id}>
-                {ingredient.name}
-              </option>
-            ))}
-          </select>
+            emptyLabel="Todos los ingredientes"
+            value={ingredientId}
+            onChange={setIngredientId}
+            options={ingredients.map((ingredient) => ({ value: ingredient.id, label: ingredient.name }))}
+            className="w-full sm:w-56"
+          />
         </div>
       </div>
 
@@ -97,13 +93,6 @@ export function ReporteIngredientesView() {
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Pedidos finalizados</p>
               <p className="text-2xl font-bold text-gray-900 mt-1">{report.completed_orders}</p>
             </div>
-
-            {report.products_without_recipe.length > 0 && (
-              <div className="shrink-0 rounded-xl bg-amber-50 border border-amber-200 text-amber-800 px-4 py-3 text-sm">
-                Estos productos se vendieron pero no tienen receta, así que su consumo no está incluido:{' '}
-                {report.products_without_recipe.join(', ')}.
-              </div>
-            )}
 
             {report.items.length === 0 ? (
               <p className="text-sm text-gray-500 text-center py-8">

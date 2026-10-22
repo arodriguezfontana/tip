@@ -1,6 +1,7 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
-import type { AdminOrder, OrderStatus } from '@/types/order';
+import { PAYMENT_METHOD_LABEL } from '@/types/order';
+import type { AdminOrder, OrderStatus, PaymentMethod } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
@@ -16,6 +17,13 @@ const DELAY_BADGE_CLASS: Record<DelayLevel, string> = {
   'on-time': 'bg-green-100 text-green-700',
   warning: 'bg-amber-100 text-amber-800',
   late: 'bg-red-100 text-red-700',
+};
+
+const PAYMENT_METHOD_ICON: Record<PaymentMethod, string> = {
+  efectivo: '💵',
+  mercadopago: '💳',
+  transferencia: '🏦',
+  tarjeta: '💳',
 };
 
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
@@ -50,9 +58,12 @@ export function ComandaCard({
   onOpenDetail,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
+  const [markingPaid, setMarkingPaid] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
+  // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
+  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
   const delayLevel = getDelayLevel(order, new Date(order.created_at).getTime() + elapsedMs);
@@ -77,7 +88,7 @@ export function ComandaCard({
   return (
     <div
       onClick={onOpenDetail ? () => onOpenDetail(order) : undefined}
-      className={`bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
+      className={`@container bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
@@ -114,16 +125,70 @@ export function ComandaCard({
           <p className="font-medium text-gray-900">{order.customer_name}</p>
           <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
           <p className="text-xs text-gray-500">Tel: {order.customer_phone || '—'}</p>
-          {order.delivery_driver_name && (
-            <p className="text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
-              <span>🛵 Repartidor:</span>
-              <span className="font-bold">{order.delivery_driver_name}</span>
-            </p>
-          )}
           <p className={`text-xs break-words ${order.notes ? 'text-gray-600 italic' : 'text-gray-400'}`}>
             {order.notes ? `“${order.notes}”` : 'Sin observaciones'}
           </p>
         </div>
+
+        {canAssignDriver ? (
+          /* Cartel que al tocarlo deja elegir el repartidor: un selector nativo transparente encima del texto. */
+          <div
+            onClick={stopPropagation}
+            className={`relative self-start text-xs font-semibold rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5 transition focus-within:ring-2 focus-within:ring-black ${
+              order.delivery_driver_name
+                ? 'text-blue-800 bg-blue-50 border border-blue-200/60 hover:bg-blue-100'
+                : 'text-blue-700 bg-white border border-dashed border-blue-300 hover:bg-blue-50'
+            } ${pending ? 'opacity-60' : ''}`}
+          >
+            <span aria-hidden="true">🛵</span>
+            {order.delivery_driver_name ? (
+              <>
+                <span>Repartidor:</span>
+                <span className="font-bold">{order.delivery_driver_name}</span>
+              </>
+            ) : (
+              <span>Asignar repartidor</span>
+            )}
+            <span aria-hidden="true" className="text-[10px] opacity-70">
+              ▾
+            </span>
+            <select
+              aria-label={order.delivery_driver_name ? 'Cambiar repartidor' : 'Asignar repartidor'}
+              value={order.delivery_driver_id ?? ''}
+              disabled={pending}
+              onChange={async (e) => {
+                const val = e.target.value;
+                setPending(true);
+                try {
+                  await onAssignDriver?.(order.id, val ? Number(val) : null);
+                } finally {
+                  setPending(false);
+                }
+              }}
+              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
+            >
+              <option value="" disabled={!order.delivery_driver_name}>
+                {order.delivery_driver_name ? 'Quitar asignación' : 'Elegí un repartidor'}
+              </option>
+              {/* Si el repartidor asignado ya no está activo igual se muestra como el elegido. */}
+              {order.delivery_driver_id != null && !activeDrivers.some((d) => d.id === order.delivery_driver_id) && (
+                <option value={order.delivery_driver_id}>{order.delivery_driver_name}</option>
+              )}
+              {activeDrivers.map((driver) => (
+                <option key={driver.id} value={driver.id}>
+                  {driver.name} ({driver.phone})
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : (
+          order.delivery_driver_name && (
+            <p className="self-start text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
+              <span>🛵 Repartidor:</span>
+              <span className="font-bold">{order.delivery_driver_name}</span>
+            </p>
+          )
+        )}
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {order.scheduled_for ? (
@@ -138,31 +203,52 @@ export function ComandaCard({
             )
           )}
 
+          <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
+        </div>
+
+        {/* Medio de pago y si ya está abonado; si está pendiente, un clic lo marca como abonado. */}
+        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
+          <span className="bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1">
+            {order.payment_method ? (
+              <>
+                <span aria-hidden="true" className="@max-[205px]:hidden">
+                  {PAYMENT_METHOD_ICON[order.payment_method]}
+                </span>
+                {PAYMENT_METHOD_LABEL[order.payment_method]}
+              </>
+            ) : (
+              'Medio de pago sin definir'
+            )}
+          </span>
+
           {order.is_paid ? (
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2.5 py-1 rounded-xl font-semibold">
+            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
               Abonado
             </span>
-          ) : order.payment_method === 'mercadopago' ? (
-            onMarkPaid ? (
-              <button
-                type="button"
-                onClick={async (e) => {
-                  e.stopPropagation();
+          ) : onMarkPaid ? (
+            <button
+              type="button"
+              disabled={markingPaid}
+              onClick={async (e) => {
+                e.stopPropagation();
+                setMarkingPaid(true);
+                try {
                   await onMarkPaid(order.id, true);
-                }}
-                title="Hacé clic para marcar como abonado"
-                className="bg-sky-50 hover:bg-sky-100 text-sky-700 border border-sky-200 hover:border-sky-300 px-2.5 py-1 rounded-xl font-semibold transition cursor-pointer"
-              >
-                MP Pendiente · Marcar abonado
-              </button>
-            ) : (
-              <span className="bg-sky-50 text-sky-700 border border-sky-200 px-2.5 py-1 rounded-xl font-semibold">
-                MP Pendiente
-              </span>
-            )
-          ) : null}
-
-          <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
+                } finally {
+                  setMarkingPaid(false);
+                }
+              }}
+              title="Hacé clic para marcar como abonado"
+              aria-label="Pago pendiente: marcar como abonado"
+              className="bg-amber-50 hover:bg-amber-100 disabled:opacity-60 text-amber-800 border border-amber-200 hover:border-amber-300 px-2 py-1 rounded-xl font-semibold whitespace-nowrap transition cursor-pointer"
+            >
+              Pago Pendiente
+            </button>
+          ) : (
+            <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+              Pago Pendiente
+            </span>
+          )}
         </div>
 
         {order.status === 'Pendiente' && (
@@ -212,39 +298,6 @@ export function ComandaCard({
             >
               {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
             </button>
-          </div>
-        )}
-
-        {order.status === 'En Camino' && order.delivery_method === 'domicilio' && (
-          <div className="pt-2 border-t border-gray-50 space-y-1.5" onClick={stopPropagation}>
-            <label htmlFor={`assign-driver-${order.id}`} className="block text-[11px] font-bold text-gray-700">
-              {order.delivery_driver_name ? 'Reasignar repartidor:' : 'Asignar repartidor:'}
-            </label>
-            <select
-              id={`assign-driver-${order.id}`}
-              aria-label="Asignar repartidor"
-              value={order.delivery_driver_id ?? ''}
-              disabled={pending}
-              onChange={async (e) => {
-                const val = e.target.value;
-                setPending(true);
-                try {
-                  await onAssignDriver?.(order.id, val ? Number(val) : null);
-                } finally {
-                  setPending(false);
-                }
-              }}
-              className="w-full rounded-xl border border-gray-200 px-3 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
-            >
-              <option value="">
-                {order.delivery_driver_name ? '-- Quitar asignación --' : '-- Seleccionar repartidor --'}
-              </option>
-              {activeDrivers.map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name} ({driver.phone})
-                </option>
-              ))}
-            </select>
           </div>
         )}
 
