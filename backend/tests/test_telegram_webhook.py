@@ -1,4 +1,4 @@
-from unittest.mock import AsyncMock, patch
+from unittest.mock import patch
 
 import pytest
 
@@ -18,9 +18,7 @@ def _headers_de_telegram() -> dict:
 
 @pytest.fixture()
 def procesar():
-    with patch(
-        "app.api.telegram_router.telegram_service.procesar_y_enviar", new_callable=AsyncMock
-    ) as mock:
+    with patch("app.api.telegram_router.telegram_service.recibir_mensaje") as mock:
         yield mock
 
 
@@ -30,14 +28,14 @@ def secreto(monkeypatch):
     return "secreto-del-webhook"
 
 
-def test_mensaje_de_texto_se_procesa_en_segundo_plano(public_client, procesar):
+def test_mensaje_de_texto_se_encola_para_responderlo(public_client, procesar):
     response = public_client.post(
         WEBHOOK_URL, json=_update("Quiero una muzza", chat_id=98765), headers=_headers_de_telegram()
     )
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    procesar.assert_awaited_once_with("98765", "Quiero una muzza")
+    procesar.assert_called_once_with("98765", "Quiero una muzza")
 
 
 @pytest.mark.parametrize(
@@ -53,7 +51,7 @@ def test_actualizaciones_sin_texto_se_ignoran_pero_se_confirman(public_client, p
     response = public_client.post(WEBHOOK_URL, json=update, headers=_headers_de_telegram())
 
     assert response.status_code == 200
-    procesar.assert_not_awaited()
+    procesar.assert_not_called()
 
 
 def test_sin_secreto_configurado_igual_exige_uno_derivado_del_token(public_client, procesar, monkeypatch):
@@ -62,14 +60,14 @@ def test_sin_secreto_configurado_igual_exige_uno_derivado_del_token(public_clien
     assert public_client.post(WEBHOOK_URL, json=_update()).status_code == 403
     assert settings.telegram_webhook_secret not in ("", settings.TELEGRAM_TOKEN)
     assert public_client.post(WEBHOOK_URL, json=_update(), headers=_headers_de_telegram()).status_code == 200
-    procesar.assert_awaited_once()
+    procesar.assert_called_once()
 
 
 def test_con_secreto_configurado_rechaza_pedidos_sin_el_header(public_client, procesar, secreto):
     response = public_client.post(WEBHOOK_URL, json=_update())
 
     assert response.status_code == 403
-    procesar.assert_not_awaited()
+    procesar.assert_not_called()
 
 
 def test_con_secreto_configurado_rechaza_un_header_incorrecto(public_client, procesar, secreto):
@@ -78,7 +76,7 @@ def test_con_secreto_configurado_rechaza_un_header_incorrecto(public_client, pro
     )
 
     assert response.status_code == 403
-    procesar.assert_not_awaited()
+    procesar.assert_not_called()
 
 
 def test_con_secreto_configurado_acepta_el_header_correcto(public_client, procesar, secreto):
@@ -87,4 +85,4 @@ def test_con_secreto_configurado_acepta_el_header_correcto(public_client, proces
     )
 
     assert response.status_code == 200
-    procesar.assert_awaited_once()
+    procesar.assert_called_once()
