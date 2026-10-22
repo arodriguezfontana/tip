@@ -1,5 +1,5 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { summarizeWeeklySchedule } from '@/utils/businessHours';
+import { groupWeeklySchedule, summarizeWeeklySchedule } from '@/utils/businessHours';
 import { formatCurrency } from '@/utils/currency';
 import { PHONE_PATTERN, validateCustomerData } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
@@ -169,3 +169,29 @@ describe('summarizeWeeklySchedule', () => {
     expect(summarizeWeeklySchedule([])).toBeNull();
   });
 });
+
+describe('groupWeeklySchedule', () => {
+  const range = (day_of_week: number, opens_at: string, closes_at: string) => ({ day_of_week, opens_at, closes_at });
+
+  it('devuelve una entrada por grupo de días, con una franja por línea', () => {
+    const ranges = [0, 1, 2].flatMap((day) => [range(day, '11:00', '15:00'), range(day, '19:00', '23:59')]);
+    ranges.push(range(6, '19:00', '23:59'));
+
+    expect(groupWeeklySchedule(ranges)).toEqual([
+      { label: 'Lunes a Miércoles', ranges: ['11:00 a 15:00', '19:00 a 23:59'] },
+      { label: 'Domingo', ranges: ['19:00 a 23:59'] },
+    ]);
+  });
+
+  it('no agrupa días separados por un día cerrado', () => {
+    expect(groupWeeklySchedule([range(0, '20:00', '00:00'), range(2, '20:00', '00:00')]).map((g) => g.label)).toEqual([
+      'Lunes',
+      'Miércoles',
+    ]);
+  });
+
+  it('devuelve una lista vacía si no hay franjas', () => {
+    expect(groupWeeklySchedule([])).toEqual([]);
+  });
+});
+

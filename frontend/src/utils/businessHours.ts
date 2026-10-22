@@ -26,13 +26,20 @@ export function describeDayRanges(ranges: BusinessHoursRange[]): string {
   return ranges.map((range) => `${range.opens_at} a ${range.closes_at}`).join(' y ');
 }
 
+export interface ScheduleGroup {
+  /** "Lunes", o "Lunes a Sábado" si son varios días seguidos con el mismo horario. */
+  label: string;
+  /** Una entrada por franja: "12:00 a 15:00", "20:00 a 00:00". */
+  ranges: string[];
+}
+
 /**
- * Resumen de la semana en una línea, agrupando los días seguidos que tienen el mismo horario:
- * "Martes a Domingo: 19:30 a 00:00". Null si no hay franjas cargadas.
+ * Los horarios de la semana listos para mostrar: agrupa los días seguidos que tienen el mismo horario y
+ * omite los días cerrados. Vacío si no hay franjas cargadas.
  */
-export function summarizeWeeklySchedule(ranges: BusinessHoursRange[]): string | null {
+export function groupWeeklySchedule(ranges: BusinessHoursRange[]): ScheduleGroup[] {
   const days = groupRangesByDay(ranges);
-  const parts: string[] = [];
+  const groups: ScheduleGroup[] = [];
   let start = 0;
   while (start < days.length) {
     if (days[start].ranges.length === 0) {
@@ -44,9 +51,17 @@ export function summarizeWeeklySchedule(ranges: BusinessHoursRange[]): string | 
     while (end + 1 < days.length && days[end + 1].ranges.length > 0 && describeDayRanges(days[end + 1].ranges) === description) {
       end++;
     }
-    const label = start === end ? days[start].name : `${days[start].name} a ${days[end].name}`;
-    parts.push(`${label}: ${description}`);
+    groups.push({
+      label: start === end ? days[start].name : `${days[start].name} a ${days[end].name}`,
+      ranges: days[start].ranges.map((range) => `${range.opens_at} a ${range.closes_at}`),
+    });
     start = end + 1;
   }
-  return parts.length > 0 ? parts.join(' · ') : null;
+  return groups;
+}
+
+/** Resumen de la semana en una línea: "Martes a Domingo: 19:30 a 00:00". Null si no hay franjas cargadas. */
+export function summarizeWeeklySchedule(ranges: BusinessHoursRange[]): string | null {
+  const groups = groupWeeklySchedule(ranges);
+  return groups.length > 0 ? groups.map((group) => `${group.label}: ${group.ranges.join(' y ')}`).join(' · ') : null;
 }

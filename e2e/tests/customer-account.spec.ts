@@ -30,7 +30,7 @@ test.describe('Cuenta de cliente en la web', () => {
     await expect(page.getByLabel('Teléfono')).toHaveValue('11 5555-1234');
     await expect(page.getByLabel('Dirección')).toHaveValue('Calle Falsa 123');
     await page.getByRole('button', { name: 'Confirmar pedido' }).click();
-    await expect(page.getByText(/¡Recibimos tu pedido!/)).toBeVisible();
+    await expect(page.getByText(/¡Recibimos tu pedido/)).toBeVisible();
     await expect(page.getByText('Calle Falsa 123')).toBeVisible();
 
     // Edita su perfil.

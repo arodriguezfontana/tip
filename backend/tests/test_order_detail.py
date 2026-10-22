@@ -84,5 +84,6 @@ def test_pedido_web_ignora_datos_de_pago_enviados_por_el_cliente(client, db_sess
 
     assert response.status_code == 201
     order = db_session.query(Order).one()
+    # El medio elegido se registra, pero el pedido arranca sin abonar aunque el cliente diga lo contrario.
     assert order.is_paid is False
-    assert order.payment_method is None
+    assert order.payment_method == "efectivo"

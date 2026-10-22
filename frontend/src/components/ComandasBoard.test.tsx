@@ -150,6 +150,22 @@ describe('ComandasBoard', () => {
     expect(service.fetchOrderDetail).toHaveBeenCalledWith(3, expect.any(AbortSignal));
   });
 
+  it('cancela un pedido desde su detalle: sale del tablero y la ventana se cierra', async () => {
+    service.updateOrderStatus.mockResolvedValue(makeOrder({ id: 3, status: 'Cancelado' }));
+    render(<ComandasBoard />);
+    const user = userEvent.setup();
+    await screen.findByText('Ya Confirmado');
+
+    await user.click(screen.getByRole('button', { name: 'Ver detalle del pedido #3' }));
+    const dialog = await screen.findByRole('dialog', { name: 'Pedido #3' });
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar pedido' }));
+    await user.click(within(dialog).getByRole('button', { name: 'Sí, cancelar' }));
+
+    expect(service.updateOrderStatus).toHaveBeenCalledWith(3, 'Cancelado', undefined);
+    await waitFor(() => expect(screen.queryByRole('dialog')).not.toBeInTheDocument());
+    expect(screen.queryByText('Ya Confirmado')).not.toBeInTheDocument();
+  });
+
   it('el modo simulación carga pedidos de prueba sin llamar a la API', async () => {
     render(<ComandasBoard />);
     const user = userEvent.setup();

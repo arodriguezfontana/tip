@@ -23,6 +23,7 @@ class OrderSnapshot:
     telegram_chat_id: str | None
     estimated_minutes: int | None
     scheduled_for: datetime | None
+    is_paid: bool = False
 
     @classmethod
     def of(cls, order: Order) -> "OrderSnapshot":
@@ -31,6 +32,7 @@ class OrderSnapshot:
             telegram_chat_id=order.telegram_chat_id,
             estimated_minutes=order.estimated_minutes,
             scheduled_for=order.scheduled_for,
+            is_paid=bool(order.is_paid),
         )
 
 
@@ -51,6 +53,13 @@ def build_status_message(order: Order | OrderSnapshot, new_status: str) -> str |
         )
     if new_status == OrderStatus.REJECTED:
         return "Lamentablemente tu pedido fue rechazado. Contactanos si tenés dudas."
+    if new_status == OrderStatus.CANCELLED:
+        mensaje = f"Lamentablemente tuvimos que cancelar tu pedido #{order.id}. ❌ Disculpá las molestias."
+        if order.is_paid:
+            mensaje += "\nComo ya lo habías abonado, comunicate con el local para coordinar el reintegro."
+        else:
+            mensaje += "\nSi tenés dudas, contactanos."
+        return mensaje
     if new_status == OrderStatus.ON_THE_WAY:
         return "¡Tu pedido ya está en camino! 🛵 En breve lo vas a recibir."
     if new_status == OrderStatus.READY_FOR_PICKUP:

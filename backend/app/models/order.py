@@ -30,6 +30,8 @@ class OrderStatus(_StrEnum):
     READY_FOR_PICKUP = "Listo para Retirar"
     COMPLETED = "Finalizado"
     REJECTED = "Rechazado"
+    # El local da de baja un pedido ya aceptado (o todavía sin responder) antes de entregarlo.
+    CANCELLED = "Cancelado"
 
 
 class DeliveryMethod(_StrEnum):
@@ -83,13 +85,15 @@ class Order(Base):
     )
 
     # Ciclo de vida del pedido: a qué estados puede pasar desde cada uno.
+    # Cualquier pedido que todavía no terminó se puede cancelar.
     ALLOWED_TRANSITIONS: ClassVar[dict[OrderStatus, frozenset[OrderStatus]]] = {
-        OrderStatus.PENDING: frozenset({OrderStatus.CONFIRMED, OrderStatus.REJECTED}),
-        OrderStatus.CONFIRMED: frozenset({OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP}),
-        OrderStatus.ON_THE_WAY: frozenset({OrderStatus.COMPLETED}),
-        OrderStatus.READY_FOR_PICKUP: frozenset({OrderStatus.COMPLETED}),
+        OrderStatus.PENDING: frozenset({OrderStatus.CONFIRMED, OrderStatus.REJECTED, OrderStatus.CANCELLED}),
+        OrderStatus.CONFIRMED: frozenset({OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP, OrderStatus.CANCELLED}),
+        OrderStatus.ON_THE_WAY: frozenset({OrderStatus.COMPLETED, OrderStatus.CANCELLED}),
+        OrderStatus.READY_FOR_PICKUP: frozenset({OrderStatus.COMPLETED, OrderStatus.CANCELLED}),
         OrderStatus.COMPLETED: frozenset(),
         OrderStatus.REJECTED: frozenset(),
+        OrderStatus.CANCELLED: frozenset(),
     }
 
     id = Column(Integer, primary_key=True, index=True)

@@ -1,3 +1,5 @@
+from unittest.mock import patch
+
 import pytest
 
 from app.models.order import Order, OrderItem
@@ -18,7 +20,7 @@ def _payload(items, **overrides):
     return payload
 
 
-def test_crea_pedido_web_y_lo_persiste_como_los_del_bot(public_client, db_session, products):
+def test_crea_pedido_web_aceptado_automaticamente(public_client, db_session, products):
     items = [
         {"product_id": products["muzza"].id, "quantity": 2},
         {"product_id": products["coca"].id, "quantity": 1},
@@ -28,12 +30,14 @@ def test_crea_pedido_web_y_lo_persiste_como_los_del_bot(public_client, db_sessio
 
     assert response.status_code == 201
     body = response.json()
-    assert body["status"] == "Pendiente"
+    # Los pedidos web no pasan por aceptar/rechazar: entran confirmados con la demora estimada.
+    assert body["status"] == "Confirmado"
     assert body["total_amount"] == 2 * 8500.0 + 2500.0
 
     order = db_session.query(Order).filter(Order.id == body["id"]).one()
     assert order.source == "web"
-    assert order.status == "Pendiente"
+    assert order.status == "Confirmado"
+    assert order.estimated_minutes == 15
     assert order.customer_phone == "+54 11 5555-1234"
     assert order.notes == "Tocar timbre 2B"
     assert order.shipping_address == "Calle Falsa 123"
@@ -47,7 +51,7 @@ def test_pedido_web_aparece_en_el_listado_del_dashboard(public_client, client, p
     response = public_client.post(WEB_ORDERS_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}]))
     assert response.status_code == 201
 
-    listado = client.get("/api/v1/orders", params={"status": ["Pendiente"]})
+    listado = client.get("/api/v1/orders", params={"status": ["Confirmado"]})
 
     assert listado.status_code == 200
     pedidos = listado.json()
@@ -172,3 +176,54 @@ def test_menu_publico_solo_devuelve_productos_disponibles(public_client, product
     nombres = {p["name"] for p in response.json()}
     assert nombres == {"Pizza Muzzarella", "Coca-Cola 500ml"}
     assert response.json()[0]["category"]["name"] == "Pizzas"
+
+
+def test_pedido_web_en_efectivo_queda_pendiente_de_pago_sin_link(public_client, db_session, products):
+    response = public_client.post(WEB_ORDERS_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}]))
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["payment_method"] == "efectivo"
+    assert body["is_paid"] is False
+    assert body["payment_url"] is None
+
+
+def test_pedido_web_con_mercadopago_devuelve_link_de_pago_por_el_total(public_client, db_session, products):
+    items = [{"product_id": products["muzza"].id, "quantity": 2}]
+    with patch(
+        "app.api.order_router.start_web_payment", return_value="https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=abc"
+    ) as start:
+        response = public_client.post(WEB_ORDERS_URL, json=_payload(items, payment_method="mercadopago"))
+
+    assert response.status_code == 201
+    body = response.json()
+    assert body["payment_url"] == "https://www.mercadopago.com.ar/checkout/v1/redirect?pref_id=abc"
+    assert body["payment_method"] == "mercadopago"
+    assert body["is_paid"] is False
+    assert body["status"] == "Confirmado"
+
+    order = db_session.query(Order).filter(Order.id == body["id"]).one()
+    assert order.payment_method == "mercadopago"
+    assert order.is_paid is False
+    assert start.call_args.args[1].id == order.id
+
+
+def test_pedido_web_con_mercadopago_guarda_la_preferencia(public_client, db_session, products):
+    response = public_client.post(
+        WEB_ORDERS_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}], payment_method="mercadopago")
+    )
+
+    body = response.json()
+    order = db_session.query(Order).filter(Order.id == body["id"]).one()
+    # Sin credenciales (tests/desarrollo) se usa la preferencia simulada.
+    assert order.mp_preference_id == f"mp-pref-{order.id}"
+    assert body["payment_url"].endswith(order.mp_preference_id)
+
+
+@pytest.mark.parametrize("payment_method", ["tarjeta", "transferencia"])
+def test_pedido_web_rechaza_medios_de_pago_no_ofrecidos(public_client, products, payment_method):
+    response = public_client.post(
+        WEB_ORDERS_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}], payment_method=payment_method)
+    )
+
+    assert response.status_code == 422

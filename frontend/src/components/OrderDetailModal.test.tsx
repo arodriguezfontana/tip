@@ -23,10 +23,13 @@ const ORDER = makeOrder({
 function renderModal(
   order: AdminOrder = ORDER,
   simulated = false,
-  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>
+  onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>,
+  onCancel?: (orderId: number) => Promise<void>
 ) {
   const onClose = vi.fn();
-  render(<OrderDetailModal order={order} simulated={simulated} onMarkPaid={onMarkPaid} onClose={onClose} />);
+  render(
+    <OrderDetailModal order={order} simulated={simulated} onMarkPaid={onMarkPaid} onCancel={onCancel} onClose={onClose} />
+  );
   return { onClose, user: userEvent.setup() };
 }
 
@@ -155,5 +158,52 @@ describe('OrderDetailModal', () => {
     expect(button).toBeInTheDocument();
     await user.click(button);
     expect(onMarkPaid).toHaveBeenCalledWith(55, true);
+  });
+
+  it.each(['Pendiente', 'Confirmado', 'En Camino', 'Listo para Retirar'] as const)(
+    'un pedido %s se puede cancelar desde el detalle, después de confirmarlo',
+    async (status) => {
+      const onCancel = vi.fn().mockResolvedValue(undefined);
+      const { user } = renderModal({ ...ORDER, status }, false, undefined, onCancel);
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      await user.click(within(dialog).getByRole('button', { name: 'Cancelar pedido' }));
+      expect(within(dialog).getByText('¿Cancelar el pedido?')).toBeInTheDocument();
+      expect(onCancel).not.toHaveBeenCalled();
+
+      await user.click(within(dialog).getByRole('button', { name: 'Sí, cancelar' }));
+      expect(onCancel).toHaveBeenCalledWith(55);
+    }
+  );
+
+  it('el botón de cancelar está al lado del de cerrar', () => {
+    renderModal(ORDER, false, undefined, vi.fn());
+
+    const cancel = screen.getByRole('button', { name: 'Cancelar pedido' });
+    const close = screen.getByRole('button', { name: 'Cerrar detalle del pedido' });
+    expect(cancel.parentElement).toBe(close.parentElement);
+  });
+
+  it('se puede desistir de cancelar', async () => {
+    const onCancel = vi.fn();
+    const { user } = renderModal(ORDER, false, undefined, onCancel);
+
+    await user.click(screen.getByRole('button', { name: 'Cancelar pedido' }));
+    await user.click(screen.getByRole('button', { name: 'No' }));
+
+    expect(onCancel).not.toHaveBeenCalled();
+    expect(screen.getByRole('button', { name: 'Cancelar pedido' })).toBeInTheDocument();
+  });
+
+  it.each(['Finalizado', 'Rechazado', 'Cancelado'] as const)('un pedido %s ya no se puede cancelar', (status) => {
+    renderModal({ ...ORDER, status }, false, undefined, vi.fn());
+
+    expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
+  });
+
+  it('sin acción de cancelar (por ejemplo en el historial) no muestra el botón', () => {
+    renderModal();
+
+    expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
   });
 });

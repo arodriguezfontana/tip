@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
 from app.models.menu import Product
-from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus
+from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus, PaymentMethod
 from app.models.user import User
 from app.repositories import delivery_driver_repository, order_repository, product_repository
 from app.services.business_hours_service import verificar_local_abierto
@@ -111,8 +111,14 @@ def _save(db: Session, order: Order) -> Order:
     return order
 
 
-def create_web_order(db: Session, request: OrderRequest, user: User | None = None) -> Order:
-    """Pedido hecho desde la web: queda 'Pendiente' hasta que el local lo acepte.
+def create_web_order(
+    db: Session,
+    request: OrderRequest,
+    user: User | None = None,
+    payment_method: PaymentMethod | str = PaymentMethod.CASH,
+) -> Order:
+    """Pedido hecho desde la web: se acepta automáticamente (entra 'Confirmado' con la demora estimada
+    del local, sin pasar por aceptar/rechazar) y queda sin abonar. El local puede cancelarlo después.
 
     Se puede pedir como invitado. Si quien pide tiene sesión de cliente, el pedido queda asociado a su
     cuenta (los datos de contacto son siempre los enviados en el pedido). Solo se aceptan dentro del
@@ -121,6 +127,10 @@ def create_web_order(db: Session, request: OrderRequest, user: User | None = Non
     verificar_local_abierto(db)
     order = _new_order(db, request, OrderSource.WEB)
     order.customer_id = user.id if user is not None and user.is_customer else None
+    order.status = OrderStatus.CONFIRMED.value
+    order.estimated_minutes = estimate_delay_minutes(db)
+    order.payment_method = PaymentMethod(payment_method).value
+    order.is_paid = False
     return _save(db, order)
 
 

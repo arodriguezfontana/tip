@@ -40,6 +40,8 @@ class Settings(BaseSettings):
     MERCADOPAGO_ACCESS_TOKEN: str = ""
     MERCADOPAGO_PUBLIC_KEY: str = ""
     MERCADOPAGO_WEBHOOK_SECRET: str = ""
+    # URL de la web de pedidos: MercadoPago devuelve ahí al cliente después de pagar.
+    FRONTEND_URL: str = "http://localhost:5173"
 
     model_config = SettingsConfigDict(
         env_file=".env",

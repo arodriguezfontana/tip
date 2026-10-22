@@ -86,3 +86,27 @@ def test_telegram_chat_id_no_numerico_no_rompe_la_respuesta(client, db_session, 
 
     assert response.status_code == 200
     mock_send_message.assert_not_called()
+
+
+def test_cancelar_notifica_al_cliente_por_telegram(client, db_session, mock_send_message):
+    order = _create_order(db_session, status="Confirmado")
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Cancelado"})
+
+    assert response.status_code == 200
+    mock_send_message.assert_called_once()
+    chat_id, mensaje = mock_send_message.call_args[0]
+    assert chat_id == 12345
+    assert f"cancelar tu pedido #{order.id}" in mensaje
+    assert "reintegro" not in mensaje
+
+
+def test_cancelar_un_pedido_abonado_avisa_del_reintegro(client, db_session, mock_send_message):
+    order = _create_order(db_session, status="En Camino")
+    order.is_paid = True
+    db_session.commit()
+
+    client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Cancelado"})
+
+    _, mensaje = mock_send_message.call_args[0]
+    assert "reintegro" in mensaje

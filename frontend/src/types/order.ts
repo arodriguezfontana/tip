@@ -36,12 +36,17 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
 /** Medios que se ofrecen al tomar un pedido (los demás quedan solo para mostrar pedidos viejos). */
 export const COUNTER_PAYMENT_METHODS: PaymentMethod[] = ['efectivo', 'mercadopago'];
 
+/** Medios con los que el cliente puede pagar un pedido hecho desde la web. */
+export type WebPaymentMethod = Extract<PaymentMethod, 'efectivo' | 'mercadopago'>;
+export const WEB_PAYMENT_METHODS: WebPaymentMethod[] = ['efectivo', 'mercadopago'];
+
 export interface CheckoutFormData {
   name: string;
   phone: string;
   deliveryMethod: DeliveryMethod;
   address: string;
   notes: string;
+  paymentMethod: WebPaymentMethod;
 }
 
 export interface WebOrderItemPayload {
@@ -56,10 +61,11 @@ export interface WebOrderPayload {
   shipping_address: string | null;
   notes: string | null;
   items: WebOrderItemPayload[];
+  payment_method: WebPaymentMethod;
 }
 
 /** Pedido presencial: el personal registra además cómo paga el cliente. */
-export interface CounterOrderPayload extends WebOrderPayload {
+export interface CounterOrderPayload extends Omit<WebOrderPayload, 'payment_method'> {
   payment_method: PaymentMethod | null;
   is_paid: boolean;
 }
@@ -83,6 +89,10 @@ export interface WebOrderCreated {
   total_amount: number;
   created_at: string;
   items: WebOrderItem[];
+  payment_method: PaymentMethod | null;
+  is_paid: boolean;
+  /** Link de Checkout Pro de MercadoPago al que se redirige al cliente (solo si eligió MercadoPago). */
+  payment_url: string | null;
 }
 
 export interface CheckoutFormErrors {
@@ -97,7 +107,11 @@ export type OrderStatus =
   | 'En Camino'
   | 'Listo para Retirar'
   | 'Finalizado'
-  | 'Rechazado';
+  | 'Rechazado'
+  | 'Cancelado';
+
+/** Estados en los que el pedido ya terminó (sale del tablero de comandas). */
+export const FINISHED_ORDER_STATUSES: OrderStatus[] = ['Finalizado', 'Rechazado', 'Cancelado'];
 
 export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
   'Pendiente',

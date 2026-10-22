@@ -35,7 +35,7 @@ test.describe('Pedido web de un cliente', () => {
     await page.getByLabel('Observaciones (opcional)').fill('Cortar en 8');
     await page.getByRole('button', { name: 'Confirmar pedido' }).click();
 
-    await expect(page.getByText(/¡Recibimos tu pedido!/)).toBeVisible();
+    await expect(page.getByText(/¡Recibimos tu pedido/)).toBeVisible();
     await expect(page.getByRole('heading', { name: /Pedido #\d+/ })).toBeVisible();
     await expect(page.getByText('Pizza Muzzarella x2')).toBeVisible();
     await expect(page.getByText('Coca-Cola 500ml x1')).toBeVisible();
@@ -56,6 +56,6 @@ test.describe('Pedido web de un cliente', () => {
     await expect(page.getByText('Ingresá tu nombre.')).toBeVisible();
     await expect(page.getByText(/Ingresá un teléfono válido/)).toBeVisible();
     await expect(page.getByText('Ingresá la dirección de entrega.')).toBeVisible();
-    await expect(page.getByText(/¡Recibimos tu pedido!/)).toBeHidden();
+    await expect(page.getByText(/¡Recibimos tu pedido/)).toBeHidden();
   });
 });

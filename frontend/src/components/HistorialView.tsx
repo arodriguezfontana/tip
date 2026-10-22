@@ -56,7 +56,7 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
   const load = useCallback(() => fetchOrders({ dateFrom: range.from, dateTo: range.to }), [range.from, range.to]);
   const { data: orders = [], loading, error } = useAsyncData(rangeIncomplete ? null : load, 'No se pudieron cargar los pedidos.');
 
-  const facturedOrders = useMemo(() => orders.filter((order) => order.status !== 'Rechazado'), [orders]);
+  const facturedOrders = useMemo(() => orders.filter((order) => order.status !== 'Rechazado' && order.status !== 'Cancelado'), [orders]);
   const totalRevenue = useMemo(
     () => facturedOrders.reduce((sum, order) => sum + order.total_amount, 0),
     [facturedOrders]

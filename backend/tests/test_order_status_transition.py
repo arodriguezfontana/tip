@@ -178,3 +178,22 @@ def test_aviso_de_confirmacion_de_programado_indica_el_horario(db_session):
 
     assert "21:00" in mensaje
     assert "Tiempo estimado" not in mensaje
+
+
+@pytest.mark.parametrize("status", ["Pendiente", "Confirmado", "En Camino", "Listo para Retirar"])
+def test_cualquier_pedido_activo_se_puede_cancelar(client, db_session, status):
+    order = _create_order(db_session, status=status)
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Cancelado"})
+
+    assert response.status_code == 200
+    assert response.json()["status"] == "Cancelado"
+
+
+@pytest.mark.parametrize("status", ["Finalizado", "Rechazado", "Cancelado"])
+def test_no_se_puede_cancelar_un_pedido_terminado(client, db_session, status):
+    order = _create_order(db_session, status=status)
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Cancelado"})
+
+    assert response.status_code == 409
