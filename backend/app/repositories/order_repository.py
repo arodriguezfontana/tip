@@ -1,9 +1,9 @@
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.menu import Product
+from app.models.menu import Category, Product
 from app.models.order import Order, OrderItem, OrderStatus
 from app.repositories.common import created_between
 
@@ -17,7 +17,7 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
     return (
         db.query(Order)
         .options(
-            joinedload(Order.items).joinedload(OrderItem.product),
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.category),
             joinedload(Order.delivery_driver),
         )
         .filter(Order.id == order_id)
@@ -26,12 +26,16 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
 
 
 def list_orders(
-    db: Session, date_from: datetime | None, date_to: datetime | None, statuses: list[str] | None
+    db: Session,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    statuses: list[str] | None,
+    sector: str | None = None,
 ) -> list[Order]:
     """Del más reciente al más antiguo."""
     query = created_between(
         db.query(Order).options(
-            joinedload(Order.items),
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.category),
             joinedload(Order.delivery_driver),
         ),
         date_from,
@@ -39,6 +43,21 @@ def list_orders(
     )
     if statuses:
         query = query.filter(Order.status.in_(statuses))
+    if sector:
+        sector_clean = sector.strip().lower()
+        query = query.filter(
+            Order.items.any(
+                OrderItem.product.has(
+                    or_(
+                        func.lower(Product.sector) == sector_clean,
+                        and_(
+                            Product.sector.is_(None),
+                            Product.category.has(func.lower(Category.sector) == sector_clean),
+                        ),
+                    )
+                )
+            )
+        )
     return query.order_by(Order.created_at.desc()).all()
 
 

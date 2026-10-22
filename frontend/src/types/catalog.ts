@@ -1,5 +1,5 @@
 import type { RecipeItem } from '@/types/ingredient';
-import type { ProductCategory } from '@/types/order';
+import type { PreparationSector, ProductCategory } from '@/types/order';
 
 /** Producto tal como lo ve el panel: incluye los no disponibles, los sin categoría y su receta. */
 export interface AdminProduct {
@@ -37,11 +37,13 @@ export interface CategoryProduct {
 export interface AdminCategory {
   id: number;
   name: string;
+  sector?: PreparationSector;
   products: CategoryProduct[];
 }
 
 export interface CategoryPayload {
   name: string;
+  sector?: PreparationSector;
   /** Productos que forman la categoría. Los que estaban en otra se mueven a esta. */
   product_ids: number[];
 }

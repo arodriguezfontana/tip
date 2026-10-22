@@ -70,12 +70,51 @@ export interface CounterOrderPayload extends Omit<WebOrderPayload, 'payment_meth
   is_paid: boolean;
 }
 
+export type PreparationSector = 'cocina' | 'pizzeria' | 'barra';
+
+export type SectorFilter = 'todos' | PreparationSector;
+
+export interface SectorMeta {
+  key: PreparationSector;
+  label: string;
+  icon: string;
+  badgeClass: string;
+  activeTabClass: string;
+}
+
+export const SECTOR_CONFIG: Record<PreparationSector, SectorMeta> = {
+  pizzeria: {
+    key: 'pizzeria',
+    label: 'Pizzería',
+    icon: '🍕',
+    badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200',
+    activeTabClass: 'bg-amber-600 text-white shadow-xs',
+  },
+  cocina: {
+    key: 'cocina',
+    label: 'Cocina',
+    icon: '🍳',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    activeTabClass: 'bg-emerald-600 text-white shadow-xs',
+  },
+  barra: {
+    key: 'barra',
+    label: 'Barra',
+    icon: '🍺',
+    badgeClass: 'bg-sky-100 text-sky-800 border border-sky-200',
+    activeTabClass: 'bg-sky-600 text-white shadow-xs',
+  },
+};
+
 export interface WebOrderItem {
+  id?: number;
   product_id: number;
   product_name: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
+  sector?: PreparationSector | string;
+  is_prepared?: boolean;
 }
 
 export interface WebOrderCreated {
@@ -140,6 +179,10 @@ export interface AdminOrder {
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
+  items?: WebOrderItem[];
+  items_prepared_count?: number;
+  is_all_prepared?: boolean;
+  sectors?: (PreparationSector | string)[];
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */

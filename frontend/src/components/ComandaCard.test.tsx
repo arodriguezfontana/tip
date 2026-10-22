@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ComandaCard } from '@/components/ComandaCard';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import type { AdminOrder } from '@/types/order';
+import type { AdminOrder, SectorFilter } from '@/types/order';
 import { makeOrder } from '@/test/utils';
 
 function renderCard(
@@ -12,10 +12,15 @@ function renderCard(
     activeDrivers?: DeliveryDriver[];
     onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
     onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+    selectedSector?: SectorFilter;
+    onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+    onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
   } = {}
 ) {
   const onStatusChange = vi.fn().mockResolvedValue(undefined);
   const onAssignDriver = extraProps.onAssignDriver ?? vi.fn().mockResolvedValue(undefined);
+  const onItemPreparedChange = extraProps.onItemPreparedChange ?? vi.fn().mockResolvedValue(undefined);
+  const onSectorPrepared = extraProps.onSectorPrepared ?? vi.fn().mockResolvedValue(undefined);
   const onOpenDetail = vi.fn();
   const order = makeOrder(overrides);
   render(
@@ -26,9 +31,20 @@ function renderCard(
       onMarkPaid={extraProps.onMarkPaid}
       activeDrivers={extraProps.activeDrivers}
       onOpenDetail={onOpenDetail}
+      selectedSector={extraProps.selectedSector}
+      onItemPreparedChange={onItemPreparedChange}
+      onSectorPrepared={onSectorPrepared}
     />
   );
-  return { order, onStatusChange, onAssignDriver, onOpenDetail, user: userEvent.setup() };
+  return {
+    order,
+    onStatusChange,
+    onAssignDriver,
+    onItemPreparedChange,
+    onSectorPrepared,
+    onOpenDetail,
+    user: userEvent.setup(),
+  };
 }
 
 const minutes = (n: number) => new Date(Date.now() - n * 60000).toISOString();
@@ -338,5 +354,62 @@ describe('ComandaCard', () => {
 
     expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
+  });
+  describe('Separación de comandas por sector (US-34)', () => {
+    const mockItems = [
+      { id: 1, product_id: 10, product_name: 'Pizza Napolitana', quantity: 2, unit_price: 9000, subtotal: 18000, sector: 'pizzeria', is_prepared: false },
+      { id: 2, product_id: 20, product_name: 'Milanesa con Papas', quantity: 1, unit_price: 11000, subtotal: 11000, sector: 'cocina', is_prepared: false },
+      { id: 3, product_id: 30, product_name: 'Cerveza IPA', quantity: 2, unit_price: 3500, subtotal: 7000, sector: 'barra', is_prepared: true },
+    ];
+
+    it('en vista "todos", agrupa visualmente los platos según su sector y muestra el progreso general', () => {
+      renderCard({ items: mockItems });
+
+      expect(screen.getByText('Pizzería')).toBeInTheDocument();
+      expect(screen.getByText('Cocina')).toBeInTheDocument();
+      expect(screen.getByText('Barra')).toBeInTheDocument();
+
+      expect(screen.getByText('Pizza Napolitana')).toBeInTheDocument();
+      expect(screen.getByText('Milanesa con Papas')).toBeInTheDocument();
+      expect(screen.getByText('Cerveza IPA')).toBeInTheDocument();
+
+      expect(screen.getByText('1/3 (33%)')).toBeInTheDocument();
+    });
+
+    it('al seleccionar un sector específico, muestra únicamente los platos de ese sector', () => {
+      renderCard({ items: mockItems }, { selectedSector: 'pizzeria' });
+
+      expect(screen.getByText('Pizza Napolitana')).toBeInTheDocument();
+      expect(screen.queryByText('Milanesa con Papas')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cerveza IPA')).not.toBeInTheDocument();
+
+      expect(screen.getByText('Otros sectores:')).toBeInTheDocument();
+      expect(screen.getByText(/Cocina/)).toBeInTheDocument();
+      expect(screen.getByText(/Barra/)).toBeInTheDocument();
+    });
+
+    it('permite marcar o desmarcar un ítem individual como preparado', async () => {
+      const onItemPreparedChange = vi.fn().mockResolvedValue(undefined);
+      const { user } = renderCard({ items: mockItems }, { onItemPreparedChange, selectedSector: 'pizzeria' });
+
+      await user.click(screen.getByText('Pizza Napolitana'));
+      expect(onItemPreparedChange).toHaveBeenCalledWith(101, 1, true);
+    });
+
+    it('permite marcar un sector completo como preparado desde el botón de lote', async () => {
+      const onSectorPrepared = vi.fn().mockResolvedValue(undefined);
+      const { user } = renderCard({ items: mockItems }, { onSectorPrepared, selectedSector: 'pizzeria' });
+
+      await user.click(screen.getByRole('button', { name: 'Marcar sector listo' }));
+      expect(onSectorPrepared).toHaveBeenCalledWith(101, 'pizzeria', true);
+    });
+
+    it('muestra el distintivo "Comanda 100% preparada" cuando todos los platos están listos', () => {
+      const readyItems = mockItems.map((item) => ({ ...item, is_prepared: true }));
+      renderCard({ items: readyItems, is_all_prepared: true, items_prepared_count: 3 });
+
+      expect(screen.getByText(/3\/3/)).toBeInTheDocument();
+      expect(screen.getByText(/Comanda 100% preparada/)).toBeInTheDocument();
+    });
   });
 });

@@ -217,6 +217,25 @@ class Order(Base):
         if estimated_minutes is not None:
             self.estimated_minutes = estimated_minutes
 
+    @property
+    def is_all_prepared(self) -> bool:
+        return bool(self.items) and all(item.is_prepared for item in self.items)
+
+    @property
+    def items_prepared_count(self) -> int:
+        return sum(1 for item in self.items if item.is_prepared)
+
+    @property
+    def sectors(self) -> list[str]:
+        seen = set()
+        res = []
+        for item in self.items:
+            s = item.sector
+            if s not in seen:
+                seen.add(s)
+                res.append(s)
+        return res
+
 
 class OrderItem(Base):
     __tablename__ = "order_items"
@@ -226,6 +245,7 @@ class OrderItem(Base):
     product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(MoneyColumn, nullable=False)
+    is_prepared = Column(Boolean, nullable=False, default=False, server_default=false())
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product")
@@ -237,3 +257,9 @@ class OrderItem(Base):
     @property
     def subtotal(self) -> Decimal:
         return self.unit_price * self.quantity
+
+    @property
+    def sector(self) -> str:
+        if self.product:
+            return self.product.effective_sector
+        return "cocina"

@@ -209,7 +209,12 @@ def test_crea_una_categoria_sin_productos(client, db_session):
     response = client.post(CATEGORIES_URL, json={"name": "  Empanadas "})
 
     assert response.status_code == 201
-    assert response.json() == {"id": response.json()["id"], "name": "Empanadas", "products": []}
+    assert response.json() == {
+        "id": response.json()["id"],
+        "name": "Empanadas",
+        "sector": "cocina",
+        "products": [],
+    }
     assert db_session.query(Category).one().name == "Empanadas"
 
 

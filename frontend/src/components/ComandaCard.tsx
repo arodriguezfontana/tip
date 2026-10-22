@@ -1,11 +1,12 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
-import { PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderStatus, PaymentMethod } from '@/types/order';
+import { PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/types/order';
+import type { AdminOrder, OrderStatus, PaymentMethod, PreparationSector, SectorFilter, WebOrderItem } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -31,8 +32,6 @@ const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
   retiro: 'Retiro en local',
 };
 
-import type { DeliveryDriver } from '@/types/deliveryDriver';
-
 interface ComandaCardProps {
   order: AdminOrder;
   onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
@@ -44,6 +43,12 @@ interface ComandaCardProps {
   activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
   onOpenDetail?: (order: AdminOrder) => void;
+  /** Sector activo seleccionado en el tablero: 'todos', 'pizzeria', 'cocina', 'barra'. */
+  selectedSector?: SectorFilter;
+  /** Callback para marcar/desmarcar un ítem preparado. */
+  onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+  /** Callback para marcar todos los ítems de un sector preparados. */
+  onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
 }
 
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
@@ -56,9 +61,13 @@ export function ComandaCard({
   onMarkPaid,
   activeDrivers = [],
   onOpenDetail,
+  selectedSector = 'todos',
+  onItemPreparedChange,
+  onSectorPrepared,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [sectorActionPending, setSectorActionPending] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
@@ -82,6 +91,50 @@ export function ComandaCard({
       await onStatusChange(order.id, newStatus, estimatedMinutes);
     } finally {
       setPending(false);
+    }
+  };
+
+  const items = order.items ?? [];
+  const hasItems = items.length > 0;
+  const totalItemCount = hasItems ? items.length : order.item_count || 0;
+  const preparedItemCount = hasItems ? items.filter((i) => i.is_prepared).length : 0;
+  const progressPercent = totalItemCount > 0 ? Math.round((preparedItemCount / totalItemCount) * 100) : 0;
+  const isAllPrepared = order.is_all_prepared || (hasItems && preparedItemCount === totalItemCount);
+
+  // Ítems agrupados por sector para vista "todos"
+  const groupedBySector = useMemo(() => {
+    const map = new Map<PreparationSector, WebOrderItem[]>();
+    for (const item of items) {
+      const sec = ((item.sector?.toLowerCase() as PreparationSector) || 'cocina');
+      if (!map.has(sec)) map.set(sec, []);
+      map.get(sec)!.push(item);
+    }
+    return map;
+  }, [items]);
+
+  // Ítems visibles según el filtro de sector
+  const isSpecificSector = selectedSector !== 'todos';
+  const visibleItems = useMemo(() => {
+    if (!isSpecificSector) return items;
+    return items.filter((i) => (i.sector?.toLowerCase() || 'cocina') === selectedSector);
+  }, [items, isSpecificSector, selectedSector]);
+
+  const allVisiblePrepared = visibleItems.length > 0 && visibleItems.every((i) => i.is_prepared);
+
+  const handleToggleItem = async (item: WebOrderItem, event: MouseEvent) => {
+    stopPropagation(event);
+    if (!item.id || !onItemPreparedChange) return;
+    await onItemPreparedChange(order.id, item.id, !item.is_prepared);
+  };
+
+  const handleBatchSector = async (sectorName: string, targetState: boolean, event: MouseEvent) => {
+    stopPropagation(event);
+    if (!onSectorPrepared) return;
+    setSectorActionPending(true);
+    try {
+      await onSectorPrepared(order.id, sectorName, targetState);
+    } finally {
+      setSectorActionPending(false);
     }
   };
 
@@ -190,6 +243,193 @@ export function ComandaCard({
           )
         )}
 
+        {/* Sección de productos segmentados por sector */}
+        {hasItems && (
+          <div className="border border-gray-100 rounded-xl p-2.5 bg-gray-50/40 space-y-2.5" onClick={stopPropagation}>
+            {/* Barra de progreso global del pedido */}
+            <div className="space-y-1">
+              <div className="flex items-center justify-between text-[11px]">
+                <span className="font-semibold text-gray-700">Progreso general:</span>
+                <span className={`font-bold ${isAllPrepared ? 'text-emerald-700' : 'text-gray-600'}`}>
+                  {preparedItemCount}/{totalItemCount} {isAllPrepared ? '✓ Listo' : `(${progressPercent}%)`}
+                </span>
+              </div>
+              <div className="w-full bg-gray-200 h-1.5 rounded-full overflow-hidden">
+                <div
+                  className={`h-full transition-all duration-300 ${isAllPrepared ? 'bg-emerald-500' : 'bg-amber-500'}`}
+                  style={{ width: `${progressPercent}%` }}
+                />
+              </div>
+            </div>
+
+            {/* Listado de ítems según filtro */}
+            {isSpecificSector ? (
+              <div className="space-y-1.5">
+                <div className="flex items-center justify-between">
+                  <div className="flex items-center gap-1.5">
+                    <span className="text-xs">{SECTOR_CONFIG[selectedSector]?.icon}</span>
+                    <span className="text-xs font-bold text-gray-800">
+                      {SECTOR_CONFIG[selectedSector]?.label}
+                    </span>
+                  </div>
+                  {onSectorPrepared && visibleItems.length > 0 && (
+                    allVisiblePrepared ? (
+                      <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100/70 px-2 py-0.5 rounded-md">
+                        ✓ Sector preparado
+                      </span>
+                    ) : (
+                      <button
+                        type="button"
+                        disabled={sectorActionPending}
+                        onClick={(e) => handleBatchSector(selectedSector, true, e)}
+                        className="text-[10px] font-bold text-gray-700 bg-white border border-gray-300 hover:bg-gray-100 px-2 py-0.5 rounded-md transition shadow-2xs cursor-pointer"
+                      >
+                        Marcar sector listo
+                      </button>
+                    )
+                  )}
+                </div>
+
+                <div className="space-y-1 max-h-48 overflow-y-auto pr-0.5">
+                  {visibleItems.length === 0 ? (
+                    <p className="text-xs text-gray-400 italic py-1">Sin platos para este sector</p>
+                  ) : (
+                    visibleItems.map((item) => (
+                      <div
+                        key={item.id ?? item.product_id}
+                        onClick={(e) => handleToggleItem(item, e)}
+                        className={`flex items-center justify-between gap-2 p-1.5 rounded-lg border text-xs transition cursor-pointer select-none ${
+                          item.is_prepared
+                            ? 'bg-emerald-50/70 border-emerald-200 text-emerald-900'
+                            : 'bg-white border-gray-200 text-gray-800 hover:bg-gray-50'
+                        }`}
+                      >
+                        <div className="flex items-center gap-2 min-w-0">
+                          <span
+                            className={`w-4 h-4 rounded-full flex items-center justify-center text-[10px] font-bold shrink-0 ${
+                              item.is_prepared ? 'bg-emerald-600 text-white' : 'border border-gray-400 text-transparent'
+                            }`}
+                          >
+                            ✓
+                          </span>
+                          <span className={`font-semibold shrink-0 ${item.is_prepared ? 'text-emerald-700' : 'text-gray-700'}`}>
+                            {item.quantity}×
+                          </span>
+                          <span className={`truncate ${item.is_prepared ? 'line-through text-gray-500' : 'font-medium text-gray-900'}`}>
+                            {item.product_name}
+                          </span>
+                        </div>
+                        <span className={`text-[10px] font-semibold shrink-0 ${item.is_prepared ? 'text-emerald-700' : 'text-gray-400'}`}>
+                          {item.is_prepared ? 'Listo' : 'Pendiente'}
+                        </span>
+                      </div>
+                    ))
+                  )}
+                </div>
+
+                {/* Chips de los otros sectores en este pedido */}
+                {groupedBySector.size > 1 && (
+                  <div className="pt-1 flex flex-wrap items-center gap-1 text-[10px] text-gray-500">
+                    <span className="text-gray-400">Otros sectores:</span>
+                    {Array.from(groupedBySector.entries())
+                      .filter(([sec]) => sec !== selectedSector)
+                      .map(([sec, secItems]) => {
+                        const secReady = secItems.every((i) => i.is_prepared);
+                        const secMeta = SECTOR_CONFIG[sec as PreparationSector];
+                        return (
+                          <span
+                            key={sec}
+                            className={`px-1.5 py-0.5 rounded-md font-semibold inline-flex items-center gap-1 ${
+                              secReady ? 'bg-emerald-50 text-emerald-700 border border-emerald-200' : 'bg-gray-100 text-gray-600'
+                            }`}
+                          >
+                            <span>{secMeta?.icon ?? '🍽️'}</span>
+                            <span>{secMeta?.label ?? sec}</span>
+                            <span>{secReady ? '✓' : '⏳'}</span>
+                          </span>
+                        );
+                      })}
+                  </div>
+                )}
+              </div>
+            ) : (
+              /* Vista "Todos": Segmentado por cada área de trabajo */
+              <div className="space-y-2 max-h-56 overflow-y-auto pr-0.5">
+                {Array.from(groupedBySector.entries()).map(([sec, secItems]) => {
+                  const secMeta = SECTOR_CONFIG[sec as PreparationSector];
+                  const secAllReady = secItems.every((i) => i.is_prepared);
+
+                  return (
+                    <div key={sec} className="bg-white rounded-lg p-2 border border-gray-200/80 space-y-1.5">
+                      <div className="flex items-center justify-between text-xs">
+                        <div className="flex items-center gap-1.5 font-bold text-gray-800">
+                          <span>{secMeta?.icon ?? '🍽️'}</span>
+                          <span>{secMeta?.label ?? sec}</span>
+                        </div>
+                        {onSectorPrepared && (
+                          secAllReady ? (
+                            <span className="text-[10px] font-bold text-emerald-700 bg-emerald-50 px-1.5 py-0.5 rounded">
+                              ✓ Listo
+                            </span>
+                          ) : (
+                            <button
+                              type="button"
+                              disabled={sectorActionPending}
+                              onClick={(e) => handleBatchSector(sec, true, e)}
+                              className="text-[10px] font-semibold text-gray-600 hover:text-black bg-gray-50 hover:bg-gray-100 border border-gray-200 px-1.5 py-0.5 rounded transition cursor-pointer"
+                            >
+                              Marcar listo
+                            </button>
+                          )
+                        )}
+                      </div>
+
+                      <div className="space-y-1">
+                        {secItems.map((item) => (
+                          <div
+                            key={item.id ?? item.product_id}
+                            onClick={(e) => handleToggleItem(item, e)}
+                            className={`flex items-center justify-between gap-1.5 px-2 py-1 rounded text-xs transition cursor-pointer select-none ${
+                              item.is_prepared
+                                ? 'bg-emerald-50/50 text-emerald-900'
+                                : 'hover:bg-gray-50 text-gray-800'
+                            }`}
+                          >
+                            <div className="flex items-center gap-1.5 min-w-0">
+                              <span
+                                className={`w-3.5 h-3.5 rounded-full flex items-center justify-center text-[9px] font-bold shrink-0 ${
+                                  item.is_prepared ? 'bg-emerald-600 text-white' : 'border border-gray-300 text-transparent'
+                                }`}
+                              >
+                                ✓
+                              </span>
+                              <span className="font-semibold text-gray-700 shrink-0">{item.quantity}×</span>
+                              <span className={`truncate ${item.is_prepared ? 'line-through text-gray-400' : 'text-gray-900'}`}>
+                                {item.product_name}
+                              </span>
+                            </div>
+                            <span className={`text-[10px] shrink-0 ${item.is_prepared ? 'text-emerald-600 font-semibold' : 'text-gray-400'}`}>
+                              {item.is_prepared ? 'Listo' : '⏳'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  );
+                })}
+              </div>
+            )}
+
+            {/* Aviso visual cuando el pedido completo está preparado */}
+            {isAllPrepared && (
+              <div className="flex items-center justify-center gap-1.5 text-xs font-bold text-emerald-800 bg-emerald-100/60 border border-emerald-300 py-1 px-2 rounded-lg animate-pulse">
+                <span>✅</span>
+                <span>¡Comanda 100% preparada para entrega!</span>
+              </div>
+            )}
+          </div>
+        )}
+
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {order.scheduled_for ? (
             <span className="bg-amber-50 border border-amber-200 text-amber-800 px-2.5 py-1 rounded-xl font-semibold">
@@ -294,9 +534,14 @@ export function ComandaCard({
               type="button"
               disabled={pending}
               onClick={() => handleClick(order.delivery_method === 'retiro' ? 'Listo para Retirar' : 'En Camino')}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              className={`w-full py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 ${
+                isAllPrepared
+                  ? 'bg-emerald-600 hover:bg-emerald-700 text-white ring-2 ring-emerald-400 ring-offset-1'
+                  : 'bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white'
+              }`}
             >
-              {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
+              {isAllPrepared && <span>✓</span>}
+              <span>{order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}</span>
             </button>
           </div>
         )}

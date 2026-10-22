@@ -33,6 +33,7 @@ const ORDERS = [
 
 beforeEach(() => {
   vi.resetAllMocks();
+  localStorage.clear();
   service.fetchOrders.mockResolvedValue(ORDERS);
   service.fetchOrderDetail.mockResolvedValue(makeOrderDetail());
 });
@@ -171,7 +172,7 @@ describe('ComandasBoard', () => {
     const user = userEvent.setup();
     await screen.findByText('Pendiente Ahora');
 
-    await user.click(screen.getByRole('button', { name: 'Simular 55 Pedidos' }));
+    await user.click(screen.getByRole('button', { name: 'Simular 50 Pedidos' }));
 
     expect(screen.getByText('Panel de Comandas (Modo Simulación)')).toBeInTheDocument();
     expect(screen.queryByText('Pendiente Ahora')).not.toBeInTheDocument();
@@ -185,9 +186,119 @@ describe('ComandasBoard', () => {
       render(<ComandasBoard />);
       await screen.findByText('Pendiente Ahora');
 
-      expect(screen.queryByRole('button', { name: 'Simular 55 Pedidos' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Simular 50 Pedidos' })).not.toBeInTheDocument();
     } finally {
       vi.unstubAllEnvs();
     }
+  });
+  describe('Separación de comandas por sector (US-34)', () => {
+    const SECTOR_ORDERS = [
+      makeOrder({
+        id: 11,
+        customer_name: 'Solo Pizza',
+        status: 'Confirmado',
+        items: [
+          { id: 101, product_id: 1, product_name: 'Muzza', quantity: 2, unit_price: 8000, subtotal: 16000, sector: 'pizzeria', is_prepared: false },
+        ],
+        sectors: ['pizzeria'],
+      }),
+      makeOrder({
+        id: 12,
+        customer_name: 'Solo Tragos',
+        status: 'Confirmado',
+        items: [
+          { id: 102, product_id: 2, product_name: 'Fernet', quantity: 1, unit_price: 5000, subtotal: 5000, sector: 'barra', is_prepared: false },
+        ],
+        sectors: ['barra'],
+      }),
+      makeOrder({
+        id: 13,
+        customer_name: 'Pizza y Barra',
+        status: 'Confirmado',
+        items: [
+          { id: 103, product_id: 1, product_name: 'Fugazzeta', quantity: 1, unit_price: 9000, subtotal: 9000, sector: 'pizzeria', is_prepared: false },
+          { id: 104, product_id: 3, product_name: 'Cerveza', quantity: 2, unit_price: 3000, subtotal: 6000, sector: 'barra', is_prepared: false },
+        ],
+        sectors: ['pizzeria', 'barra'],
+      }),
+    ];
+
+    it('muestra las pestañas de sectores con sus respectivos contadores', async () => {
+      service.fetchOrders.mockResolvedValue(SECTOR_ORDERS);
+      render(<ComandasBoard />);
+
+      expect(await screen.findByText('Solo Pizza')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Todos/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Pizzería/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Barra/ })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Cocina/ })).toBeInTheDocument();
+    });
+
+    it('filtrar por un sector muestra únicamente los pedidos que tienen platos para ese sector', async () => {
+      service.fetchOrders.mockResolvedValue(SECTOR_ORDERS);
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+
+      expect(await screen.findByText('Solo Pizza')).toBeInTheDocument();
+      expect(screen.getByText('Solo Tragos')).toBeInTheDocument();
+      expect(screen.getByText('Pizza y Barra')).toBeInTheDocument();
+
+      // Filtrar por Pizzería
+      await user.click(screen.getByRole('button', { name: /Pizzería/ }));
+
+      expect(screen.getByText('Solo Pizza')).toBeInTheDocument();
+      expect(screen.getByText('Pizza y Barra')).toBeInTheDocument();
+      expect(screen.queryByText('Solo Tragos')).not.toBeInTheDocument();
+      expect(localStorage.getItem('resto_comandas_sector')).toBe('pizzeria');
+
+      // Filtrar por Barra
+      await user.click(screen.getByRole('button', { name: /Barra/ }));
+
+      expect(screen.getByText('Solo Tragos')).toBeInTheDocument();
+      expect(screen.getByText('Pizza y Barra')).toBeInTheDocument();
+      expect(screen.queryByText('Solo Pizza')).not.toBeInTheDocument();
+      expect(localStorage.getItem('resto_comandas_sector')).toBe('barra');
+
+      // Volver a Todos
+      await user.click(screen.getByRole('button', { name: /Todos/ }));
+      expect(screen.getByText('Solo Pizza')).toBeInTheDocument();
+      expect(screen.getByText('Solo Tragos')).toBeInTheDocument();
+    });
+
+    it('marcar un ítem preparado llama a la API de actualización de ítem', async () => {
+      service.fetchOrders.mockResolvedValue([SECTOR_ORDERS[0]]);
+      service.updateOrderItemPrepared.mockResolvedValue({
+        ...SECTOR_ORDERS[0],
+        items: [{ ...SECTOR_ORDERS[0].items[0], is_prepared: true }],
+        items_prepared_count: 1,
+        is_all_prepared: true,
+      });
+
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+
+      await screen.findByText('Solo Pizza');
+      await user.click(screen.getByText('Muzza'));
+
+      expect(service.updateOrderItemPrepared).toHaveBeenCalledWith(11, 101, true);
+    });
+
+    it('marcar un sector listo llama a la API de actualización por sector', async () => {
+      service.fetchOrders.mockResolvedValue([SECTOR_ORDERS[0]]);
+      service.updateOrderSectorPrepared.mockResolvedValue({
+        ...SECTOR_ORDERS[0],
+        items: [{ ...SECTOR_ORDERS[0].items[0], is_prepared: true }],
+        items_prepared_count: 1,
+        is_all_prepared: true,
+      });
+
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+
+      await screen.findByText('Solo Pizza');
+      await user.click(screen.getByRole('button', { name: 'Marcar listo' }));
+
+      expect(service.updateOrderSectorPrepared).toHaveBeenCalledWith(11, 'pizzeria', true);
+    });
   });
 });

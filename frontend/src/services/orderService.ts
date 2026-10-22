@@ -4,6 +4,7 @@ import type {
   CounterOrderPayload,
   OrderDetail,
   OrderStatus,
+  PreparationSector,
   WebOrderCreated,
   WebOrderPayload,
 } from '@/types/order';
@@ -12,6 +13,7 @@ export interface FetchOrdersParams {
   dateFrom?: Date;
   dateTo?: Date;
   status?: OrderStatus[];
+  sector?: PreparationSector;
 }
 
 export async function fetchOrders(params: FetchOrdersParams = {}): Promise<AdminOrder[]> {
@@ -20,6 +22,7 @@ export async function fetchOrders(params: FetchOrdersParams = {}): Promise<Admin
       date_from: params.dateFrom?.toISOString(),
       date_to: params.dateTo?.toISOString(),
       status: params.status,
+      sector: params.sector,
     },
     // FastAPI's `status: list[str] = Query(None)` binds repeated `status=a&status=b`,
     // not axios's default bracketed `status[]=a&status[]=b`.
@@ -74,6 +77,30 @@ export async function updateOrderPayment(
 ): Promise<AdminOrder> {
   const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/payment`, {
     is_paid: isPaid,
+  });
+  return data;
+}
+
+/** Marca o desmarca un ítem individual como preparado. */
+export async function updateOrderItemPrepared(
+  orderId: number,
+  itemId: number,
+  isPrepared: boolean
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/items/${itemId}/prepared`, {
+    is_prepared: isPrepared,
+  });
+  return data;
+}
+
+/** Marca o desmarca todos los ítems de un sector como preparados. */
+export async function updateOrderSectorPrepared(
+  orderId: number,
+  sector: string,
+  isPrepared: boolean
+): Promise<AdminOrder> {
+  const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/sectors/${sector}/prepared`, {
+    is_prepared: isPrepared,
   });
   return data;
 }

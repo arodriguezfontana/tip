@@ -3,6 +3,7 @@ import type { FormEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { INPUT_FULL_CLASS as INPUT_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
+import type { PreparationSector } from '@/types/order';
 import { getErrorMessage } from '@/utils/errors';
 
 interface CategoryFormModalProps {
@@ -15,6 +16,7 @@ interface CategoryFormModalProps {
 
 export function CategoryFormModal({ category, products, onClose, onSave }: CategoryFormModalProps) {
   const [name, setName] = useState(category?.name ?? '');
+  const [sector, setSector] = useState<PreparationSector>(category?.sector ?? 'cocina');
   const [selected, setSelected] = useState<Set<number>>(() => new Set(category?.products.map((p) => p.id)));
   const [search, setSearch] = useState('');
   const [saving, setSaving] = useState(false);
@@ -50,7 +52,11 @@ export function CategoryFormModal({ category, products, onClose, onSave }: Categ
     setFormError(null);
     try {
       // Se envían en el orden del catálogo para que el pedido sea siempre el mismo.
-      await onSave({ name: name.trim(), product_ids: products.filter((p) => selected.has(p.id)).map((p) => p.id) });
+      await onSave({
+        name: name.trim(),
+        sector,
+        product_ids: products.filter((p) => selected.has(p.id)).map((p) => p.id),
+      });
     } catch (err) {
       setFormError(getErrorMessage(err, 'No se pudo guardar la categoría.'));
       setSaving(false);
@@ -91,6 +97,25 @@ export function CategoryFormModal({ category, products, onClose, onSave }: Categ
               maxLength={100}
               className={INPUT_CLASS}
             />
+          </div>
+
+          <div>
+            <label htmlFor="category-sector" className={LABEL_CLASS}>
+              Sector de preparación *
+            </label>
+            <select
+              id="category-sector"
+              value={sector}
+              onChange={(e) => setSector(e.target.value as PreparationSector)}
+              className={INPUT_CLASS}
+            >
+              <option value="cocina">🍳 Cocina</option>
+              <option value="pizzeria">🍕 Pizzería</option>
+              <option value="barra">🍺 Barra</option>
+            </select>
+            <p className="text-[11px] text-gray-500 mt-1">
+              Área de trabajo del tablero donde se visualizan y preparan los platos de esta categoría.
+            </p>
           </div>
 
           <div className="space-y-2">

@@ -68,6 +68,7 @@ class Category(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
+    sector = Column(String(50), nullable=False, default="cocina", server_default="cocina")
 
     products = relationship("Product", back_populates="category")
 
@@ -127,9 +128,18 @@ class Product(Base):
     # Un producto queda sin categoría si se lo quita de la suya desde el panel: mientras tanto no se ofrece.
     category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
     category = relationship("Category", back_populates="products")
+    sector = Column(String(50), nullable=True)
 
     recipe_items = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")
     image = relationship("ProductImage", back_populates="product", uselist=False, cascade="all, delete-orphan")
+
+    @property
+    def effective_sector(self) -> str:
+        if self.sector:
+            return self.sector.lower()
+        if self.category and getattr(self.category, "sector", None):
+            return self.category.sector.lower()
+        return "cocina"
 
     @validates("price")
     def _as_money(self, _key: str, value) -> Decimal:

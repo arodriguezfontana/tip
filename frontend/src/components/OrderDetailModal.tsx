@@ -2,8 +2,8 @@ import { useEffect, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchOrderDetail } from '@/services/orderService';
-import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderDetail, OrderStatus } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/types/order';
+import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
 
@@ -284,7 +284,21 @@ export function OrderDetailModal({
                     {detail.items.map((item) => (
                       <tr key={item.product_id}>
                         <td className="py-2 pr-2 font-semibold">{item.quantity}</td>
-                        <td className="py-2 pr-2 text-gray-900">{item.product_name}</td>
+                        <td className="py-2 pr-2 text-gray-900">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span>{item.product_name}</span>
+                            {item.sector && SECTOR_CONFIG[item.sector as PreparationSector] && (
+                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${SECTOR_CONFIG[item.sector as PreparationSector].badgeClass}`}>
+                                {SECTOR_CONFIG[item.sector as PreparationSector].icon} {SECTOR_CONFIG[item.sector as PreparationSector].label}
+                              </span>
+                            )}
+                            {item.is_prepared && (
+                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md">
+                                ✓ Listo
+                              </span>
+                            )}
+                          </div>
+                        </td>
                         <td className="py-2 pr-2 text-right text-gray-600 whitespace-nowrap">
                           {formatCurrency(item.unit_price)}
                         </td>
