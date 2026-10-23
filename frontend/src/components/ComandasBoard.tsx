@@ -77,7 +77,9 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       if (saved && (saved === 'todos' || saved === 'pizzeria' || saved === 'cocina' || saved === 'barra')) {
         return saved;
       }
-    } catch {}
+    } catch {
+      // Ignorar restricciones de almacenamiento local
+    }
     return 'todos';
   });
 
@@ -135,7 +137,9 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     setSelectedSector(newSector);
     try {
       localStorage.setItem('resto_comandas_sector', newSector);
-    } catch {}
+    } catch {
+      // Ignorar restricciones de almacenamiento local
+    }
     setPages({
       Pendiente: 1,
       Confirmado: 1,
@@ -145,7 +149,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   };
 
   // Conteo de pedidos activos por sector
-  const { totalActiveOrders, pizzeriaCount, cocinaCount, barraCount, preparacionCount, entregaCount } = useMemo(() => {
+  const { totalActiveOrders, pizzeriaCount, cocinaCount, barraCount } = useMemo(() => {
     const active = orders.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status));
     const total = active.length;
 
@@ -166,7 +170,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       cocinaCount: countFor('cocina'),
       barraCount: countFor('barra'),
     };
-  }, [orders, selectedSector]);
+  }, [orders]);
 
   const columns = useMemo(() => {
     return ACTIVE_ORDER_STATUSES.map((status) => {

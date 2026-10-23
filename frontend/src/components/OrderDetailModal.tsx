@@ -156,10 +156,11 @@ export function OrderDetailModal({
   };
 
   // Agrupación de productos por sector de preparación (US-34)
+  const detailItems = detail?.items;
   const itemsBySector = useMemo(() => {
-    if (!detail?.items) return [];
+    if (!detailItems) return [];
     const map = new Map<string, WebOrderItem[]>();
-    for (const item of detail.items) {
+    for (const item of detailItems) {
       const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
       if (!map.has(sec)) {
         map.set(sec, []);
@@ -167,7 +168,7 @@ export function OrderDetailModal({
       map.get(sec)!.push(item);
     }
     return Array.from(map.entries());
-  }, [detail?.items]);
+  }, [detailItems]);
 
   // Los datos generales salen del tablero (se actualizan con el sondeo); el detalle aporta productos y pago.
   const current = order;

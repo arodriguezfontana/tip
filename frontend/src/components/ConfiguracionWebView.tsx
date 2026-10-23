@@ -194,7 +194,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
   };
 
   const currentTheme = getThemeOption(themeColor);
-  const isCustomColor = !PRESET_THEME_KEYS.includes(themeColor as any);
+  const isCustomColor = !(PRESET_THEME_KEYS as readonly string[]).includes(themeColor);
 
   if (loading) {
     return (
