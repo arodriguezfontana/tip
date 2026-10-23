@@ -265,40 +265,58 @@ describe('ComandasBoard', () => {
       expect(screen.getByText('Solo Tragos')).toBeInTheDocument();
     });
 
-    it('marcar un ítem preparado llama a la API de actualización de ítem', async () => {
+    it('las tarjetas en el tablero no muestran platos ni checks para mantener legibilidad', async () => {
       service.fetchOrders.mockResolvedValue([SECTOR_ORDERS[0]]);
-      service.updateOrderItemPrepared.mockResolvedValue({
-        ...SECTOR_ORDERS[0],
-        items: [{ ...SECTOR_ORDERS[0].items[0], is_prepared: true }],
-        items_prepared_count: 1,
-        is_all_prepared: true,
-      });
+      render(<ComandasBoard />);
 
+      expect(await screen.findByText('Solo Pizza')).toBeInTheDocument();
+      expect(screen.queryByText('Muzza')).not.toBeInTheDocument();
+      expect(screen.queryByText('2×')).not.toBeInTheDocument();
+      expect(screen.queryByRole('button', { name: 'Marcar listo' })).not.toBeInTheDocument();
+      expect(screen.queryByText('✓ Listo')).not.toBeInTheDocument();
+      expect(screen.queryByText(/Progreso general/)).not.toBeInTheDocument();
+    });
+  });
+
+  describe('División entre comandas en preparación y en entrega (US-34)', () => {
+    it('permite alternar entre preparación y entrega, mostrando únicamente sus columnas respectivas', async () => {
       render(<ComandasBoard />);
       const user = userEvent.setup();
 
-      await screen.findByText('Solo Pizza');
-      await user.click(screen.getByText('Muzza'));
+      await screen.findByText('Pendiente Ahora');
 
-      expect(service.updateOrderItemPrepared).toHaveBeenCalledWith(11, 101, true);
+      // 1. Filtrar solo a "Comandas en preparación"
+      await user.click(screen.getByRole('button', { name: /Comandas en preparación/ }));
+      expect(screen.getByRole('heading', { name: 'Pendientes' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Confirmados' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'En Camino' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Listo para Retirar' })).not.toBeInTheDocument();
+      expect(localStorage.getItem('resto_comandas_stage')).toBe('preparacion');
+
+      // 2. Filtrar solo a "Comandas en entrega"
+      await user.click(screen.getByRole('button', { name: /Comandas en entrega/ }));
+      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Pendientes' })).not.toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Confirmados' })).not.toBeInTheDocument();
+      expect(localStorage.getItem('resto_comandas_stage')).toBe('entrega');
+
+      // 3. Volver a "Todas"
+      await user.click(screen.getByRole('button', { name: /^📋.*Todas/ }));
+      expect(screen.getByRole('heading', { name: 'Pendientes' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Confirmados' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
+      expect(localStorage.getItem('resto_comandas_stage')).toBe('todas');
     });
 
-    it('marcar un sector listo llama a la API de actualización por sector', async () => {
-      service.fetchOrders.mockResolvedValue([SECTOR_ORDERS[0]]);
-      service.updateOrderSectorPrepared.mockResolvedValue({
-        ...SECTOR_ORDERS[0],
-        items: [{ ...SECTOR_ORDERS[0].items[0], is_prepared: true }],
-        items_prepared_count: 1,
-        is_all_prepared: true,
-      });
+    it('respeta la fase inicial configurada en initialStage', async () => {
+      render(<ComandasBoard initialStage="entrega" />);
 
-      render(<ComandasBoard />);
-      const user = userEvent.setup();
-
-      await screen.findByText('Solo Pizza');
-      await user.click(screen.getByRole('button', { name: 'Marcar listo' }));
-
-      expect(service.updateOrderSectorPrepared).toHaveBeenCalledWith(11, 'pizzeria', true);
+      await screen.findByText('Viajando');
+      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
+      expect(screen.queryByRole('heading', { name: 'Pendientes' })).not.toBeInTheDocument();
     });
   });
 });

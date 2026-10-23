@@ -1,9 +1,9 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchOrderDetail } from '@/services/orderService';
 import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/types/order';
-import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector } from '@/types/order';
+import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector, WebOrderItem } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
 
@@ -155,6 +155,20 @@ export function OrderDetailModal({
     setReloadKey((key) => key + 1);
   };
 
+  // Agrupación de productos por sector de preparación (US-34)
+  const itemsBySector = useMemo(() => {
+    if (!detail?.items) return [];
+    const map = new Map<string, WebOrderItem[]>();
+    for (const item of detail.items) {
+      const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+      if (!map.has(sec)) {
+        map.set(sec, []);
+      }
+      map.get(sec)!.push(item);
+    }
+    return Array.from(map.entries());
+  }, [detail?.items]);
+
   // Los datos generales salen del tablero (se actualizan con el sondeo); el detalle aporta productos y pago.
   const current = order;
   const isDelivery = current.delivery_method === 'domicilio';
@@ -271,42 +285,44 @@ export function OrderDetailModal({
               </div>
             ) : (
               detail && (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-                      <th className="text-left font-semibold py-2 pr-2">Cant.</th>
-                      <th className="text-left font-semibold py-2 pr-2">Producto</th>
-                      <th className="text-right font-semibold py-2 pr-2">P. unit.</th>
-                      <th className="text-right font-semibold py-2">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {detail.items.map((item) => (
-                      <tr key={item.product_id}>
-                        <td className="py-2 pr-2 font-semibold">{item.quantity}</td>
-                        <td className="py-2 pr-2 text-gray-900">
-                          <div className="flex flex-wrap items-center gap-1.5">
-                            <span>{item.product_name}</span>
-                            {item.sector && SECTOR_CONFIG[item.sector as PreparationSector] && (
-                              <span className={`text-[10px] font-semibold px-1.5 py-0.5 rounded-md ${SECTOR_CONFIG[item.sector as PreparationSector].badgeClass}`}>
-                                {SECTOR_CONFIG[item.sector as PreparationSector].icon} {SECTOR_CONFIG[item.sector as PreparationSector].label}
-                              </span>
-                            )}
-                            {item.is_prepared && (
-                              <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded-md">
-                                ✓ Listo
-                              </span>
-                            )}
-                          </div>
-                        </td>
-                        <td className="py-2 pr-2 text-right text-gray-600 whitespace-nowrap">
-                          {formatCurrency(item.unit_price)}
-                        </td>
-                        <td className="py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(item.subtotal)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-2.5">
+                  {itemsBySector.map(([sector, items]) => {
+                    const meta = SECTOR_CONFIG[sector as PreparationSector] ?? {
+                      key: sector as PreparationSector,
+                      label: sector.charAt(0).toUpperCase() + sector.slice(1),
+                      icon: '🍽️',
+                      badgeClass: 'bg-gray-100 text-gray-800 border border-gray-200',
+                      activeTabClass: '',
+                    };
+
+                    return (
+                      <div key={sector} className="rounded-xl border border-gray-200/80 overflow-hidden bg-white">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/90 border-b border-gray-100 text-xs font-bold text-gray-800">
+                          <span className="flex items-center gap-1.5">
+                            <span aria-hidden="true">{meta.icon}</span>
+                            <span>{meta.label}</span>
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-500">
+                            {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'ítem' : 'ítems'}
+                          </span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <tbody className="divide-y divide-gray-100">
+                            {items.map((item) => (
+                              <tr key={item.product_id} className="hover:bg-gray-50/50 transition">
+                                <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
+                                <td className="py-1.5 pr-2 text-gray-900 font-medium">{item.product_name}</td>
+                                <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">
+                                  {formatCurrency(item.subtotal)}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+                </div>
               )
             )}
 
