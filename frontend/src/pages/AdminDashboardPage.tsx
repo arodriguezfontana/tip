@@ -15,15 +15,21 @@ import { IngredientesView } from '@/components/IngredientesView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
+import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
 import type { StoreConfig } from '@/types/storeConfig';
+
+// Ver la regla en index.css: corre las secciones solo lo necesario para no quedar bajo la columna de chats.
+const CHAT_COLUMN_PADDING = 'chat-column-offset';
 
 export default function AdminDashboardPage() {
   const { logout } = useAuth();
   const navigate = useNavigate();
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('comandas');
+  // Con la columna de chats a la derecha, las secciones se corren solo si no entran a su izquierda.
+  const [chatColumnVisible, setChatColumnVisible] = useState(false);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
 
   useEffect(() => {
@@ -56,8 +62,8 @@ export default function AdminDashboardPage() {
         logoUrl={storeConfig?.logo_url}
         themeColor={storeConfig?.theme_color}
       />
-      <main className="flex-1 px-4 py-6 lg:min-h-0">
-        <div className={`${activeView === 'tomar-pedido' ? 'max-w-7xl' : 'max-w-6xl'} mx-auto lg:h-full`}>
+      <main className={`flex-1 px-4 py-6 lg:min-h-0 transition-[padding] ${chatColumnVisible ? CHAT_COLUMN_PADDING : ''}`}>
+        <div className="max-w-6xl mx-auto lg:h-full">
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
           </div>
@@ -87,6 +93,8 @@ export default function AdminDashboardPage() {
           )}
         </div>
       </main>
+
+      <HandoffNotifications onVisibleChange={setChatColumnVisible} />
 
       <Sidebar
         open={menuOpen}

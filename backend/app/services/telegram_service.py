@@ -6,7 +6,9 @@ import time
 import httpx
 
 from app.core.config import settings
+from app.services.chat_memory import SesionChat
 from app.services.chat_service import ChatService
+from app.services.human_handoff import derivaciones
 from app.services.message_batcher import AgrupadorDeMensajes
 
 logger = logging.getLogger(__name__)
@@ -105,8 +107,18 @@ class TelegramService:
             al_empezar=self._avisar_que_escribe,
         )
 
+    def registrar_perfil(self, chat_id: str, nombre: str | None, usuario: str | None) -> None:
+        """Recuerda quién escribe (según Telegram), para identificarlo si pide hablar con una persona."""
+        perfil = {"nombre": (nombre or "").strip()[:100], "usuario": (usuario or "").strip()[:64]}
+        sesion = self.chat_service.sesiones.setdefault(chat_id, SesionChat())
+        sesion.perfil = {clave: valor for clave, valor in perfil.items() if valor}
+
     def recibir_mensaje(self, chat_id: str, mensaje: str) -> None:
         """Punto de entrada del webhook: encola el mensaje; la respuesta sale cuando el cliente deja de escribir."""
+        if derivaciones.esta_derivado(chat_id):
+            # Lo atiende una persona: el mensaje le llega al empleado en el panel y el bot no responde.
+            derivaciones.registrar_mensaje_del_cliente(chat_id, mensaje)
+            return
         self.agrupador.recibir(chat_id, mensaje)
 
     async def _avisar_que_escribe(self, chat_id: str) -> None:

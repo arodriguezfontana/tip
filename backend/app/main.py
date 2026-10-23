@@ -14,6 +14,7 @@ from app.api import (
     client_router,
     customer_router,
     delivery_driver_router,
+    handoff_router,
     ingredient_router,
     menu_router,
     mercadopago_router,
@@ -72,6 +73,7 @@ api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])
 api_router.include_router(customer_router.router, prefix="/customers", tags=["Customers"])
 api_router.include_router(delivery_driver_router.router, prefix="/delivery-drivers", tags=["Delivery Drivers"])
+api_router.include_router(handoff_router.router, prefix="/handoffs", tags=["Handoffs"])
 api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags=["MercadoPago"])

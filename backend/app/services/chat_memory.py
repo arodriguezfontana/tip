@@ -7,12 +7,15 @@ from datetime import datetime, timedelta, timezone
 
 from langchain_core.messages import BaseMessage, HumanMessage
 
+from app.services.human_handoff import AutorMensaje, MensajeDerivacion
 from app.services.tools.order_tools import MARCA_PEDIDO_REGISTRADO
 
 # Mensajes recientes que se le mandan al modelo (cada pregunta del cliente, llamadas a herramientas y respuestas).
 MAX_MENSAJES_HISTORIAL = 12
 # Tras este tiempo sin mensajes se olvida la charla y el pedido a medio armar, pero no los datos del cliente.
 INACTIVIDAD_PARA_REINICIAR = timedelta(hours=2)
+# Mensajes que se guardan de toda la charla para mostrársela a un empleado si el cliente pide hablar con uno.
+MAX_MENSAJES_TRANSCRIPCION = 200
 
 
 def _ahora() -> datetime:
@@ -38,18 +41,31 @@ def _describir_items(pedido: dict) -> str:
 class SesionChat:
     historial: list[BaseMessage] = field(default_factory=list)
     cliente: dict[str, str] = field(default_factory=dict)
+    # Datos del perfil de Telegram del chat (nombre y @usuario), para que el personal reconozca al cliente.
+    perfil: dict[str, str] = field(default_factory=dict)
     pedido_en_curso: dict | None = None
     ultimo_pedido: str | None = None
     pedido_registrado_en_este_turno: bool = False
     ultima_actividad: datetime = field(default_factory=_ahora)
+    # La charla completa de la sesión (a diferencia del historial, que se recorta para el modelo).
+    transcripcion: list[MensajeDerivacion] = field(default_factory=list)
+
+    def _anotar(self, autor: AutorMensaje, texto: str) -> None:
+        self.transcripcion.append(MensajeDerivacion(autor, texto))
+        del self.transcripcion[:-MAX_MENSAJES_TRANSCRIPCION]
+
+    def registrar_respuesta_del_bot(self, texto: str) -> None:
+        self._anotar(AutorMensaje.BOT, texto)
 
     def iniciar_turno(self, mensaje_usuario: str) -> None:
         if _ahora() - self.ultima_actividad > INACTIVIDAD_PARA_REINICIAR:
             self.historial = []
             self.pedido_en_curso = None
+            self.transcripcion = []
         self.ultima_actividad = _ahora()
         self.pedido_registrado_en_este_turno = False
         self.historial.append(HumanMessage(content=mensaje_usuario))
+        self._anotar(AutorMensaje.CLIENTE, mensaje_usuario)
 
     def registrar_resultado_herramienta(self, nombre: str, resultado: str) -> str | None:
         """Extrae de los resultados de las herramientas lo que vale la pena recordar.
@@ -84,6 +100,10 @@ class SesionChat:
                 )
             self.pedido_en_curso = None
             self.pedido_registrado_en_este_turno = True
+            return resultado
+
+        elif nombre == "derivar_a_empleado":
+            # La conversación pasa a una persona: el aviso al cliente sale tal cual, sin otra llamada al modelo.
             return resultado
 
         return None

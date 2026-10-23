@@ -79,8 +79,29 @@ export async function unlockAudio(): Promise<boolean> {
   return (ctx.state as AlertAudioState) === 'running';
 }
 
-/** Reproduce la alerta. Devuelve false si el navegador todavía no habilitó el audio. */
-export function playAlertSound(): boolean {
+interface Chime {
+  notesHz: number[];
+  waveform: OscillatorType;
+  noteDurationS: number;
+  noteGapS: number;
+}
+
+const ORDER_CHIME: Chime = {
+  notesHz: CHIME_NOTES_HZ,
+  waveform: 'triangle',
+  noteDurationS: NOTE_DURATION_S,
+  noteGapS: NOTE_GAP_S,
+};
+
+// Campanilla "ding-dong" descendente: no se confunde con el acorde ascendente de los pedidos.
+const HANDOFF_CHIME: Chime = {
+  notesHz: [784, 587],
+  waveform: 'sine',
+  noteDurationS: 0.4,
+  noteGapS: 0.05,
+};
+
+function playChime({ notesHz, waveform, noteDurationS, noteGapS }: Chime): boolean {
   const ctx = getContext();
   if (!ctx) return false;
   if (ctx.state !== 'running') {
@@ -91,13 +112,13 @@ export function playAlertSound(): boolean {
   }
 
   const start = ctx.currentTime + 0.02;
-  CHIME_NOTES_HZ.forEach((frequency, index) => {
-    const noteStart = start + index * (NOTE_DURATION_S + NOTE_GAP_S);
-    const noteEnd = noteStart + NOTE_DURATION_S;
+  notesHz.forEach((frequency, index) => {
+    const noteStart = start + index * (noteDurationS + noteGapS);
+    const noteEnd = noteStart + noteDurationS;
 
     const oscillator = ctx.createOscillator();
     const gain = ctx.createGain();
-    oscillator.type = 'triangle';
+    oscillator.type = waveform;
     oscillator.frequency.setValueAtTime(frequency, noteStart);
 
     // Envolvente con ataque y caída cortos para evitar "clicks" al cortar el sonido.
@@ -111,4 +132,14 @@ export function playAlertSound(): boolean {
     oscillator.stop(noteEnd + 0.02);
   });
   return true;
+}
+
+/** Reproduce la alerta de pedidos. Devuelve false si el navegador todavía no habilitó el audio. */
+export function playAlertSound(): boolean {
+  return playChime(ORDER_CHIME);
+}
+
+/** Alerta de un cliente que pidió hablar con una persona (suena distinto a la de pedidos). */
+export function playHandoffAlertSound(): boolean {
+  return playChime(HANDOFF_CHIME);
 }

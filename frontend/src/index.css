@@ -36,3 +36,14 @@
     scrollbar-color: rgb(0 0 0 / 0.25) transparent;
   }
 }
+
+/*
+ * Deja lugar a la columna de chats (21rem, fija a la derecha) sin mover las secciones de más:
+ * el contenido (72rem, centrado) se queda donde está mientras entre a su izquierda, y solo se corre
+ * —lo justo— cuando la pantalla es más angosta que 72rem + 2 × 22rem; al final se achica en vez de taparse.
+ */
+@media (min-width: 1024px) {
+  .chat-column-offset {
+    padding-right: calc(1rem + min(21rem, max(0rem, 116rem - 100vw)));
+  }
+}
