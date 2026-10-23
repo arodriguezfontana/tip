@@ -114,3 +114,17 @@ def test_login_background_image_must_be_an_image_data_url(client):
         json={"store_name": "RestoIT", "theme_color": "black", "login_bg": "custom", "login_bg_image": "https://x.com/a.js"},
     )
     assert response.status_code == 422
+
+
+def test_admin_can_update_custom_hex_theme_color(client, public_client):
+    payload = {
+        "store_name": "Pizzería Colorida",
+        "theme_color": "#a855f7",
+    }
+    response = client.put(CONFIG_URL, json=payload)
+    assert response.status_code == 200
+    assert response.json()["theme_color"] == "#a855f7"
+
+    pub_res = public_client.get(CONFIG_URL)
+    assert pub_res.status_code == 200
+    assert pub_res.json()["theme_color"] == "#a855f7"

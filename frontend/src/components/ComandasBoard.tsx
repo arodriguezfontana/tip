@@ -15,7 +15,7 @@ import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -75,7 +75,7 @@ export function ComandasBoard({ onTakeOrder, themeColor, initialStage }: Comanda
       localStorage.setItem('resto_comandas_stage', newStage);
     } catch {}
   };
-  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
+  const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);

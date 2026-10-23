@@ -46,16 +46,19 @@ describe('ConfiguracionWebView', () => {
     expect(screen.getByRole('button', { name: 'Negro' })).toHaveAttribute('aria-pressed', 'true');
   });
 
-  it('permite cambiar el color principal seleccionando entre los 5 estilos predefinidos', async () => {
+  it('permite cambiar el color principal seleccionando un estilo predefinido y no incluye rojo', async () => {
     const user = userEvent.setup();
     render(<ConfiguracionWebView />);
 
     expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
 
-    const redButton = screen.getByRole('button', { name: 'Rojo' });
-    await user.click(redButton);
+    // El color rojo ya no debe figurar como tema preseleccionado
+    expect(screen.queryByRole('button', { name: 'Rojo' })).not.toBeInTheDocument();
 
-    expect(redButton).toHaveAttribute('aria-pressed', 'true');
+    const blueButton = screen.getByRole('button', { name: 'Azul' });
+    await user.click(blueButton);
+
+    expect(blueButton).toHaveAttribute('aria-pressed', 'true');
     expect(screen.getByRole('button', { name: 'Negro' })).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
@@ -63,7 +66,36 @@ describe('ConfiguracionWebView', () => {
     await waitFor(() => {
       expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
         expect.objectContaining({
-          theme_color: 'red',
+          theme_color: 'blue',
+        })
+      );
+    });
+
+    expect(await screen.findByText(/¡Configuración guardada exitosamente!/i)).toBeInTheDocument();
+  });
+
+  it('permite elegir un color personalizado usando el botón arcoíris y la paleta de colores', async () => {
+    const user = userEvent.setup();
+    render(<ConfiguracionWebView />);
+
+    expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
+
+    const rainbowButton = screen.getByRole('button', { name: 'Color personalizado' });
+    expect(rainbowButton).toBeInTheDocument();
+    expect(rainbowButton).toHaveAttribute('aria-pressed', 'false');
+
+    const colorPicker = screen.getByLabelText(/Elegir color personalizado/i);
+    fireEvent.change(colorPicker, { target: { value: '#a855f7' } });
+
+    expect(rainbowButton).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Negro' })).toHaveAttribute('aria-pressed', 'false');
+
+    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+
+    await waitFor(() => {
+      expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+        expect.objectContaining({
+          theme_color: '#a855f7',
         })
       );
     });

@@ -2,7 +2,7 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
-THEME_COLOR_PATTERN = r"^(black|red|blue|emerald|orange)$"
+THEME_COLOR_PATTERN = r"^(black|red|blue|emerald|orange|#[0-9a-fA-F]{6})$"
 LOGIN_BG_PATTERN = r"^(bistro|kitchen|trattoria|custom)$"
 # Una imagen de fondo ya redimensionada por el navegador pesa bastante menos; esto solo evita abusos.
 LOGIN_BG_IMAGE_MAX_LENGTH = 4_000_000
