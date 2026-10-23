@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 interface TopBarProps {
   onToggleMenu?: () => void;
@@ -25,7 +25,7 @@ export function TopBar({
   themeColor,
 }: TopBarProps) {
   const brandName = title?.trim() || 'RestoIT';
-  const bgColor = themeColor ? THEME_OPTIONS[themeColor]?.hex : '#000000';
+  const bgColor = themeColor ? getThemeOption(themeColor).hex : '#000000';
 
   return (
     <header

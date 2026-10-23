@@ -1,11 +1,12 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderStatus, PaymentMethod } from '@/types/order';
+import type { AdminOrder, OrderStatus, PaymentMethod, SectorFilter } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -31,8 +32,6 @@ const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
   retiro: 'Retiro en local',
 };
 
-import type { DeliveryDriver } from '@/types/deliveryDriver';
-
 interface ComandaCardProps {
   order: AdminOrder;
   onStatusChange: (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => Promise<void>;
@@ -44,6 +43,12 @@ interface ComandaCardProps {
   activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
   onOpenDetail?: (order: AdminOrder) => void;
+  /** Sector activo seleccionado en el tablero: 'todos', 'pizzeria', 'cocina', 'barra'. */
+  selectedSector?: SectorFilter;
+  /** Callback opcional de ítem (para compatibilidad). */
+  onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+  /** Callback opcional de sector (para compatibilidad). */
+  onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
 }
 
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
@@ -294,9 +299,9 @@ export function ComandaCard({
               type="button"
               disabled={pending}
               onClick={() => handleClick(order.delivery_method === 'retiro' ? 'Listo para Retirar' : 'En Camino')}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              className="w-full py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
             >
-              {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
+              <span>{order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}</span>
             </button>
           </div>
         )}

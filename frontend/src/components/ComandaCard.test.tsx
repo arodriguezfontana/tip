@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ComandaCard } from '@/components/ComandaCard';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import type { AdminOrder } from '@/types/order';
+import type { AdminOrder, SectorFilter } from '@/types/order';
 import { makeOrder } from '@/test/utils';
 
 function renderCard(
@@ -12,10 +12,15 @@ function renderCard(
     activeDrivers?: DeliveryDriver[];
     onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
     onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+    selectedSector?: SectorFilter;
+    onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+    onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
   } = {}
 ) {
   const onStatusChange = vi.fn().mockResolvedValue(undefined);
   const onAssignDriver = extraProps.onAssignDriver ?? vi.fn().mockResolvedValue(undefined);
+  const onItemPreparedChange = extraProps.onItemPreparedChange ?? vi.fn().mockResolvedValue(undefined);
+  const onSectorPrepared = extraProps.onSectorPrepared ?? vi.fn().mockResolvedValue(undefined);
   const onOpenDetail = vi.fn();
   const order = makeOrder(overrides);
   render(
@@ -26,9 +31,20 @@ function renderCard(
       onMarkPaid={extraProps.onMarkPaid}
       activeDrivers={extraProps.activeDrivers}
       onOpenDetail={onOpenDetail}
+      selectedSector={extraProps.selectedSector}
+      onItemPreparedChange={onItemPreparedChange}
+      onSectorPrepared={onSectorPrepared}
     />
   );
-  return { order, onStatusChange, onAssignDriver, onOpenDetail, user: userEvent.setup() };
+  return {
+    order,
+    onStatusChange,
+    onAssignDriver,
+    onItemPreparedChange,
+    onSectorPrepared,
+    onOpenDetail,
+    user: userEvent.setup(),
+  };
 }
 
 const minutes = (n: number) => new Date(Date.now() - n * 60000).toISOString();
@@ -338,5 +354,31 @@ describe('ComandaCard', () => {
 
     expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
+  });
+  describe('Separación de comandas por sector (US-34)', () => {
+    const mockItems = [
+      { id: 1, product_id: 10, product_name: 'Pizza Napolitana', quantity: 2, unit_price: 9000, subtotal: 18000, sector: 'pizzeria' },
+      { id: 2, product_id: 20, product_name: 'Milanesa con Papas', quantity: 1, unit_price: 11000, subtotal: 11000, sector: 'cocina' },
+      { id: 3, product_id: 30, product_name: 'Cerveza IPA', quantity: 2, unit_price: 3500, subtotal: 7000, sector: 'barra' },
+    ];
+
+    it('las tarjetas chicas no muestran elementos del pedido ni sectores para mantener legibilidad', () => {
+      renderCard({ items: mockItems });
+
+      // No se muestran nombres de productos
+      expect(screen.queryByText('Pizza Napolitana')).not.toBeInTheDocument();
+      expect(screen.queryByText('Milanesa con Papas')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cerveza IPA')).not.toBeInTheDocument();
+
+      // No se muestran sectores dentro de la tarjeta
+      expect(screen.queryByText('Pizzería')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cocina')).not.toBeInTheDocument();
+      expect(screen.queryByText('Barra')).not.toBeInTheDocument();
+      expect(screen.queryByText('Otros sectores:')).not.toBeInTheDocument();
+
+      // Muestra datos esenciales de la comanda
+      expect(screen.getByText('#101')).toBeInTheDocument();
+      expect(screen.getByText('Paula Gómez')).toBeInTheDocument();
+    });
   });
 });

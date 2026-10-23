@@ -1,14 +1,21 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ACTIVE_ORDER_STATUSES, FINISHED_ORDER_STATUSES } from '@/types/order';
-import type { AdminOrder, OrderStatus } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, FINISHED_ORDER_STATUSES, SECTOR_CONFIG } from '@/types/order';
+import type { AdminOrder, OrderStatus, PreparationSector, SectorFilter } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import { assignDeliveryDriver, fetchOrders, updateOrderPayment, updateOrderStatus } from '@/services/orderService';
+import {
+  assignDeliveryDriver,
+  fetchOrders,
+  updateOrderItemPrepared,
+  updateOrderPayment,
+  updateOrderSectorPrepared,
+  updateOrderStatus,
+} from '@/services/orderService';
 import { fetchDeliveryDrivers } from '@/services/deliveryDriverService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -48,7 +55,7 @@ interface ComandasBoardProps {
 }
 
 export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
-  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
+  const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);
@@ -64,6 +71,18 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   });
 
   const [pendingFilter, setPendingFilter] = useState<'ahora' | 'programados'>('ahora');
+  const [selectedSector, setSelectedSector] = useState<SectorFilter>(() => {
+    try {
+      const saved = localStorage.getItem('resto_comandas_sector') as SectorFilter | null;
+      if (saved && (saved === 'todos' || saved === 'pizzeria' || saved === 'cocina' || saved === 'barra')) {
+        return saved;
+      }
+    } catch {
+      // Ignorar restricciones de almacenamiento local
+    }
+    return 'todos';
+  });
+
   const [detailOrderId, setDetailOrderId] = useState<number | null>(null);
   const closeDetail = useCallback(() => setDetailOrderId(null), []);
 
@@ -114,11 +133,63 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     }
   };
 
+  const handleSectorChange = (newSector: SectorFilter) => {
+    setSelectedSector(newSector);
+    try {
+      localStorage.setItem('resto_comandas_sector', newSector);
+    } catch {
+      // Ignorar restricciones de almacenamiento local
+    }
+    setPages({
+      Pendiente: 1,
+      Confirmado: 1,
+      'En Camino': 1,
+      'Listo para Retirar': 1,
+    });
+  };
+
+  // Conteo de pedidos activos por sector
+  const { totalActiveOrders, pizzeriaCount, cocinaCount, barraCount } = useMemo(() => {
+    const active = orders.filter((o) => ACTIVE_ORDER_STATUSES.includes(o.status));
+    const total = active.length;
+
+    const countFor = (sec: PreparationSector) =>
+      active.filter((o) => {
+        if (o.sectors && o.sectors.length > 0) {
+          return o.sectors.map((s) => s.toLowerCase()).includes(sec);
+        }
+        if (o.items && o.items.length > 0) {
+          return o.items.some((i) => (i.sector?.toLowerCase() || 'cocina') === sec);
+        }
+        return false;
+      }).length;
+
+    return {
+      totalActiveOrders: total,
+      pizzeriaCount: countFor('pizzeria'),
+      cocinaCount: countFor('cocina'),
+      barraCount: countFor('barra'),
+    };
+  }, [orders]);
+
   const columns = useMemo(() => {
     return ACTIVE_ORDER_STATUSES.map((status) => {
       let allOrdersForStatus = orders
         .filter((order) => order.status === status)
         .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
+
+      // Filtrado por sector si no es 'todos'
+      if (selectedSector !== 'todos') {
+        allOrdersForStatus = allOrdersForStatus.filter((order) => {
+          if (order.sectors && order.sectors.length > 0) {
+            return order.sectors.map((s) => s.toLowerCase()).includes(selectedSector);
+          }
+          if (order.items && order.items.length > 0) {
+            return order.items.some((item) => (item.sector?.toLowerCase() || 'cocina') === selectedSector);
+          }
+          return false;
+        });
+      }
 
       // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
       const totalCount = allOrdersForStatus.length;
@@ -146,7 +217,9 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         totalPages,
       };
     });
-  }, [orders, pages, pageSize, pendingFilter]);
+  }, [orders, pages, pageSize, pendingFilter, selectedSector]);
+
+
 
   // Se busca en la lista para que la ventana refleje el estado actualizado por el sondeo.
   const detailOrder = detailOrderId === null ? null : orders.find((order) => order.id === detailOrderId) ?? null;
@@ -230,8 +303,68 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     }
   };
 
+  const handleItemPreparedChange = async (orderId: number, itemId: number, isPrepared: boolean) => {
+    // Actualización optimista local en memoria
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId || !order.items) return order;
+        const updatedItems = order.items.map((item) =>
+          item.id === itemId ? { ...item, is_prepared: isPrepared } : item
+        );
+        const preparedCount = updatedItems.filter((i) => i.is_prepared).length;
+        return {
+          ...order,
+          items: updatedItems,
+          items_prepared_count: preparedCount,
+          is_all_prepared: updatedItems.length > 0 && preparedCount === updatedItems.length,
+        };
+      })
+    );
+
+    if (isSimulating) return;
+
+    try {
+      const updated = await updateOrderItemPrepared(orderId, itemId, isPrepared);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, ...updated } : order)));
+      setError(null);
+    } catch {
+      setError('No se pudo actualizar el estado de preparación del plato.');
+    }
+  };
+
+  const handleSectorPrepared = async (orderId: number, sector: string, isPrepared: boolean) => {
+    const sectorClean = sector.toLowerCase();
+    // Actualización optimista local en memoria
+    setOrders((prev) =>
+      prev.map((order) => {
+        if (order.id !== orderId || !order.items) return order;
+        const updatedItems = order.items.map((item) =>
+          (item.sector?.toLowerCase() || 'cocina') === sectorClean ? { ...item, is_prepared: isPrepared } : item
+        );
+        const preparedCount = updatedItems.filter((i) => i.is_prepared).length;
+        return {
+          ...order,
+          items: updatedItems,
+          items_prepared_count: preparedCount,
+          is_all_prepared: updatedItems.length > 0 && preparedCount === updatedItems.length,
+        };
+      })
+    );
+
+    if (isSimulating) return;
+
+    try {
+      const updated = await updateOrderSectorPrepared(orderId, sector, isPrepared);
+      setOrders((prev) => prev.map((order) => (order.id === orderId ? { ...order, ...updated } : order)));
+      setError(null);
+    } catch {
+      setError(`No se pudo marcar el sector ${sector} como preparado.`);
+    }
+  };
+
   return (
     <div className="flex flex-col gap-4 lg:h-full">
+      {/* Barra superior de controles del tablero */}
       <div className="shrink-0 flex flex-wrap items-center justify-between bg-white px-5 py-3 rounded-2xl shadow-xs border border-gray-100 gap-3">
         <div className="flex items-center gap-3">
           <span className={`w-2.5 h-2.5 rounded-full ${isSimulating ? 'bg-purple-500' : 'bg-amber-500'} animate-pulse`}></span>
@@ -276,7 +409,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
               onClick={handleToggleSimulation}
               className={`text-xs font-medium px-3 py-1.5 rounded-xl transition shadow-xs ${isSimulating ? 'bg-purple-600 hover:bg-purple-700 text-white' : 'bg-gray-900 hover:bg-gray-800 text-white'}`}
             >
-              {isSimulating ? 'Salir de Simulación' : 'Simular 55 Pedidos'}
+              {isSimulating ? 'Salir de Simulación' : 'Simular 50 Pedidos'}
             </button>
           )}
 
@@ -294,6 +427,81 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
             <SpeakerIcon muted={!soundAlert.enabled} />
           </button>
         </div>
+      </div>
+
+      {/* Pestañas de filtrado por sector de preparación*/}
+      <div className="shrink-0 flex items-center justify-between gap-3 bg-white px-4 py-2.5 rounded-2xl shadow-xs border border-gray-100">
+        <div className="flex items-center gap-2 overflow-x-auto py-0.5">
+          <span className="text-xs font-bold text-gray-500 uppercase tracking-wider mr-1 shrink-0">
+            Sector:
+          </span>
+          <button
+            type="button"
+            onClick={() => handleSectorChange('todos')}
+            className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+              selectedSector === 'todos'
+                ? 'bg-gray-900 text-white shadow-xs'
+                : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/80'
+            }`}
+          >
+            <span>🍽️</span>
+            <span>Todos</span>
+            <span
+              className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                selectedSector === 'todos' ? 'bg-gray-700 text-white' : 'bg-gray-200 text-gray-700'
+              }`}
+            >
+              {totalActiveOrders}
+            </span>
+          </button>
+
+          {(['pizzeria', 'cocina', 'barra'] as const).map((secKey) => {
+            const meta = SECTOR_CONFIG[secKey];
+            const isSelected = selectedSector === secKey;
+            const count =
+              secKey === 'pizzeria' ? pizzeriaCount : secKey === 'cocina' ? cocinaCount : barraCount;
+
+            return (
+              <button
+                key={secKey}
+                type="button"
+                onClick={() => handleSectorChange(secKey)}
+                className={`flex items-center gap-2 px-3 py-1.5 rounded-xl text-xs font-bold transition whitespace-nowrap cursor-pointer ${
+                  isSelected
+                    ? meta.activeTabClass
+                    : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/80'
+                }`}
+              >
+                <span>{meta.icon}</span>
+                <span>{meta.label}</span>
+                <span
+                  className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
+                    isSelected ? 'bg-black/20 text-white' : 'bg-gray-200 text-gray-700'
+                  }`}
+                >
+                  {count}
+                </span>
+              </button>
+            );
+          })}
+        </div>
+
+        {selectedSector !== 'todos' && (
+          <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500 shrink-0">
+            <span>Filtrado por:</span>
+            <span className="font-semibold text-gray-800 flex items-center gap-1">
+              <span>{SECTOR_CONFIG[selectedSector].icon}</span>
+              <span>{SECTOR_CONFIG[selectedSector].label}</span>
+            </span>
+            <button
+              type="button"
+              onClick={() => handleSectorChange('todos')}
+              className="text-[11px] text-blue-600 hover:underline font-medium ml-1 cursor-pointer"
+            >
+              (Ver todos)
+            </button>
+          </div>
+        )}
       </div>
 
       {!soundAlert.audioSupported && (
@@ -351,16 +559,21 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
               <div className="space-y-3 min-h-[220px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {column.orders.length === 0 ? (
-                  <p className="text-xs text-gray-400 text-center py-12">Sin pedidos</p>
+                  <p className="text-xs text-gray-400 text-center py-12">
+                    {selectedSector !== 'todos' ? `Sin pedidos para ${SECTOR_CONFIG[selectedSector].label}` : 'Sin pedidos'}
+                  </p>
                 ) : (
                   column.orders.map((order) => (
                     <ComandaCard
                       key={order.id}
                       order={order}
                       activeDrivers={activeDrivers}
+                      selectedSector={selectedSector}
                       onAssignDriver={handleAssignDriver}
                       onStatusChange={handleStatusChange}
                       onMarkPaid={handleMarkPaid}
+                      onItemPreparedChange={handleItemPreparedChange}
+                      onSectorPrepared={handleSectorPrepared}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
                     />
                   ))

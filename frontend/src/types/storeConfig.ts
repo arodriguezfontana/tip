@@ -1,7 +1,8 @@
-export type ThemeColor = 'black' | 'red' | 'blue' | 'emerald' | 'orange';
+export type PresetThemeColor = 'black' | 'blue' | 'emerald' | 'orange';
+export type ThemeColor = PresetThemeColor | 'red' | string;
 
 export interface ThemeOption {
-  id: ThemeColor;
+  id: string;
   name: string;
   hex: string;
   headerBg: string;
@@ -10,28 +11,19 @@ export interface ThemeOption {
   accentBorder: string;
 }
 
-export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
+export const THEME_OPTIONS: Record<string, ThemeOption> = {
   black: {
     id: 'black',
-    name: 'Negro Clásico',
+    name: 'Negro',
     hex: '#18181b',
     headerBg: 'bg-zinc-900',
     badgeBg: 'bg-zinc-100',
     badgeText: 'text-zinc-900',
     accentBorder: 'border-zinc-900',
   },
-  red: {
-    id: 'red',
-    name: 'Rojo Gourmet',
-    hex: '#dc2626',
-    headerBg: 'bg-red-600',
-    badgeBg: 'bg-red-50',
-    badgeText: 'text-red-700',
-    accentBorder: 'border-red-600',
-  },
   blue: {
     id: 'blue',
-    name: 'Azul Real',
+    name: 'Azul',
     hex: '#2563eb',
     headerBg: 'bg-blue-600',
     badgeBg: 'bg-blue-50',
@@ -40,7 +32,7 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   emerald: {
     id: 'emerald',
-    name: 'Verde Esmeralda',
+    name: 'Verde',
     hex: '#059669',
     headerBg: 'bg-emerald-600',
     badgeBg: 'bg-emerald-50',
@@ -49,14 +41,45 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   orange: {
     id: 'orange',
-    name: 'Naranja Cálido',
+    name: 'Naranja',
     hex: '#ea580c',
     headerBg: 'bg-orange-600',
     badgeBg: 'bg-orange-50',
     badgeText: 'text-orange-700',
     accentBorder: 'border-orange-600',
   },
+  // Mantenemos 'red' en el mapa por si existe en alguna base de datos existente,
+  // pero ya no figura en los temas preseleccionados ofrecidos en la interfaz.
+  red: {
+    id: 'red',
+    name: 'Rojo',
+    hex: '#dc2626',
+    headerBg: 'bg-red-600',
+    badgeBg: 'bg-red-50',
+    badgeText: 'text-red-700',
+    accentBorder: 'border-red-600',
+  },
 };
+
+/** Lista de temas preseleccionados mostrados como botones. Rojo fue removido a favor del selector arcoíris. */
+export const PRESET_THEME_KEYS: PresetThemeColor[] = ['black', 'blue', 'emerald', 'orange'];
+
+export function getThemeOption(color?: string | null): ThemeOption {
+  if (!color) return THEME_OPTIONS.black;
+  if (THEME_OPTIONS[color]) return THEME_OPTIONS[color];
+  if (color.startsWith('#')) {
+    return {
+      id: color,
+      name: 'Personalizado',
+      hex: color,
+      headerBg: 'bg-zinc-900',
+      badgeBg: 'bg-zinc-100',
+      badgeText: 'text-zinc-900',
+      accentBorder: 'border-zinc-900',
+    };
+  }
+  return THEME_OPTIONS.black;
+}
 
 /** 'custom' = imagen propia subida desde el dispositivo (ver login_bg_image). */
 export type LoginBgOption = 'bistro' | 'kitchen' | 'trattoria' | 'custom';
@@ -103,4 +126,3 @@ export interface StoreConfigUpdatePayload {
   login_bg_image?: string | null;
   mp_alias?: string | null;
 }
-

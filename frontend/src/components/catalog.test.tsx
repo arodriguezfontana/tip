@@ -292,7 +292,7 @@ describe('CategoriasView', () => {
     expect(within(dialog).getByText('2 seleccionados')).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Crear categoría' }));
 
-    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Otros', product_ids: [11, 12] });
+    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Otros', product_ids: [11, 12], sector: 'cocina' });
     expect(await screen.findByText('Se creó la categoría Otros.')).toBeInTheDocument();
     await waitFor(() => expect(catalog.fetchCategories).toHaveBeenCalledTimes(2));
   });
@@ -309,7 +309,7 @@ describe('CategoriasView', () => {
 
     await user.type(screen.getByLabelText('Nombre *'), 'Empanadas');
     await user.click(screen.getByRole('button', { name: 'Crear categoría' }));
-    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Empanadas', product_ids: [] });
+    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Empanadas', product_ids: [], sector: 'cocina' });
   });
 
   it('edita el nombre y quita productos de una categoría', async () => {
@@ -328,7 +328,7 @@ describe('CategoriasView', () => {
     expect(within(dialog).getByText(/1 producto quedará sin categoría/)).toBeInTheDocument();
     await user.click(within(dialog).getByRole('button', { name: 'Guardar cambios' }));
 
-    expect(catalog.updateCategory).toHaveBeenCalledWith(1, { name: 'Pizzas a la piedra', product_ids: [] });
+    expect(catalog.updateCategory).toHaveBeenCalledWith(1, { name: 'Pizzas a la piedra', product_ids: [], sector: 'cocina' });
     expect(await screen.findByText('Se guardaron los cambios de Pizzas a la piedra.')).toBeInTheDocument();
   });
 
@@ -362,6 +362,27 @@ describe('CategoriasView', () => {
     await user.click(screen.getByRole('button', { name: 'Eliminar Pizzas' }));
     expect(catalog.deleteCategory).toHaveBeenCalledWith(1);
     expect(await screen.findByText('Se eliminó la categoría Pizzas.')).toBeInTheDocument();
+  });
+
+  it('permite elegir el sector de preparación y muestra la insignia en el listado', async () => {
+    catalog.fetchCategories.mockResolvedValue([
+      { id: 1, name: 'Pizzas', sector: 'pizzeria', products: [] },
+      { id: 2, name: 'Bebidas', sector: 'barra', products: [] },
+    ]);
+    catalog.createCategory.mockResolvedValue({ id: 3, name: 'Tragos', sector: 'barra', products: [] });
+    render(<CategoriasView />);
+    const user = userEvent.setup();
+
+    expect(await screen.findByText('Pizzería')).toBeInTheDocument();
+    expect(screen.getByText('Barra')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: '+ Nueva categoría' }));
+    const dialog = screen.getByRole('dialog', { name: 'Nueva categoría' });
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Tragos');
+    await user.selectOptions(within(dialog).getByLabelText('Sector de preparación *'), 'barra');
+    await user.click(within(dialog).getByRole('button', { name: 'Crear categoría' }));
+
+    expect(catalog.createCategory).toHaveBeenCalledWith({ name: 'Tragos', product_ids: [], sector: 'barra' });
   });
 });
 

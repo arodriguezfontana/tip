@@ -26,7 +26,9 @@ def post_category(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> AdminCategoryResponse:
-    return AdminCategoryResponse.from_model(catalog_service.create_category(db, payload.name, payload.product_ids))
+    return AdminCategoryResponse.from_model(
+        catalog_service.create_category(db, payload.name, payload.product_ids, payload.sector)
+    )
 
 
 @router.put("/{category_id}", response_model=AdminCategoryResponse)
@@ -37,7 +39,9 @@ def put_category(
     current_user: User = Depends(get_current_admin),
 ) -> AdminCategoryResponse:
     """Renombra la categoría y deja en ella exactamente los productos indicados."""
-    category = catalog_service.update_category(db, category_id, payload.name, payload.product_ids)
+    category = catalog_service.update_category(
+        db, category_id, payload.name, payload.product_ids, payload.sector
+    )
     return AdminCategoryResponse.from_model(category)
 
 

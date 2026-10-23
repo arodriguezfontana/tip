@@ -65,9 +65,9 @@ describe('OrderDetailModal', () => {
     expect(within(dialog).getByText('Sin cebolla')).toBeInTheDocument();
 
     const rows = await within(dialog).findAllByRole('row');
-    expect(rows.slice(1).map((row) => plain(row.textContent))).toEqual([
-      '2Pizza Muzzarella$ 8.500,00$ 17.000,00',
-      '1Coca-Cola 500ml$ 2.500,00$ 2.500,00',
+    expect(rows.map((row) => plain(row.textContent))).toEqual([
+      '2Pizza Muzzarella$ 17.000,00',
+      '1Coca-Cola 500ml$ 2.500,00',
     ]);
     expect(within(dialog).getByText('Transferencia')).toBeInTheDocument();
     expect(within(dialog).getByText('Pagado')).toBeInTheDocument();
@@ -205,5 +205,37 @@ describe('OrderDetailModal', () => {
     renderModal();
 
     expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
+  });
+  describe('Separación de productos por sector en el detalle (US-34)', () => {
+    it('agrupa los productos por sector de preparación arriba y abajo sin etiquetas individuales', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            { product_id: 10, product_name: 'Pizza Calabresa', quantity: 1, unit_price: 9500, subtotal: 9500, sector: 'pizzeria' },
+            { product_id: 20, product_name: 'Bife de Chorizo', quantity: 2, unit_price: 12000, subtotal: 24000, sector: 'cocina' },
+            { product_id: 30, product_name: 'Cerveza Tirada', quantity: 3, unit_price: 3000, subtotal: 9000, sector: 'barra' },
+          ],
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      // Encabezados de los tres sectores presentes
+      expect(await within(dialog).findByText(/Pizzería/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Cocina/i)).toBeInTheDocument();
+      expect(within(dialog).getByText(/Barra/i)).toBeInTheDocument();
+
+      // Platos correspondientes presentes
+      expect(within(dialog).getByText('Pizza Calabresa')).toBeInTheDocument();
+      expect(within(dialog).getByText('Bife de Chorizo')).toBeInTheDocument();
+      expect(within(dialog).getByText('Cerveza Tirada')).toBeInTheDocument();
+
+      // Cantidades correctas
+      expect(within(dialog).getByText('1 ítem')).toBeInTheDocument();
+      expect(within(dialog).getByText('2 ítems')).toBeInTheDocument();
+      expect(within(dialog).getByText('3 ítems')).toBeInTheDocument();
+    });
   });
 });

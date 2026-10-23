@@ -28,9 +28,13 @@ class OrderResponse(BaseModel):
     delivery_driver_name: str | None = None
     payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
+    items: list["WebOrderItemResponse"] = Field(default_factory=list)
+    items_prepared_count: int = 0
+    is_all_prepared: bool = False
+    sectors: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _web_payment_methods(self) -> "CounterOrderCreate":
+    def _web_payment_methods(self) -> "OrderResponse":
         # En el mostrador el personal puede registrar cualquier medio de pago (o ninguno).
         return self
 
@@ -54,6 +58,10 @@ class OrderResponse(BaseModel):
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
             payment_method=order.payment_method,
             is_paid=bool(order.is_paid),
+            items=[WebOrderItemResponse.from_model(item) for item in order.items] if order.items else [],
+            items_prepared_count=order.items_prepared_count,
+            is_all_prepared=order.is_all_prepared,
+            sectors=order.sectors,
         )
 
 
@@ -126,20 +134,26 @@ class CounterOrderCreate(_OrderCreate):
 
 
 class WebOrderItemResponse(BaseModel):
+    id: int | None = None
     product_id: int
     product_name: str
     quantity: int
     unit_price: float
     subtotal: float
+    sector: str = "cocina"
+    is_prepared: bool = False
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
         return cls(
+            id=item.id,
             product_id=item.product_id,
-            product_name=item.product.name,
+            product_name=item.product.name if item.product else "",
             quantity=item.quantity,
             unit_price=item.unit_price,
             subtotal=item.subtotal,
+            sector=item.sector,
+            is_prepared=bool(item.is_prepared),
         )
 
 
@@ -181,7 +195,6 @@ class WebOrderCreatedResponse(BaseModel):
 class OrderDetailResponse(OrderResponse):
     """Detalle completo de un pedido para el panel: productos, entrega y facturación."""
 
-    items: list[WebOrderItemResponse]
     subtotal: float
     shipping_cost: float
 
@@ -189,7 +202,6 @@ class OrderDetailResponse(OrderResponse):
     def from_model(cls, order: Order) -> "OrderDetailResponse":
         return cls(
             **OrderResponse.from_model(order).model_dump(),
-            items=[WebOrderItemResponse.from_model(item) for item in order.items],
             subtotal=order.subtotal,
             shipping_cost=order.shipping_cost or 0,
         )
@@ -199,3 +211,15 @@ class OrderPaymentUpdate(BaseModel):
     """Payload para actualizar manualmente el estado de cobro de un pedido."""
 
     is_paid: bool = True
+
+
+class OrderItemPreparedUpdate(BaseModel):
+    """Payload para marcar un ítem individual como preparado."""
+
+    is_prepared: bool = True
+
+
+class OrderSectorPreparedUpdate(BaseModel):
+    """Payload para marcar todos los ítems de un sector como preparados."""
+
+    is_prepared: bool = True

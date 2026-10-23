@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 export type ViewKey =
   | 'tomar-pedido'
@@ -79,7 +79,7 @@ function saveCollapsedGroups(titles: string[]) {
 
 export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsedGroups);
-  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
+  const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
 
   const toggleGroup = (title: string) => {
     const next = collapsed.includes(title) ? collapsed.filter((t) => t !== title) : [...collapsed, title];

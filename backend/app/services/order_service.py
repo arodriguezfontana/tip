@@ -190,9 +190,10 @@ def list_orders(
     date_from: datetime | None = None,
     date_to: datetime | None = None,
     statuses: list[str] | None = None,
+    sector: str | None = None,
 ) -> list[Order]:
-    """Pedidos registrados, del más reciente al más antiguo, filtrados por fecha de creación y estado."""
-    return order_repository.list_orders(db, date_from, date_to, statuses)
+    """Pedidos registrados, del más reciente al más antiguo, filtrados por fecha de creación, estado y sector."""
+    return order_repository.list_orders(db, date_from, date_to, statuses, sector)
 
 
 def get_order(db: Session, order_id: int) -> Order:
@@ -256,6 +257,36 @@ def update_order_payment(db: Session, order_id: int, is_paid: bool) -> Order:
     """Actualiza manualmente el estado de cobro de un pedido."""
     order = get_order(db, order_id)
     order.is_paid = is_paid
+    with transaction(db):
+        pass
+    db.refresh(order)
+    return order
+
+
+def update_order_item_prepared(db: Session, order_id: int, item_id: int, is_prepared: bool) -> Order:
+    """Marca o desmarca un ítem individual de una comanda como preparado."""
+    order = get_order(db, order_id)
+    item = next((i for i in order.items if i.id == item_id), None)
+    if item is None:
+        raise NotFoundError("Ítem no encontrado en el pedido.")
+    item.is_prepared = is_prepared
+    with transaction(db):
+        pass
+    db.refresh(order)
+    return order
+
+
+def update_order_sector_prepared(db: Session, order_id: int, sector: str, is_prepared: bool) -> Order:
+    """Marca o desmarca todos los ítems de un sector en una comanda como preparados."""
+    order = get_order(db, order_id)
+    sector_clean = sector.strip().lower()
+    matched = False
+    for item in order.items:
+        if item.sector.lower() == sector_clean:
+            item.is_prepared = is_prepared
+            matched = True
+    if not matched:
+        raise NotFoundError(f"No hay ítems para el sector '{sector}' en este pedido.")
     with transaction(db):
         pass
     db.refresh(order)

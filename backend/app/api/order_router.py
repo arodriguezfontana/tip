@@ -14,8 +14,10 @@ from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
     CounterOrderCreate,
     OrderDetailResponse,
+    OrderItemPreparedUpdate,
     OrderPaymentUpdate,
     OrderResponse,
+    OrderSectorPreparedUpdate,
     OrderStatusUpdate,
     WebOrderCreate,
     WebOrderCreatedResponse,
@@ -41,6 +43,7 @@ def list_orders(
     date_from: datetime | None = Query(None, description="Fecha/hora mínima (inclusive) de creación del pedido."),
     date_to: datetime | None = Query(None, description="Fecha/hora máxima (inclusive) de creación del pedido."),
     status: list[str] | None = Query(None, description="Filtra por uno o más estados del pedido."),
+    sector: str | None = Query(None, description="Filtra por sector de preparación (cocina, pizzeria, barra)."),
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> list[OrderResponse]:
@@ -52,7 +55,10 @@ def list_orders(
     for paid in reconcile_pending_payments(db):
         if paid.telegram_chat_id:
             background_tasks.add_task(send_telegram_message, int(paid.telegram_chat_id), payment_received_message(paid))
-    return [OrderResponse.from_model(order) for order in order_service.list_orders(db, date_from, date_to, status)]
+    return [
+        OrderResponse.from_model(order)
+        for order in order_service.list_orders(db, date_from, date_to, status, sector)
+    ]
 
 
 @router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
@@ -153,4 +159,30 @@ def update_order_payment(
             f"Registramos el pago en el sistema. ¡Muchas gracias!"
         )
         background_tasks.add_task(send_telegram_message, int(order.telegram_chat_id), mensaje)
+    return OrderResponse.from_model(order)
+
+
+@router.patch("/{order_id}/items/{item_id}/prepared", response_model=OrderResponse)
+def update_order_item_prepared(
+    order_id: int,
+    item_id: int,
+    payload: OrderItemPreparedUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Marca o desmarca un ítem individual del pedido como preparado."""
+    order = order_service.update_order_item_prepared(db, order_id, item_id, payload.is_prepared)
+    return OrderResponse.from_model(order)
+
+
+@router.patch("/{order_id}/sectors/{sector}/prepared", response_model=OrderResponse)
+def update_order_sector_prepared(
+    order_id: int,
+    sector: str,
+    payload: OrderSectorPreparedUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Marca o desmarca todos los ítems de un sector específico en el pedido como preparados."""
+    order = order_service.update_order_sector_prepared(db, order_id, sector, payload.is_prepared)
     return OrderResponse.from_model(order)

@@ -21,7 +21,7 @@ import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
 import { clearPendingPaymentOrder, loadPendingPaymentOrder, savePendingPaymentOrder } from '@/utils/pendingPayment';
 import { groupWeeklySchedule } from '@/utils/businessHours';
-import { THEME_OPTIONS, type StoreConfig } from '@/types/storeConfig';
+import { getThemeOption, type StoreConfig } from '@/types/storeConfig';
 import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 
 interface SubmittedOrder {
@@ -69,7 +69,7 @@ export default function MenuPage() {
 
   const showingConfirmation = Boolean(submittedOrder || returningOrderId);
   const productGroups = groupByCategory(products);
-  const currentTheme = THEME_OPTIONS[storeConfig?.theme_color || 'black'] || THEME_OPTIONS.black;
+  const currentTheme = getThemeOption(storeConfig?.theme_color);
 
   const handleOrderCreated = (order: WebOrderCreated, form: CheckoutFormData) => {
     // Con MercadoPago se sale de la página a pagar: se guarda el pedido para mostrarlo al volver.
