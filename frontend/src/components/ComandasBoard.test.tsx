@@ -278,45 +278,5 @@ describe('ComandasBoard', () => {
     });
   });
 
-  describe('División entre comandas en preparación y en entrega (US-34)', () => {
-    it('permite alternar entre preparación y entrega, mostrando únicamente sus columnas respectivas', async () => {
-      render(<ComandasBoard />);
-      const user = userEvent.setup();
 
-      await screen.findByText('Pendiente Ahora');
-
-      // 1. Filtrar solo a "Comandas en preparación"
-      await user.click(screen.getByRole('button', { name: /Comandas en preparación/ }));
-      expect(screen.getByRole('heading', { name: 'Pendientes' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Confirmados' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'En Camino' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Listo para Retirar' })).not.toBeInTheDocument();
-      expect(localStorage.getItem('resto_comandas_stage')).toBe('preparacion');
-
-      // 2. Filtrar solo a "Comandas en entrega"
-      await user.click(screen.getByRole('button', { name: /Comandas en entrega/ }));
-      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Pendientes' })).not.toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Confirmados' })).not.toBeInTheDocument();
-      expect(localStorage.getItem('resto_comandas_stage')).toBe('entrega');
-
-      // 3. Volver a "Todas"
-      await user.click(screen.getByRole('button', { name: /^📋.*Todas/ }));
-      expect(screen.getByRole('heading', { name: 'Pendientes' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Confirmados' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
-      expect(localStorage.getItem('resto_comandas_stage')).toBe('todas');
-    });
-
-    it('respeta la fase inicial configurada en initialStage', async () => {
-      render(<ComandasBoard initialStage="entrega" />);
-
-      await screen.findByText('Viajando');
-      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
-      expect(screen.getByRole('heading', { name: 'Listo para Retirar' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Pendientes' })).not.toBeInTheDocument();
-    });
-  });
 });

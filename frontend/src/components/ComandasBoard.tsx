@@ -48,33 +48,13 @@ function SpeakerIcon({ muted }: { muted: boolean }) {
   );
 }
 
-export type BoardStage = 'todas' | 'preparacion' | 'entrega';
-
 interface ComandasBoardProps {
   /** Acceso rápido a la sección para cargar pedidos presenciales. */
   onTakeOrder?: () => void;
   themeColor?: ThemeColor;
-  initialStage?: BoardStage;
 }
 
-export function ComandasBoard({ onTakeOrder, themeColor, initialStage }: ComandasBoardProps) {
-  const [boardStage, setBoardStage] = useState<BoardStage>(() => {
-    if (initialStage) return initialStage;
-    try {
-      const saved = localStorage.getItem('resto_comandas_stage');
-      if (saved === 'preparacion' || saved === 'entrega' || saved === 'todas') {
-        return saved;
-      }
-    } catch {}
-    return 'todas';
-  });
-
-  const handleStageChange = (newStage: BoardStage) => {
-    setBoardStage(newStage);
-    try {
-      localStorage.setItem('resto_comandas_stage', newStage);
-    } catch {}
-  };
+export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
@@ -180,26 +160,11 @@ export function ComandasBoard({ onTakeOrder, themeColor, initialStage }: Comanda
         return false;
       }).length;
 
-    const countStage = (statuses: OrderStatus[]) =>
-      active.filter((order) => {
-        if (!statuses.includes(order.status)) return false;
-        if (selectedSector === 'todos') return true;
-        if (order.sectors && order.sectors.length > 0) {
-          return order.sectors.map((s) => s.toLowerCase()).includes(selectedSector);
-        }
-        if (order.items && order.items.length > 0) {
-          return order.items.some((item) => (item.sector?.toLowerCase() || 'cocina') === selectedSector);
-        }
-        return false;
-      }).length;
-
     return {
       totalActiveOrders: total,
       pizzeriaCount: countFor('pizzeria'),
       cocinaCount: countFor('cocina'),
       barraCount: countFor('barra'),
-      preparacionCount: countStage(['Pendiente', 'Confirmado']),
-      entregaCount: countStage(['En Camino', 'Listo para Retirar']),
     };
   }, [orders, selectedSector]);
 
@@ -250,15 +215,7 @@ export function ComandasBoard({ onTakeOrder, themeColor, initialStage }: Comanda
     });
   }, [orders, pages, pageSize, pendingFilter, selectedSector]);
 
-  const visibleColumns = useMemo(() => {
-    if (boardStage === 'preparacion') {
-      return columns.filter((c) => c.status === 'Pendiente' || c.status === 'Confirmado');
-    }
-    if (boardStage === 'entrega') {
-      return columns.filter((c) => c.status === 'En Camino' || c.status === 'Listo para Retirar');
-    }
-    return columns;
-  }, [columns, boardStage]);
+
 
   // Se busca en la lista para que la ventana refleje el estado actualizado por el sondeo.
   const detailOrder = detailOrderId === null ? null : orders.find((order) => order.id === detailOrderId) ?? null;
@@ -567,14 +524,8 @@ export function ComandasBoard({ onTakeOrder, themeColor, initialStage }: Comanda
       {loading && orders.length === 0 ? (
         <p className="text-sm text-gray-500 text-center py-12">Cargando comandas...</p>
       ) : (
-        <div
-          className={
-            boardStage === 'todas'
-              ? 'grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0'
-              : 'grid grid-cols-1 md:grid-cols-2 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0'
-          }
-        >
-          {visibleColumns.map((column) => (
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
+          {columns.map((column) => (
             <div key={column.status} className="bg-gray-50/50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
               <div className="shrink-0 flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700">{COLUMN_LABELS[column.status]}</h3>
