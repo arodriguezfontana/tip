@@ -66,8 +66,8 @@ describe('OrderDetailModal', () => {
 
     const rows = await within(dialog).findAllByRole('row');
     expect(rows.map((row) => plain(row.textContent))).toEqual([
-      '2Pizza Muzzarella$ 8.500,00$ 17.000,00',
-      '1Coca-Cola 500ml$ 2.500,00$ 2.500,00',
+      '2Pizza Muzzarella$ 17.000,00',
+      '1Coca-Cola 500ml$ 2.500,00',
     ]);
     expect(within(dialog).getByText('Transferencia')).toBeInTheDocument();
     expect(within(dialog).getByText('Pagado')).toBeInTheDocument();

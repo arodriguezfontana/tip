@@ -19,7 +19,7 @@ from sqlalchemy.orm import Session
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
-from app.models.order import PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError, PaymentMethod
+from app.models.order import MAX_QUANTITY_PER_ITEM, PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError, PaymentMethod
 from app.schemas.common import PHONE_PATTERN
 from app.services.business_hours_service import (
     DIAS_SEMANA,
@@ -54,6 +54,9 @@ def _normalizar_metodo_pago(metodo: str | None) -> str | None:
 TOLERANCIA_CONFIRMACION_MINUTOS = 5
 
 MAX_LARGO_OBSERVACIONES = 500
+MAX_ITEMS_EN_PEDIDO = 50
+MAX_LARGO_CLIENTE = 100
+MAX_LARGO_DIRECCION = 255
 
 # Con cuántos días de anticipación se puede programar un pedido.
 MAX_DIAS_PROGRAMACION = 7
@@ -253,6 +256,10 @@ def calcular_y_preparar_pedido(
     """
     db = SessionLocal()
     try:
+        # Sanitización de límites de longitud para campos de texto
+        customer_name = (customer_name or "").strip()[:MAX_LARGO_CLIENTE] or None
+        shipping_address = (shipping_address or "").strip()[:MAX_LARGO_DIRECCION] or None
+
         lista_items = []
 
         try:
@@ -273,16 +280,36 @@ def calcular_y_preparar_pedido(
                 else:
                     lista_items.append({"nombre": parte_limpia, "cantidad": 1})
 
+        if len(lista_items) > MAX_ITEMS_EN_PEDIDO:
+            lista_items = lista_items[:MAX_ITEMS_EN_PEDIDO]
+
         resumen_lineas = []
         total_general = Decimal(0)
         items_validados = []
         hay_ambiguos = False
+        hay_cantidades_invalidas = False
 
         for item in lista_items:
             nombre_buscado = str(item.get("nombre", "")).strip()
-            cantidad = int(item.get("cantidad") or item.get("quantity") or 1)
+            raw_cant = item.get("cantidad") if item.get("cantidad") is not None else item.get("quantity")
+            try:
+                cantidad = int(raw_cant) if raw_cant is not None else 1
+            except (ValueError, TypeError):
+                cantidad = 1
 
             if not nombre_buscado:
+                continue
+
+            if cantidad < 1:
+                hay_cantidades_invalidas = True
+                resumen_lineas.append(f"- '{nombre_buscado}': la cantidad debe ser de al menos 1 unidad.")
+                continue
+
+            if cantidad > MAX_QUANTITY_PER_ITEM:
+                hay_cantidades_invalidas = True
+                resumen_lineas.append(
+                    f"- '{nombre_buscado}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
+                )
                 continue
 
             producto = _buscar_producto(db, nombre_buscado)
@@ -309,6 +336,8 @@ def calcular_y_preparar_pedido(
         if not items_validados:
             if hay_ambiguos:
                 return "Necesito que me aclares algunos productos:\n" + "\n".join(resumen_lineas)
+            if hay_cantidades_invalidas:
+                return "Necesito que revises algunos productos del pedido:\n" + "\n".join(resumen_lineas)
             return "No se pudieron reconocer productos válidos en el menú para tu pedido."
 
         es_retiro = metodo_entrega == DeliveryMethod.PICKUP
@@ -318,7 +347,7 @@ def calcular_y_preparar_pedido(
         notas = _limpiar_observaciones(observaciones)
         pago_normalizado = _normalizar_metodo_pago(metodo_pago)
         faltan_datos = (
-            metodo_entrega is None or not customer_name or falta_telefono or falta_direccion or hay_ambiguos
+            metodo_entrega is None or not customer_name or falta_telefono or falta_direccion or hay_ambiguos or hay_cantidades_invalidas
         )
 
         horario_programado, aviso_horario = _evaluar_hora_programada(db, hora_programada, dia_programado)
@@ -351,6 +380,8 @@ def calcular_y_preparar_pedido(
                 faltantes.append("tu dirección de envío")
             if hay_ambiguos:
                 faltantes.append("cuál de los productos que te consulté arriba querés")
+            if hay_cantidades_invalidas:
+                faltantes.append("corregir las cantidades no válidas que te indiqué arriba")
             texto_respuesta += f"\n\n(Me falta que me digas {', '.join(faltantes)} para continuar)."
             if aviso_horario:
                 texto_respuesta += f"\n\n{aviso_horario}"
@@ -417,9 +448,10 @@ def confirmar_y_guardar_pedido(
             delivery_method = DeliveryMethod.DELIVERY
         es_retiro = delivery_method == DeliveryMethod.PICKUP
 
-        cliente = datos.get("cliente") or datos.get("customer_name") or "Cliente"
-        direccion = datos.get("direccion") or datos.get("shipping_address")
-        telefono = str(datos.get("telefono") or datos.get("customer_phone") or "").strip()
+        cliente = (datos.get("cliente") or datos.get("customer_name") or "Cliente").strip()[:MAX_LARGO_CLIENTE]
+        raw_dir = datos.get("direccion") or datos.get("shipping_address")
+        direccion = raw_dir.strip()[:MAX_LARGO_DIRECCION] if raw_dir else None
+        telefono = str(datos.get("telefono") or datos.get("customer_phone") or "").strip()[:30]
 
         if not cliente or (not es_retiro and not direccion):
             return "Faltan datos obligatorios (nombre o dirección) para registrar la orden."
