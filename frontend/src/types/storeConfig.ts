@@ -13,7 +13,7 @@ export interface ThemeOption {
 export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   black: {
     id: 'black',
-    name: 'Negro Clásico',
+    name: 'Negro',
     hex: '#18181b',
     headerBg: 'bg-zinc-900',
     badgeBg: 'bg-zinc-100',
@@ -22,7 +22,7 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   red: {
     id: 'red',
-    name: 'Rojo Gourmet',
+    name: 'Rojo',
     hex: '#dc2626',
     headerBg: 'bg-red-600',
     badgeBg: 'bg-red-50',
@@ -31,7 +31,7 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   blue: {
     id: 'blue',
-    name: 'Azul Real',
+    name: 'Azul',
     hex: '#2563eb',
     headerBg: 'bg-blue-600',
     badgeBg: 'bg-blue-50',
@@ -40,7 +40,7 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   emerald: {
     id: 'emerald',
-    name: 'Verde Esmeralda',
+    name: 'Verde',
     hex: '#059669',
     headerBg: 'bg-emerald-600',
     badgeBg: 'bg-emerald-50',
@@ -49,7 +49,7 @@ export const THEME_OPTIONS: Record<ThemeColor, ThemeOption> = {
   },
   orange: {
     id: 'orange',
-    name: 'Naranja Cálido',
+    name: 'Naranja',
     hex: '#ea580c',
     headerBg: 'bg-orange-600',
     badgeBg: 'bg-orange-50',

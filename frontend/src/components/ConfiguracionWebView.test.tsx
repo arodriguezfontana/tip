@@ -43,7 +43,7 @@ describe('ConfiguracionWebView', () => {
     expect(screen.queryByLabelText('Horarios de atención')).not.toBeInTheDocument();
     expect(screen.getByDisplayValue('11 4444-1234')).toBeInTheDocument();
     expect(screen.getByText('Sin logo')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'Negro Clásico' })).toHaveAttribute('aria-pressed', 'true');
+    expect(screen.getByRole('button', { name: 'Negro' })).toHaveAttribute('aria-pressed', 'true');
   });
 
   it('permite cambiar el color principal seleccionando entre los 5 estilos predefinidos', async () => {
@@ -52,11 +52,11 @@ describe('ConfiguracionWebView', () => {
 
     expect(await screen.findByDisplayValue('Pizzería Los Troncos')).toBeInTheDocument();
 
-    const redButton = screen.getByRole('button', { name: 'Rojo Gourmet' });
+    const redButton = screen.getByRole('button', { name: 'Rojo' });
     await user.click(redButton);
 
     expect(redButton).toHaveAttribute('aria-pressed', 'true');
-    expect(screen.getByRole('button', { name: 'Negro Clásico' })).toHaveAttribute('aria-pressed', 'false');
+    expect(screen.getByRole('button', { name: 'Negro' })).toHaveAttribute('aria-pressed', 'false');
 
     await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
 
