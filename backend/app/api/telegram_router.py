@@ -24,6 +24,10 @@ async def recibir_mensaje(
         chat_id = str(data["message"]["chat"]["id"])
         mensaje_usuario = data["message"]["text"]
 
+        remitente = data["message"].get("from") or {}
+        nombre = " ".join(p for p in (remitente.get("first_name"), remitente.get("last_name")) if p)
+        telegram_service.registrar_perfil(chat_id, nombre, remitente.get("username"))
+
         # Responde 200 enseguida; el mensaje espera un instante por si el cliente manda más (se contestan juntos).
         telegram_service.recibir_mensaje(chat_id, mensaje_usuario)
 

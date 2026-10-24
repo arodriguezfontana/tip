@@ -6,6 +6,7 @@ import * as businessHoursService from '@/services/businessHoursService';
 import * as catalogService from '@/services/catalogService';
 import * as clientService from '@/services/clientService';
 import * as deliveryDriverService from '@/services/deliveryDriverService';
+import * as handoffService from '@/services/handoffService';
 import * as ingredientService from '@/services/ingredientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
@@ -14,6 +15,7 @@ import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/orderService');
+vi.mock('@/services/handoffService');
 vi.mock('@/services/deliveryDriverService');
 vi.mock('@/services/menuService');
 vi.mock('@/services/statsService');
@@ -29,6 +31,7 @@ vi.mock('@/hooks/useNewOrderAlert', () => ({
 beforeEach(() => {
   vi.resetAllMocks();
   vi.mocked(orderService.fetchOrders).mockResolvedValue([]);
+  vi.mocked(handoffService.fetchHandoffs).mockResolvedValue([]);
   vi.mocked(deliveryDriverService.fetchDeliveryDrivers).mockResolvedValue([]);
   vi.mocked(menuService.fetchMenuProducts).mockResolvedValue([MUZZA]);
   vi.mocked(statsService.fetchStatusDistribution).mockResolvedValue({});
