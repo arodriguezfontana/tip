@@ -64,6 +64,19 @@ describe('ComandaCard', () => {
     expect(screen.getByText(/19\.500,00/)).toBeInTheDocument();
   });
 
+  it('en un pedido a domicilio muestra la dirección en lugar de "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: 'Belgrano 95, piso 2' });
+
+    expect(screen.getByText('Belgrano 95, piso 2')).toBeInTheDocument();
+    expect(screen.queryByText('A domicilio')).not.toBeInTheDocument();
+  });
+
+  it('si el pedido a domicilio no tiene dirección cargada vuelve a decir "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: '  ' });
+
+    expect(screen.getByText('A domicilio')).toBeInTheDocument();
+  });
+
   it('muestra la insignia de Abonado cuando el pedido ya está pagado', () => {
     renderCard({ is_paid: true });
     expect(screen.getByText('Abonado')).toBeInTheDocument();

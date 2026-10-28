@@ -38,7 +38,7 @@ def test_crea_pedido_web_aceptado_automaticamente(public_client, db_session, pro
     assert order.source == "web"
     assert order.status == "Confirmado"
     assert order.estimated_minutes == 15
-    assert order.customer_phone == "+54 11 5555-1234"
+    assert order.customer_phone == "1155551234"
     assert order.notes == "Tocar timbre 2B"
     assert order.shipping_address == "Calle Falsa 123"
     assert {(i.product_id, i.quantity, i.unit_price) for i in order.items} == {

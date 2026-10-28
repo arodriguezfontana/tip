@@ -11,6 +11,7 @@ export type ViewKey =
   | 'repartidores'
   | 'productos'
   | 'ingredientes'
+  | 'menu-imagen'
   | 'horarios'
   | 'configuracion-web';
 
@@ -31,6 +32,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'productos', label: 'Productos y categorías' },
       { key: 'ingredientes', label: 'Ingredientes' },
+      { key: 'menu-imagen', label: 'Menú en imagen' },
     ],
   },
   {
@@ -90,7 +92,7 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/40 z-40 transition-opacity ${
+        className={`fixed inset-0 bg-black/40 z-40 transition-opacity lg:hidden ${
           open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}
@@ -108,7 +110,7 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
           style={themeHex ? { backgroundColor: themeHex } : undefined}
         >
           <h2 className="text-lg font-bold">Menú</h2>
-          <button
+            <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar menú"

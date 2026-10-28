@@ -6,6 +6,8 @@ recibe y envía texto a través de esta interfaz. Sumar un canal es implementar 
 
 import asyncio
 from abc import ABC, abstractmethod
+from collections.abc import Callable
+from dataclasses import dataclass
 from typing import ClassVar
 
 import httpx
@@ -32,6 +34,19 @@ class ClienteHttpCompartido:
         return self._cliente
 
 
+@dataclass(frozen=True)
+class ImagenParaEnviar:
+    """Imagen a mandarle a un cliente. Los bytes se piden recién cuando hacen falta (puede no ser necesario
+    subirla de nuevo si el canal ya la tiene)."""
+
+    # Cambia cada vez que se reemplaza la imagen: identifica la copia que el canal tiene guardada.
+    version: int
+    content_type: str
+    cargar: Callable[[], bytes]
+    # Distingue una imagen de otra cuando se mandan varias (el canal recuerda la última versión de cada una).
+    clave: int = 0
+
+
 class CanalDeMensajeria(ABC):
     canal: ClassVar[Channel]
     # Cada cuántos segundos hay que renovar el aviso "escribiendo..." mientras se prepara la respuesta.
@@ -44,6 +59,11 @@ class CanalDeMensajeria(ABC):
     @abstractmethod
     async def enviar_escribiendo(self, chat_id: str) -> None:
         """Muestra "escribiendo..." en el chat. Si falla no pasa nada: es solo un indicador visual."""
+
+    async def enviar_imagen(self, chat_id: str, imagen: ImagenParaEnviar, pie: str) -> bool:
+        """Manda la imagen, con un pie de foto si no está vacío. Devuelve si salió; False si el canal no la soporta
+        o falló."""
+        return False
 
     async def registrar_webhook(self) -> None:
         """Deja al canal apuntando a este backend, si la plataforma lo permite por API."""

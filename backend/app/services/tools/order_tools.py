@@ -18,6 +18,7 @@ from langchain_core.tools import InjectedToolArg, tool
 from sqlalchemy.orm import Session
 
 from app.core.channels import Channel
+from app.core.phone import normalize_phone
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
@@ -487,6 +488,9 @@ def confirmar_y_guardar_pedido(
         raw_dir = datos.get("direccion") or datos.get("shipping_address")
         direccion = raw_dir.strip()[:MAX_LARGO_DIRECCION] if raw_dir else None
         telefono = str(datos.get("telefono") or datos.get("customer_phone") or "").strip()[:30]
+        if canal == Channel.WHATSAPP and chat_id:
+            # En WhatsApp el cliente se identifica por el número del chat: es el teléfono del pedido y de su perfil.
+            telefono = normalize_phone(chat_id)
 
         if not cliente or (not es_retiro and not direccion):
             return "Faltan datos obligatorios (nombre o dirección) para registrar la orden."

@@ -167,7 +167,7 @@ export function ProductosView() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-0">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-48">
         {catalog.loading && products.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Cargando productos...</p>
         ) : products.length === 0 ? (

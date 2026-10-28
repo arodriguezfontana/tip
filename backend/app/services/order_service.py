@@ -169,7 +169,10 @@ def create_bot_order(
     order.scheduled_for = scheduled_for
     order.payment_method = payment_method
     order.is_paid = False
-    return _save(db, order)
+    order = _save(db, order)
+    # Queda en la agenda (nombre, teléfono y dirección de envío) para reconocerlo en su próximo pedido.
+    _register_client(db, request)
+    return order
 
 
 def _register_client(db: Session, request: OrderRequest) -> None:
@@ -183,7 +186,7 @@ def _register_client(db: Session, request: OrderRequest) -> None:
         with transaction(db):
             upsert_client(db, request.customer_phone, request.customer_name, address)
     except SQLAlchemyError:
-        logger.exception("No se pudo registrar al cliente del pedido presencial en la agenda.")
+        logger.exception("No se pudo registrar al cliente del pedido en la agenda.")
 
 
 # --- Consulta y ciclo de vida -------------------------------------------------------------------------

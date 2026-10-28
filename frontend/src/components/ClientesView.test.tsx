@@ -45,7 +45,7 @@ describe('ClientesView', () => {
     await user.click(screen.getByRole('button', { name: 'Siguiente' }));
     await waitFor(() => expect(service.fetchClients).toHaveBeenLastCalledWith({ search: undefined, page: 2, per_page: 10 }));
 
-    await user.type(screen.getByPlaceholderText('Buscar por nombre o teléfono...'), 'paula');
+    await user.type(screen.getByPlaceholderText('Buscar por nombre, teléfono o dirección...'), 'paula');
 
     await waitFor(() => expect(service.fetchClients).toHaveBeenLastCalledWith({ search: 'paula', page: 1, per_page: 10 }));
     // No se consulta una vez por cada letra.
@@ -60,7 +60,7 @@ describe('ClientesView', () => {
     render(<ClientesView />);
     const user = userEvent.setup();
 
-    await user.type(screen.getByPlaceholderText('Buscar por nombre o teléfono...'), 'paula');
+    await user.type(screen.getByPlaceholderText('Buscar por nombre, teléfono o dirección...'), 'paula');
     expect(await screen.findByText('Paula Gómez')).toBeInTheDocument();
 
     responderVieja(page([MARTIN]));

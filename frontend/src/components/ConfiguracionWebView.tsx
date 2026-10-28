@@ -2,12 +2,14 @@ import { useEffect, useRef, useState } from 'react';
 import backgroundBistro from '@/assets/background_bistro.jpg';
 import backgroundKitchen from '@/assets/background_kitchen.jpg';
 import backgroundTrattoria from '@/assets/background_trattoria.jpg';
+import { PanelBgPicker } from '@/components/PanelBgPicker';
 import { fetchStoreConfig, updateStoreConfig } from '@/services/storeConfigService';
 import {
   PRESET_THEME_KEYS,
   THEME_OPTIONS,
   getThemeOption,
   type LoginBgOption,
+  type PanelBgOption,
   type StoreConfig,
   type ThemeColor,
 } from '@/types/storeConfig';
@@ -52,6 +54,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
   const [themeColor, setThemeColor] = useState<ThemeColor>('black');
   const [loginBg, setLoginBg] = useState<LoginBgOption>('bistro');
   const [loginBgImage, setLoginBgImage] = useState<string | null>(null);
+  const [panelBg, setPanelBg] = useState<PanelBgOption>('none');
+  const [panelBgImage, setPanelBgImage] = useState<string | null>(null);
+  const [panelBgColor, setPanelBgColor] = useState<string | null>(null);
   const [mpAlias, setMpAlias] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -71,6 +76,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         setThemeColor(data.theme_color || 'black');
         setLoginBg(data.login_bg || 'bistro');
         setLoginBgImage(data.login_bg_image || null);
+        setPanelBg(data.panel_bg || 'none');
+        setPanelBgImage(data.panel_bg_image || null);
+        setPanelBgColor(data.panel_bg_color || null);
         setMpAlias(data.mp_alias || '');
         applyThemeColor(data.theme_color || 'black');
       })
@@ -168,6 +176,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         theme_color: themeColor,
         login_bg: loginBg,
         login_bg_image: loginBgImage,
+        panel_bg: panelBg,
+        panel_bg_image: panelBgImage,
+        panel_bg_color: panelBgColor,
         mp_alias: mpAlias.trim() || null,
       });
 
@@ -178,6 +189,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
       setThemeColor(updated.theme_color || 'black');
       setLoginBg(updated.login_bg || 'bistro');
       setLoginBgImage(updated.login_bg_image || null);
+      setPanelBg(updated.panel_bg || 'none');
+      setPanelBgImage(updated.panel_bg_image || null);
+      setPanelBgColor(updated.panel_bg_color || null);
       setMpAlias(updated.mp_alias || '');
       applyThemeColor(updated.theme_color || 'black');
       setFeedback({
@@ -206,11 +220,11 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión y los datos de contacto del local.
+            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión, el fondo del panel y los datos de contacto del local.
           </p>
         </div>
       </div>
@@ -654,6 +668,27 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
               </div>
             </div>
           </div>
+        </section>
+
+        {/* 6. Fondo del panel de administración */}
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Fondo del Panel de Administración</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Si el fondo blanco te cansa la vista, elegí un color liso, una imagen o subí una
+              propia. Las imágenes se desenfocan y se oscurecen para que todo se siga leyendo bien. Por defecto el fondo es liso.
+            </p>
+          </div>
+          <PanelBgPicker
+            value={panelBg}
+            image={panelBgImage}
+            color={panelBgColor}
+            accentColor={currentTheme.hex}
+            onChange={setPanelBg}
+            onImageChange={setPanelBgImage}
+            onColorChange={setPanelBgColor}
+            onError={(message) => setFeedback(message ? { type: 'error', message } : null)}
+          />
         </section>
 
         {/* Botón de guardar */}

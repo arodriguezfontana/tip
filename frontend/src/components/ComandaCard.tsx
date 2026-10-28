@@ -162,7 +162,11 @@ export function ComandaCard({
 
         <div className="text-sm space-y-1">
           <p className="font-medium text-gray-900">{order.customer_name}</p>
-          <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
+          <p className="text-xs text-gray-500 break-words">
+            {order.delivery_method === 'domicilio' && order.shipping_address?.trim()
+              ? order.shipping_address
+              : DELIVERY_METHOD_LABEL[order.delivery_method]}
+          </p>
           <p className="text-xs text-gray-500">Tel: {order.customer_phone || '—'}</p>
           <p className={`text-xs break-words ${order.notes ? 'text-gray-600 italic' : 'text-gray-400'}`}>
             {order.notes ? `“${order.notes}”` : 'Sin observaciones'}

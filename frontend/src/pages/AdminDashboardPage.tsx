@@ -12,6 +12,7 @@ import { ClientesView } from '@/components/ClientesView';
 import { RepartidoresView } from '@/components/RepartidoresView';
 import { CatalogoView } from '@/components/CatalogoView';
 import { IngredientesView } from '@/components/IngredientesView';
+import { MenuImagenView } from '@/components/MenuImagenView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
@@ -19,6 +20,8 @@ import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
 import type { StoreConfig } from '@/types/storeConfig';
+import { panelBackground } from '@/utils/panelBackground';
+import { canKeepMenuOpen } from '@/utils/sidebarDock';
 
 // Ver la regla en index.css: corre las secciones solo lo necesario para no quedar bajo la columna de chats.
 const CHAT_COLUMN_PADDING = 'chat-column-offset';
@@ -52,8 +55,19 @@ export default function AdminDashboardPage() {
     navigate('/login', { replace: true });
   };
 
+  const background = panelBackground(storeConfig);
+
   return (
-    <div className="min-h-screen lg:h-screen lg:overflow-hidden bg-gray-50 flex flex-col">
+    <div className="relative isolate min-h-screen lg:h-screen lg:overflow-hidden bg-gray-50 flex flex-col">
+      {background && (
+        // Capa fija detrás de todo; las fotos se agrandan un poco para que el desenfoque no deje bordes claros.
+        <div
+          data-testid="admin-panel-bg"
+          aria-hidden="true"
+          className={`fixed inset-0 -z-10 bg-cover bg-center ${background.blurred ? 'scale-110 blur-md' : ''}`}
+          style={{ backgroundImage: background.css }}
+        />
+      )}
       <TopBar
         onToggleMenu={() => setMenuOpen((prev) => !prev)}
         menuOpen={menuOpen}
@@ -62,7 +76,7 @@ export default function AdminDashboardPage() {
         logoUrl={storeConfig?.logo_url}
         themeColor={storeConfig?.theme_color}
       />
-      <main className={`flex-1 px-4 py-6 lg:min-h-0 transition-[padding] ${chatColumnVisible ? CHAT_COLUMN_PADDING : ''}`}>
+      <main className={`flex-1 px-4 py-6 lg:min-h-0 lg:overflow-y-auto transition-[padding] ${chatColumnVisible ? CHAT_COLUMN_PADDING : ''}`}>
         <div className="max-w-6xl mx-auto lg:h-full">
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
@@ -80,6 +94,7 @@ export default function AdminDashboardPage() {
           {activeView === 'repartidores' && <RepartidoresView themeColor={storeConfig?.theme_color} />}
           {activeView === 'productos' && <CatalogoView />}
           {activeView === 'ingredientes' && <IngredientesView />}
+          {activeView === 'menu-imagen' && <MenuImagenView />}
           {activeView === 'horarios' && <HorariosView />}
           {activeView === 'configuracion-web' && (
             <div className="lg:h-full lg:overflow-y-auto pr-1">
@@ -103,7 +118,8 @@ export default function AdminDashboardPage() {
         themeColor={storeConfig?.theme_color}
         onSelect={(view) => {
           setActiveView(view);
-          setMenuOpen(false);
+          // En pantallas anchas el menú se queda abierto hasta que se toca la X; en el celular tapa la página y se cierra.
+          if (!canKeepMenuOpen()) setMenuOpen(false);
         }}
       />
     </div>

@@ -12,6 +12,7 @@ from sqlalchemy.sql import func
 from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, ConflictError
 from app.core.money import MoneyColumn, to_money
+from app.core.phone import normalize_phone
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
@@ -160,6 +161,10 @@ class Order(Base):
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery_driver = relationship("DeliveryDriver", back_populates="orders")
+
+    @validates("customer_phone")
+    def _normalize_phone(self, _key: str, phone: str | None) -> str | None:
+        return normalize_phone(phone) or None if phone is not None else None
 
     @validates("total_amount", "shipping_cost", "paid_amount")
     def _as_money(self, _key: str, value) -> Decimal | None:

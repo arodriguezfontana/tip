@@ -128,3 +128,71 @@ def test_admin_can_update_custom_hex_theme_color(client, public_client):
     pub_res = public_client.get(CONFIG_URL)
     assert pub_res.status_code == 200
     assert pub_res.json()["theme_color"] == "#a855f7"
+
+
+# --- Fondo del panel de administración ---
+
+BASE = {"store_name": "RestoIT", "theme_color": "black"}
+
+
+def test_el_panel_arranca_sin_fondo(public_client):
+    data = public_client.get(CONFIG_URL).json()
+
+    assert data["panel_bg"] == "none"
+    assert data["panel_bg_image"] is None
+
+
+def test_el_dueno_elige_una_imagen_de_fondo_para_el_panel(client, public_client):
+    response = client.put(CONFIG_URL, json={**BASE, "panel_bg": "kitchen"})
+
+    assert response.status_code == 200
+    assert public_client.get(CONFIG_URL).json()["panel_bg"] == "kitchen"
+
+
+def test_el_dueno_elige_un_color_liso_para_el_panel(client, public_client):
+    response = client.put(CONFIG_URL, json={**BASE, "panel_bg": "color", "panel_bg_color": "#334155"})
+
+    assert response.status_code == 200
+    data = public_client.get(CONFIG_URL).json()
+    assert (data["panel_bg"], data["panel_bg_color"]) == ("color", "#334155")
+
+
+def test_el_color_del_panel_exige_elegir_el_color_y_ser_un_hex_valido(client):
+    assert client.put(CONFIG_URL, json={**BASE, "panel_bg": "color"}).status_code == 422
+    for invalido in ("rojo", "#fff", "#12345g", "334155"):
+        respuesta = client.put(CONFIG_URL, json={**BASE, "panel_bg": "color", "panel_bg_color": invalido})
+        assert respuesta.status_code == 422
+
+
+def test_el_fondo_del_panel_es_independiente_del_del_login(client, public_client):
+    client.put(CONFIG_URL, json={**BASE, "login_bg": "trattoria", "panel_bg": "bistro"})
+
+    data = public_client.get(CONFIG_URL).json()
+    assert (data["login_bg"], data["panel_bg"]) == ("trattoria", "bistro")
+
+
+def test_el_dueno_sube_una_imagen_propia_para_el_panel(client, public_client):
+    image = "data:image/png;base64,iVBORw0KGgo="
+    response = client.put(CONFIG_URL, json={**BASE, "panel_bg": "custom", "panel_bg_image": image})
+
+    assert response.status_code == 200
+    data = public_client.get(CONFIG_URL).json()
+    assert (data["panel_bg"], data["panel_bg_image"]) == ("custom", image)
+
+
+def test_volver_al_fondo_liso(client, public_client):
+    client.put(CONFIG_URL, json={**BASE, "panel_bg": "bistro"})
+
+    client.put(CONFIG_URL, json={**BASE, "panel_bg": "none"})
+
+    assert public_client.get(CONFIG_URL).json()["panel_bg"] == "none"
+
+
+def test_el_fondo_propio_del_panel_exige_una_imagen(client):
+    assert client.put(CONFIG_URL, json={**BASE, "panel_bg": "custom"}).status_code == 422
+
+
+def test_el_fondo_del_panel_tiene_que_ser_una_opcion_valida_con_imagen_data_url(client):
+    assert client.put(CONFIG_URL, json={**BASE, "panel_bg": "pizza"}).status_code == 422
+    invalida = {**BASE, "panel_bg": "custom", "panel_bg_image": "https://x.com/a.js"}
+    assert client.put(CONFIG_URL, json=invalida).status_code == 422

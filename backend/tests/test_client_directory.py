@@ -39,10 +39,12 @@ def test_lista_los_clientes_del_mas_nuevo_al_mas_viejo(client, agenda):
         ("Pérez", {"Martín Pérez"}),
         ("5556", {"Martín Pérez"}),
         ("  1144  ", {"Paula Gómez"}),
+        ("belgrano", {"Paula Gómez"}),
+        ("RIVADAVIA 12", {"Paula Ruiz"}),
         ("nadie", set()),
     ],
 )
-def test_busca_por_nombre_o_telefono(client, agenda, search, esperados):
+def test_busca_por_nombre_telefono_o_direccion(client, agenda, search, esperados):
     response = client.get(CLIENTS_URL, params={"search": search})
 
     nombres = {c["full_name"] for c in response.json()["items"]}

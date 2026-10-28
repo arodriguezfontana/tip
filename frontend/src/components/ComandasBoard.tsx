@@ -17,6 +17,7 @@ import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -544,11 +545,11 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading && orders.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-12">Cargando comandas...</p>
+        <PanelNote>Cargando comandas...</PanelNote>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
           {columns.map((column) => (
-            <div key={column.status} className="bg-gray-50/50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
+            <div key={column.status} className="bg-gray-50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
               <div className="shrink-0 flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-2">
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700">{COLUMN_LABELS[column.status]}</h3>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${column.status === 'Pendiente' && column.totalCount > 0 ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-800'}`}>

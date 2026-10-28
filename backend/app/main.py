@@ -16,6 +16,7 @@ from app.api import (
     delivery_driver_router,
     handoff_router,
     ingredient_router,
+    menu_image_router,
     menu_router,
     mercadopago_router,
     order_router,
@@ -76,6 +77,7 @@ api_router.include_router(customer_router.router, prefix="/customers", tags=["Cu
 api_router.include_router(delivery_driver_router.router, prefix="/delivery-drivers", tags=["Delivery Drivers"])
 api_router.include_router(handoff_router.router, prefix="/handoffs", tags=["Handoffs"])
 api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
+api_router.include_router(menu_image_router.router, prefix="/menu-image", tags=["Menu image"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags=["MercadoPago"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
