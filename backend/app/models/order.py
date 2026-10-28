@@ -1,4 +1,5 @@
 from collections.abc import Iterable
+from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, ClassVar
@@ -11,6 +12,7 @@ from sqlalchemy.sql import func
 from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, ConflictError
 from app.core.money import MoneyColumn, to_money
+from app.core.phone import normalize_phone
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
@@ -66,6 +68,13 @@ MAX_QUANTITY_PER_ITEM = 20
 PICKUP_ADDRESS = "Retiro en el local"
 
 
+# Tiempo, desde que se registra el pedido, en el que el cliente todavía puede agregarle productos.
+MODIFICATION_WINDOW = timedelta(minutes=10)
+
+# Estados en los que el pedido todavía no salió: solo ahí se puede cambiar el medio de pago o sumar productos.
+_MODIFIABLE_STATUSES = (OrderStatus.PENDING, OrderStatus.CONFIRMED)
+
+
 class InvalidOrderError(BusinessRuleError):
     """El pedido no puede registrarse porque sus datos no son válidos contra el menú actual."""
 
@@ -73,6 +82,19 @@ class InvalidOrderError(BusinessRuleError):
 class InvalidTransitionError(ConflictError):
     def __init__(self, current_status: str, new_status: str):
         super().__init__(f"No se puede pasar de '{current_status}' a '{new_status}'.")
+
+
+class ModificationWindowClosedError(BusinessRuleError):
+    def __init__(self):
+        super().__init__("Pasaron más de 10 minutos desde que se registró el pedido: ya no se le pueden agregar productos.")
+
+
+class OrderNotModifiableError(BusinessRuleError):
+    """El pedido ya salió (en camino, listo para retirar) o terminó: no admite cambios."""
+
+
+class PaymentChangeNotAllowedError(BusinessRuleError):
+    """El medio de pago no se puede cambiar (ej. el pedido ya está abonado)."""
 
 
 class ScheduledOrderEstimateError(BusinessRuleError):
@@ -87,6 +109,7 @@ class Order(Base):
         CheckConstraint(f"delivery_method IN {_values(DeliveryMethod)}", name="ck_orders_delivery_method"),
         CheckConstraint(f"source IN {_values(OrderSource)}", name="ck_orders_source"),
         CheckConstraint(f"channel IN {_values(Channel)}", name="ck_orders_channel"),
+        CheckConstraint(f"balance_payment_method IN {_values(PaymentMethod)}", name="ck_orders_balance_payment_method"),
         CheckConstraint(f"payment_method IN {_values(PaymentMethod)}", name="ck_orders_payment_method"),
     )
 
@@ -111,6 +134,13 @@ class Order(Base):
     # Sin informar (None) en los pedidos del bot y de la web, que se cobran al entregar.
     payment_method = Column(String(20), nullable=True)
     is_paid = Column(Boolean, nullable=False, default=False, server_default=false())
+    # Parte del total ya cobrada cuando el pedido no está abonado del todo: pasa al agregarle productos a un
+    # pedido que ya se había pagado. Con el pedido abonado (is_paid) se paga el total y este campo no se usa.
+    paid_amount = Column(MoneyColumn, nullable=False, default=0, server_default="0")
+    # Cómo se salda la diferencia de un pago parcial (efectivo al recibir o link de MercadoPago).
+    balance_payment_method = Column(String(20), nullable=True)
+    # Se agregaron productos y cocina todavía no lo vio (alerta en el tablero de comandas).
+    kitchen_update_pending = Column(Boolean, nullable=False, default=False, server_default=false())
     status = Column(String(50), nullable=False, default=OrderStatus.PENDING.value)
     delivery_method = Column(String(20), nullable=False, server_default=DeliveryMethod.DELIVERY.value)
     # Pedidos del bot: canal por el que habló el cliente y su chat en ese canal (para avisarle novedades).
@@ -132,7 +162,11 @@ class Order(Base):
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery_driver = relationship("DeliveryDriver", back_populates="orders")
 
-    @validates("total_amount", "shipping_cost")
+    @validates("customer_phone")
+    def _normalize_phone(self, _key: str, phone: str | None) -> str | None:
+        return normalize_phone(phone) or None if phone is not None else None
+
+    @validates("total_amount", "shipping_cost", "paid_amount")
     def _as_money(self, _key: str, value) -> Decimal | None:
         return None if value is None else to_money(value)
 
@@ -194,6 +228,110 @@ class Order(Base):
     def _is_billable_expression(cls):
         return cls.status.notin_([status.value for status in _NOT_BILLABLE_STATUSES])
 
+    # --- Pagos --------------------------------------------------------------------------------------
+
+    @property
+    def amount_paid(self) -> Decimal:
+        """Lo que el cliente ya pagó: el total si el pedido está abonado, o el pago parcial."""
+        return to_money(self.total_amount) if self.is_paid else to_money(self.paid_amount or 0)
+
+    @property
+    def amount_pending(self) -> Decimal:
+        """Lo que falta cobrar (por ejemplo, la diferencia que se paga al recibir el pedido)."""
+        return max(to_money(self.total_amount) - self.amount_paid, Decimal(0))
+
+    @property
+    def is_cash_payment(self) -> bool:
+        """El último cobro fue en efectivo: el cliente le pagó en mano al local.
+
+        Si se agregaron productos a un pedido ya pagado, lo que cuenta es cómo se saldó la diferencia.
+        """
+        return (self.balance_payment_method or self.payment_method) == PaymentMethod.CASH.value
+
+    @property
+    def has_partial_payment(self) -> bool:
+        return not self.is_paid and to_money(self.paid_amount or 0) > 0
+
+    def change_payment_method(self, method: PaymentMethod | str) -> None:
+        """Cambia cómo se paga el pedido, siempre que no haya salido y todavía haya algo por pagar.
+
+        Con un pago parcial lo que se cambia es cómo se salda la diferencia: lo ya cobrado no se toca.
+        """
+        method = PaymentMethod(method)
+        self._require_modifiable()
+        if self.is_paid:
+            raise PaymentChangeNotAllowedError("El pedido ya está abonado: no hay nada más por pagar.")
+        if self.has_partial_payment:
+            self.balance_payment_method = method.value
+        else:
+            self.payment_method = method.value
+
+    # --- Modificación por el cliente ----------------------------------------------------------------
+
+    @property
+    def is_modifiable(self) -> bool:
+        """Todavía no salió ni terminó: el cliente puede cambiar el pago o (en la ventana) sumar productos."""
+        return OrderStatus(self.status) in _MODIFIABLE_STATUSES
+
+    def _require_modifiable(self) -> None:
+        if not self.is_modifiable:
+            raise OrderNotModifiableError("El pedido ya no admite cambios.")
+
+    def is_within_modification_window(self, now: datetime | None = None) -> bool:
+        created = self.created_at
+        if created is None:
+            return True
+        if created.tzinfo is None:  # la base lo guarda en UTC
+            created = created.replace(tzinfo=timezone.utc)
+        return (now or datetime.now(timezone.utc)) - created <= MODIFICATION_WINDOW
+
+    def add_items(self, lines: Iterable[tuple["Product", int]], now: datetime | None = None) -> Decimal:
+        """Suma productos a este mismo pedido (un solo ticket de cocina y un solo envío) y devuelve lo que costaron.
+
+        Solo dentro de la ventana de modificación. Si el pedido ya estaba abonado queda con un pago parcial: lo
+        pagado hasta ahora y la diferencia por cobrar. Los productos agregados se marcan para que cocina los vea.
+        """
+        self._require_modifiable()
+        if not self.is_within_modification_window(now):
+            raise ModificationWindowClosedError()
+
+        added: dict[int, tuple[Product, int]] = {}
+        for product, quantity in lines:
+            if quantity < 1:
+                raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
+            previous = added.get(product.id, (product, 0))[1]
+            added[product.id] = (product, previous + quantity)
+        if not added:
+            raise InvalidOrderError("No hay productos para agregar.")
+
+        unavailable = [product.name for product, _ in added.values() if not product.is_available]
+        if unavailable:
+            raise InvalidOrderError(f"Estos productos no están disponibles en este momento: {', '.join(unavailable)}.")
+        current = {item.product_id: item.quantity for item in self.items}
+        exceeded = [
+            product.name for pid, (product, qty) in added.items() if current.get(pid, 0) + qty > MAX_QUANTITY_PER_ITEM
+        ]
+        if exceeded:
+            raise InvalidOrderError(
+                f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
+            )
+
+        previous_total = to_money(self.total_amount)
+        was_paid = bool(self.is_paid)
+        new_items = [
+            OrderItem(product_id=pid, product=product, quantity=qty, unit_price=product.price, added_later=True)
+            for pid, (product, qty) in added.items()
+        ]
+        self.items.extend(new_items)
+        cost = sum((item.subtotal for item in new_items), Decimal(0))
+        self.total_amount = previous_total + cost
+        if was_paid:
+            self.paid_amount = previous_total
+            self.is_paid = False
+            self.balance_payment_method = None
+        self.kitchen_update_pending = True
+        return to_money(cost)
+
     # --- Estado -------------------------------------------------------------------------------------
 
     def can_transition_to(self, new_status: OrderStatus | str) -> bool:
@@ -250,6 +388,8 @@ class OrderItem(Base):
     quantity = Column(Integer, nullable=False)
     unit_price = Column(MoneyColumn, nullable=False)
     is_prepared = Column(Boolean, nullable=False, default=False, server_default=false())
+    # Se agregó después de registrado el pedido (cocina lo ve resaltado).
+    added_later = Column(Boolean, nullable=False, default=False, server_default=false())
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product")

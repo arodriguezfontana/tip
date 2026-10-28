@@ -104,6 +104,9 @@ export const LOGIN_BG_OPTIONS: Record<Exclude<LoginBgOption, 'custom'>, LoginBgI
   },
 };
 
+/** Fondo del panel de administración: 'none' = liso; 'color' = color liso a elección (ver panel_bg_color); 'custom' = imagen propia (ver panel_bg_image). */
+export type PanelBgOption = 'none' | 'color' | 'bistro' | 'kitchen' | 'trattoria' | 'custom';
+
 export interface StoreConfig {
   id?: number;
   store_name: string;
@@ -113,6 +116,9 @@ export interface StoreConfig {
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
   login_bg_image?: string | null;
+  panel_bg?: PanelBgOption;
+  panel_bg_image?: string | null;
+  panel_bg_color?: string | null;
   mp_alias?: string | null;
 }
 
@@ -124,5 +130,8 @@ export interface StoreConfigUpdatePayload {
   theme_color: ThemeColor;
   login_bg?: LoginBgOption;
   login_bg_image?: string | null;
+  panel_bg?: PanelBgOption;
+  panel_bg_image?: string | null;
+  panel_bg_color?: string | null;
   mp_alias?: string | null;
 }

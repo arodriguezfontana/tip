@@ -32,7 +32,7 @@ def test_detalle_incluye_productos_cliente_entrega_y_facturacion(client, product
     assert body["status"] == "Confirmado"
     assert body["created_at"]
     assert body["customer_name"] == "Paula"
-    assert body["customer_phone"] == "11 4444-5555"
+    assert body["customer_phone"] == "1144445555"
     assert body["shipping_address"] == "Belgrano 95, Ramos Mejía"
     assert body["delivery_method"] == "domicilio"
     assert body["notes"] == "Sin cebolla"

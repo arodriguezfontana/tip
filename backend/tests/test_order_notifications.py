@@ -112,3 +112,79 @@ def test_cancelar_un_pedido_abonado_avisa_del_reintegro(client, db_session, mock
 
     *_, mensaje = mock_send_message.call_args[0]
     assert "reintegro" in mensaje
+
+
+# --- Aviso de cobro registrado desde el panel ---
+
+
+@pytest.fixture()
+def mock_aviso_de_pago():
+    with patch("app.api.order_router.enviar_mensaje", new_callable=AsyncMock) as mock:
+        yield mock
+
+
+def _marcar_abonado(client, order):
+    return client.patch(f"/api/v1/orders/{order.id}/payment", json={"is_paid": True})
+
+
+def test_marcar_abonado_un_pedido_en_efectivo_no_avisa_al_cliente(client, db_session, mock_aviso_de_pago):
+    order = _create_order(db_session)
+    order.payment_method = "efectivo"
+    db_session.commit()
+
+    assert _marcar_abonado(client, order).status_code == 200
+    mock_aviso_de_pago.assert_not_called()
+
+
+def test_marcar_abonado_la_diferencia_en_efectivo_tampoco_avisa(client, db_session, mock_aviso_de_pago):
+    order = _create_order(db_session)
+    order.payment_method = "mercadopago"
+    order.balance_payment_method = "efectivo"
+    db_session.commit()
+
+    assert _marcar_abonado(client, order).status_code == 200
+    mock_aviso_de_pago.assert_not_called()
+
+
+def test_marcar_abonado_un_pedido_digital_si_avisa_al_cliente(client, db_session, mock_aviso_de_pago):
+    order = _create_order(db_session)
+    order.payment_method = "mercadopago"
+    db_session.commit()
+
+    assert _marcar_abonado(client, order).status_code == 200
+    canal, chat_id, mensaje = mock_aviso_de_pago.call_args[0]
+    assert (canal, chat_id) == ("telegram", "12345")
+    assert "Recibimos el pago" in mensaje
+
+
+def test_marcar_abonada_la_diferencia_por_mercadopago_si_avisa_aunque_el_pedido_fuera_en_efectivo(
+    client, db_session, mock_aviso_de_pago
+):
+    order = _create_order(db_session)
+    order.payment_method = "efectivo"
+    order.balance_payment_method = "mercadopago"
+    db_session.commit()
+
+    assert _marcar_abonado(client, order).status_code == 200
+    mock_aviso_de_pago.assert_called_once()
+
+
+def test_el_pago_de_la_diferencia_por_mercadopago_se_avisa_al_cliente(client, db_session, mock_aviso_de_pago):
+    order = _create_order(db_session, chat_id="5491155551234", channel="whatsapp")
+    order.payment_method = "mercadopago"
+    order.is_paid = False
+    order.paid_amount = 1000
+    order.total_amount = 1500
+    order.balance_payment_method = "mercadopago"
+    db_session.commit()
+
+    with patch("app.api.mercadopago_router.enviar_mensaje", new_callable=AsyncMock) as aviso:
+        response = client.post(
+            "/api/v1/mercadopago/webhook",
+            json={"status": "approved", "external_reference": f"{order.id}-extra", "data": {"id": "777"}},
+        )
+
+    assert response.status_code == 200
+    canal, chat_id, mensaje = aviso.call_args[0]
+    assert (canal, chat_id) == ("whatsapp", "5491155551234")
+    assert "pago de la diferencia" in mensaje

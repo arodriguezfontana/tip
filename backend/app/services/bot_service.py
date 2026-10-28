@@ -10,6 +10,7 @@ import time
 
 from app.core.channels import Channel, session_key, split_session_key
 from app.core.config import settings
+from app.core.phone import normalize_phone
 from app.services.channels import CanalDeMensajeria, obtener_canal
 from app.services.chat_memory import SesionChat
 from app.services.chat_service import ChatService
@@ -54,7 +55,7 @@ class BotService:
         perfil = {
             "nombre": (nombre or "").strip()[:100],
             "usuario": (usuario or "").strip()[:64],
-            "telefono": (telefono or "").strip()[:30],
+            "telefono": normalize_phone(telefono)[:30],
         }
         sesion = self.chat_service.sesiones.setdefault(session_key(canal, chat_id), SesionChat())
         sesion.perfil = {clave: valor for clave, valor in perfil.items() if valor}

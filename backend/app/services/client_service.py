@@ -27,6 +27,15 @@ def _find_by_phone(db: Session, phone: str) -> Client | None:
     return client_repository.find_by_normalized_phone(db, normalized) if normalized else None
 
 
+def get_client_by_phone(db: Session, phone: str) -> Client | None:
+    """Cliente de la agenda con ese teléfono, o None si todavía no está registrado.
+
+    El número de WhatsApp llega sin "+" (5491162939338) y en la agenda puede estar cargado con él: se prueban ambos.
+    """
+    digits = Client.normalize_phone(phone).lstrip("+")
+    return _find_by_phone(db, digits) or (_find_by_phone(db, f"+{digits}") if digits else None)
+
+
 def find_client_by_phone(db: Session, phone: str) -> Client:
     client = _find_by_phone(db, phone)
     if client is None:
@@ -49,7 +58,7 @@ def upsert_client(db: Session, phone: str, full_name: str, address: str | None) 
 
 
 def list_clients(db: Session, search: str | None = None, page: int = 1, per_page: int = 20) -> ClientPage:
-    """Clientes de la agenda, de los más recientes a los más antiguos, filtrados por nombre o teléfono."""
+    """Clientes de la agenda, de los más recientes a los más antiguos, filtrados por nombre, teléfono o dirección."""
     clients, total = client_repository.search(
         db, text=(search or "").strip() or None, offset=(page - 1) * per_page, limit=per_page
     )

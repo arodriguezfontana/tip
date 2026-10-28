@@ -152,7 +152,7 @@ def test_bot_guarda_telefono_y_observaciones(db_session, muzza):
     assert "Listo" in resultado
     assert "Todavía no está confirmado" in resultado
     order = db_session.query(Order).one()
-    assert order.customer_phone == "11 4444-5555"
+    assert order.customer_phone == "1144445555"
     assert order.notes == "Sin cebolla, timbre 2B"
 
 

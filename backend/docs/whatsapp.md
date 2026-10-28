@@ -97,6 +97,20 @@ A diferencia de Telegram, **WhatsApp no permite registrar el webhook por API**: 
 - Solo se procesan mensajes de **texto**. Imágenes, audios y ubicaciones se ignoran.
 - Las respuestas de WhatsApp se muestran como texto plano (igual que en Telegram).
 
+## Menú en imagen
+
+Cuando un cliente pide el menú ("pasame la carta", "qué tienen", "precios"), el bot le manda las imágenes de la
+carta y un mensaje que lo invita a pedir. El dueño las carga desde el panel, en **Configuración → Menú en imagen**:
+
+- Formato JPG o PNG, de hasta **5 MB** (el máximo de WhatsApp para imágenes). El backend valida el formato por el
+  contenido del archivo y rechaza lo que lo supere.
+- El menú puede ser **hasta 10 imágenes** (por ejemplo, una por sección). El bot las manda todas, en el orden que
+  se ve en el panel (se puede subir, bajar, reemplazar o quitar cada una); el pie de foto va solo en la primera.
+- Reemplazar una imagen la deja en el mismo lugar y el bot empieza a mandar la nueva enseguida.
+- Sin imagen cargada, o si el envío falla, el bot responde con el menú en texto como siempre.
+- WhatsApp: el backend sube cada imagen a Meta una vez por versión y reutiliza ese archivo para todos los clientes
+  (Meta lo conserva 30 días; si venció, se vuelve a subir solo). No hace falta que el backend tenga URL pública.
+
 ## Cómo está armado (para quien mantenga el código)
 
 - `app/api/whatsapp_router.py`: `GET /api/v1/whatsapp/webhook` (verificación) y `POST` (mensajes; valida la

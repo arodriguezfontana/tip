@@ -37,7 +37,7 @@ def test_registra_pedido_presencial_confirmado_con_demora(client, db_session, pr
     assert order.source == "mostrador"
     assert order.status == "Confirmado"
     assert order.estimated_minutes is not None and order.estimated_minutes >= 15
-    assert order.customer_phone == "11 4444-5555"
+    assert order.customer_phone == "1144445555"
     assert order.notes == "Sin cebolla"
     assert len(order.items) == 2
 

@@ -153,13 +153,21 @@ def update_order_payment(
 ) -> OrderResponse:
     """Actualiza manualmente el estado de pago del pedido (Abonado)."""
     order = order_service.update_order_payment(db, order_id, payload.is_paid)
-    if order.is_paid and order.channel and order.chat_id:
-        mensaje = (
-            f"✅ ¡Tu pedido #{order.id} fue marcado como Abonado!\n"
-            f"Registramos el pago en el sistema. ¡Muchas gracias!"
-        )
+    # En efectivo el cliente le paga en mano al local: ahí no hace falta avisarle que se registró el cobro.
+    if order.is_paid and order.channel and order.chat_id and not order.is_cash_payment:
+        mensaje = f"✅ ¡Recibimos el pago de tu pedido #{order.id}! ¡Muchas gracias!"
         background_tasks.add_task(enviar_mensaje, order.channel, order.chat_id, mensaje)
     return OrderResponse.from_model(order)
+
+
+@router.post("/{order_id}/kitchen-update/ack", response_model=OrderResponse)
+def acknowledge_kitchen_update(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderResponse:
+    """Cocina vio los productos que el cliente agregó al pedido: se apaga la alerta del tablero."""
+    return OrderResponse.from_model(order_service.acknowledge_kitchen_update(db, order_id))
 
 
 @router.patch("/{order_id}/items/{item_id}/prepared", response_model=OrderResponse)

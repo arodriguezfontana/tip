@@ -260,4 +260,97 @@ describe('ConfiguracionWebView', () => {
     expect(screen.queryByAltText('Imagen propia')).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Salón' })).toHaveAttribute('aria-pressed', 'true');
   });
+
+  describe('fondo del panel de administración', () => {
+    it('arranca liso y se puede elegir una de las imágenes incluidas', async () => {
+      const user = userEvent.setup();
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+      expect(screen.getByRole('button', { name: 'Panel: fondo liso' })).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(screen.getByRole('button', { name: 'Panel: Cocina' }));
+
+      expect(screen.getByRole('button', { name: 'Panel: Cocina' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByRole('button', { name: 'Panel: fondo liso' })).toHaveAttribute('aria-pressed', 'false');
+      // El fondo del inicio de sesión no cambia.
+      expect(screen.getByRole('button', { name: 'Salón' })).toHaveAttribute('aria-pressed', 'true');
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      await waitFor(() =>
+        expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ panel_bg: 'kitchen', login_bg: 'bistro' })
+        )
+      );
+    });
+
+    it('permite elegir un color liso personalizado para el panel', async () => {
+      const user = userEvent.setup();
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+
+      fireEvent.change(screen.getByLabelText('Elegir color de fondo del panel'), { target: { value: '#1e3a8a' } });
+
+      expect(screen.getByRole('button', { name: 'Panel: color liso' })).toHaveAttribute('aria-pressed', 'true');
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      await waitFor(() =>
+        expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ panel_bg: 'color', panel_bg_color: '#1e3a8a' })
+        )
+      );
+    });
+
+    it('al abrir con un color guardado lo muestra elegido', async () => {
+      vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({ ...initialConfig, panel_bg: 'color', panel_bg_color: '#334155' });
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+
+      expect(screen.getByRole('button', { name: 'Panel: color liso' })).toHaveAttribute('aria-pressed', 'true');
+      expect(screen.getByLabelText('Elegir color de fondo del panel')).toHaveValue('#334155');
+    });
+
+    it('permite subir una imagen propia para el panel', async () => {
+      const user = userEvent.setup();
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+
+      const file = new File(['fake-image-bytes'], 'fondo.jpg', { type: 'image/jpeg' });
+      fireEvent.change(screen.getByLabelText('Subir imagen de fondo del panel'), { target: { files: [file] } });
+
+      await waitFor(() =>
+        expect(screen.getByRole('button', { name: 'Panel: imagen propia' })).toHaveAttribute('aria-pressed', 'true')
+      );
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      await waitFor(() =>
+        expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+          expect.objectContaining({ panel_bg: 'custom', panel_bg_image: 'data:image/jpeg;base64,fondo-propio' })
+        )
+      );
+    });
+
+    it('rechaza un archivo que no es una imagen', async () => {
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+
+      const file = new File(['texto'], 'notas.txt', { type: 'text/plain' });
+      fireEvent.change(screen.getByLabelText('Subir imagen de fondo del panel'), { target: { files: [file] } });
+
+      expect(await screen.findByRole('alert')).toHaveTextContent('archivo de imagen válido');
+      expect(screen.getByRole('button', { name: 'Panel: fondo liso' })).toHaveAttribute('aria-pressed', 'true');
+    });
+
+    it('quitar la imagen propia vuelve al fondo liso', async () => {
+      vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+        ...initialConfig,
+        panel_bg: 'custom',
+        panel_bg_image: 'data:image/jpeg;base64,guardada',
+      });
+      const user = userEvent.setup();
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+      expect(screen.getByRole('button', { name: 'Panel: imagen propia' })).toHaveAttribute('aria-pressed', 'true');
+
+      await user.click(screen.getByRole('button', { name: 'Quitar imagen propia del panel' }));
+
+      expect(screen.getByRole('button', { name: 'Panel: fondo liso' })).toHaveAttribute('aria-pressed', 'true');
+    });
+  });
 });

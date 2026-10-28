@@ -115,6 +115,8 @@ export interface WebOrderItem {
   subtotal: number;
   sector?: PreparationSector | string;
   is_prepared?: boolean;
+  /** Lo agregó el cliente después de registrar el pedido. */
+  added_later?: boolean;
 }
 
 export interface WebOrderCreated {
@@ -183,6 +185,12 @@ export interface AdminOrder {
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
+  /** Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda. */
+  paid_amount?: number;
+  pending_amount?: number;
+  balance_payment_method?: PaymentMethod | null;
+  /** Se agregaron productos y cocina todavía no lo vio. */
+  kitchen_update_pending?: boolean;
   items?: WebOrderItem[];
   items_prepared_count?: number;
   is_all_prepared?: boolean;

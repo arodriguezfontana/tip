@@ -4,6 +4,7 @@ avanzarlos en su ciclo de vida. Las reglas del pedido en sí viven en el modelo 
 import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
+from decimal import Decimal
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -168,7 +169,10 @@ def create_bot_order(
     order.scheduled_for = scheduled_for
     order.payment_method = payment_method
     order.is_paid = False
-    return _save(db, order)
+    order = _save(db, order)
+    # Queda en la agenda (nombre, teléfono y dirección de envío) para reconocerlo en su próximo pedido.
+    _register_client(db, request)
+    return order
 
 
 def _register_client(db: Session, request: OrderRequest) -> None:
@@ -182,7 +186,7 @@ def _register_client(db: Session, request: OrderRequest) -> None:
         with transaction(db):
             upsert_client(db, request.customer_phone, request.customer_name, address)
     except SQLAlchemyError:
-        logger.exception("No se pudo registrar al cliente del pedido presencial en la agenda.")
+        logger.exception("No se pudo registrar al cliente del pedido en la agenda.")
 
 
 # --- Consulta y ciclo de vida -------------------------------------------------------------------------
@@ -295,3 +299,37 @@ def update_order_sector_prepared(db: Session, order_id: int, sector: str, is_pre
     db.refresh(order)
     return order
 
+
+
+# --- Cambios que pide el cliente sobre un pedido ya registrado ----------------------------------------
+
+
+def find_latest_chat_order(db: Session, channel: Channel | str, chat_id: str) -> Order | None:
+    """Último pedido del cliente de ese chat, para modificarlo (ver Order.add_items y Order.change_payment_method)."""
+    return order_repository.latest_for_chat(db, Channel(channel).value, chat_id)
+
+
+def add_items_to_order(db: Session, order: Order, items: list[tuple[int, int]]) -> Decimal:
+    """Suma productos a un pedido ya registrado y devuelve lo que costaron. Cocina ve el aviso en su tablero."""
+    products = _products_for(db, items)
+    with transaction(db):
+        added = order.add_items(products)
+    db.refresh(order)
+    return added
+
+
+def change_order_payment_method(db: Session, order: Order, method: PaymentMethod | str) -> None:
+    """Cambia el medio de pago del pedido (o el de la diferencia, si tiene un pago parcial). No toca a cocina."""
+    with transaction(db):
+        order.change_payment_method(method)
+    db.refresh(order)
+
+
+def acknowledge_kitchen_update(db: Session, order_id: int) -> Order:
+    """Cocina vio los productos agregados: se apaga la alerta del tablero."""
+    order = get_order(db, order_id)
+    order.kitchen_update_pending = False
+    with transaction(db):
+        pass
+    db.refresh(order)
+    return order
