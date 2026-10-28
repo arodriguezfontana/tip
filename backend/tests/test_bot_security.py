@@ -34,7 +34,8 @@ def _calcular(**args) -> dict:
 def _confirmar(datos: dict, chat_id: str | None = None) -> str:
     args = {"datos_pedido_json": json.dumps(datos)}
     if chat_id is not None:
-        args["telegram_chat_id"] = chat_id
+        args["canal"] = "telegram"
+        args["chat_id"] = chat_id
     return confirmar_y_guardar_pedido.invoke(args)
 
 

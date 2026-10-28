@@ -5,6 +5,7 @@ from typing import Annotated
 
 from langchain_core.tools import InjectedToolArg, tool
 
+from app.core.channels import Channel, session_key
 from app.db.session import SessionLocal
 from app.services.business_hours_service import estado_del_local
 from app.services.human_handoff import MENSAJE_DERIVACION, derivaciones
@@ -36,9 +37,10 @@ def _aviso_si_el_local_esta_cerrado() -> str | None:
 @tool
 def derivar_a_empleado(
     motivo: str = "",
-    telegram_chat_id: Annotated[str | None, InjectedToolArg] = None,
+    canal: Annotated[Channel | None, InjectedToolArg] = None,
+    chat_id: Annotated[str | None, InjectedToolArg] = None,
     nombre_cliente: Annotated[str | None, InjectedToolArg] = None,
-    usuario_telegram: Annotated[str | None, InjectedToolArg] = None,
+    usuario: Annotated[str | None, InjectedToolArg] = None,
     telefono_cliente: Annotated[str | None, InjectedToolArg] = None,
 ) -> str:
     """Pasa la conversación a una persona del local y el bot deja de responderle al cliente.
@@ -48,17 +50,17 @@ def derivar_a_empleado(
     Args:
         motivo: Resumen breve (una frase) de qué necesita el cliente, para que el empleado llegue al tanto.
     """
-    if not telegram_chat_id or not telegram_chat_id.lstrip("-").isdigit():
-        logger.warning("No se puede derivar la conversación %r: no es un chat de Telegram.", telegram_chat_id)
+    if canal is None or not chat_id or not chat_id.lstrip("-").isdigit():
+        logger.warning("No se puede derivar la conversación %r: no es un chat de un canal de mensajería.", chat_id)
         return "Por este medio no puedo pasarte con una persona. Podés comunicarte con el local directamente."
     cerrado = _aviso_si_el_local_esta_cerrado()
     if cerrado:
         return cerrado
     derivaciones.solicitar(
-        telegram_chat_id,
+        session_key(canal, chat_id),
         cliente=nombre_cliente,
         motivo=(motivo or "").strip()[:300] or None,
-        usuario=usuario_telegram,
+        usuario=usuario,
         telefono=telefono_cliente,
     )
     return MENSAJE_DERIVACION

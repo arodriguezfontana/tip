@@ -7,16 +7,17 @@ from unittest.mock import AsyncMock, patch
 import pytest
 from langchain_core.messages import AIMessage
 
+from app.core.channels import Channel
 from app.core.config import settings
 from app.core.time import RESTAURANT_TZ
+from app.services.bot_service import BotService
 from app.services.business_hours_service import Franja, guardar_franjas
 from app.services.chat_memory import SesionChat
 from app.services.chat_service import ChatService
 from app.services.human_handoff import MENSAJE_DERIVACION, MENSAJE_FIN_DERIVACION, derivaciones
-from app.services.telegram_service import TelegramService
 from tests.conftest import TestingSessionLocal
 
-CHAT = "12345"
+CHAT = "telegram:12345"
 
 
 @pytest.fixture(autouse=True)
@@ -34,7 +35,7 @@ def tools_session(db_session):
 
 @pytest.fixture()
 def telegram():
-    with patch("app.api.handoff_router.send_telegram_message", new=AsyncMock()) as mock:
+    with patch("app.api.handoff_router.enviar_mensaje", new=AsyncMock()) as mock:
         yield mock
 
 
@@ -100,13 +101,17 @@ def test_desde_la_web_de_prueba_no_se_puede_derivar():
 
 def test_con_una_derivacion_activa_el_bot_no_responde_y_el_mensaje_llega_al_empleado():
     derivaciones.solicitar(CHAT, cliente="Ana")
-    servicio = TelegramService()
+    servicio = BotService()
 
     with patch.object(servicio.agrupador, "recibir") as agrupador:
-        servicio.recibir_mensaje(CHAT, "¿Tienen sillas para bebé?")
-        servicio.recibir_mensaje("999", "Hola")
+        servicio.recibir_mensaje(Channel.TELEGRAM, "12345", "¿Tienen sillas para bebé?")
+        servicio.recibir_mensaje(Channel.TELEGRAM, "999", "Hola")
+        servicio.recibir_mensaje(Channel.WHATSAPP, "12345", "Hola, soy de WhatsApp")
 
-    agrupador.assert_called_once_with("999", "Hola")
+    assert [c.args for c in agrupador.call_args_list] == [
+        ("telegram:999", "Hola"),
+        ("whatsapp:12345", "Hola, soy de WhatsApp"),
+    ]
     [derivacion] = derivaciones.listar()
     assert [(m.autor, m.texto) for m in derivacion.mensajes] == [("customer", "¿Tienen sillas para bebé?")]
 
@@ -129,7 +134,7 @@ def test_flujo_completo_del_empleado(client, telegram):
     derivaciones.registrar_mensaje_del_cliente(CHAT, "Hola, ¿hay mesa?")
     enviado = client.post(f"/api/v1/handoffs/{derivacion.id}/messages", json={"text": "  Sí, te esperamos  "})
     assert enviado.status_code == 200
-    telegram.assert_awaited_with(12345, "Sí, te esperamos")
+    telegram.assert_awaited_with(Channel.TELEGRAM, "12345", "Sí, te esperamos")
     assert [(m["author"], m["text"]) for m in enviado.json()["messages"]] == [
         ("system", "empleado@test.com tomó la conversación."),
         ("customer", "Hola, ¿hay mesa?"),
@@ -137,7 +142,7 @@ def test_flujo_completo_del_empleado(client, telegram):
     ]
 
     assert client.post(f"/api/v1/handoffs/{derivacion.id}/finish").status_code == 204
-    telegram.assert_awaited_with(12345, MENSAJE_FIN_DERIVACION)
+    telegram.assert_awaited_with(Channel.TELEGRAM, "12345", MENSAJE_FIN_DERIVACION)
     assert client.get("/api/v1/handoffs").json() == []
     assert not derivaciones.esta_derivado(CHAT)
 
@@ -248,7 +253,7 @@ def test_el_nombre_que_dio_al_bot_tiene_prioridad_sobre_el_de_telegram():
 
 
 def test_el_webhook_guarda_el_perfil_de_quien_escribe(public_client):
-    from app.api.telegram_router import telegram_service
+    from app.services.bot_service import bot_service
 
     update = {
         "update_id": 1,
@@ -260,12 +265,12 @@ def test_el_webhook_guarda_el_perfil_de_quien_escribe(public_client):
         },
     }
     try:
-        with patch.object(telegram_service, "recibir_mensaje"):
+        with patch.object(bot_service, "recibir_mensaje"):
             public_client.post(
                 "/api/v1/telegram/webhook",
                 json=update,
                 headers={"X-Telegram-Bot-Api-Secret-Token": settings.telegram_webhook_secret},
             )
-        assert telegram_service.chat_service.sesiones["555"].perfil == {"nombre": "Ana Pérez", "usuario": "anita"}
+        assert bot_service.chat_service.sesiones["telegram:555"].perfil == {"nombre": "Ana Pérez", "usuario": "anita"}
     finally:
-        telegram_service.chat_service.sesiones.pop("555", None)
+        bot_service.chat_service.sesiones.pop("telegram:555", None)

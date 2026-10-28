@@ -161,6 +161,9 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
 
 export type OrderSource = 'bot' | 'web' | 'mostrador';
 
+/** Canal de chat de los pedidos del bot. */
+export type OrderChannel = 'telegram' | 'whatsapp';
+
 export interface AdminOrder {
   id: number;
   customer_name: string;
@@ -169,6 +172,7 @@ export interface AdminOrder {
   status: OrderStatus;
   delivery_method: DeliveryMethod;
   source: OrderSource;
+  channel?: OrderChannel | null;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;

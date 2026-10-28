@@ -23,18 +23,19 @@ from app.api import (
     stats_router,
     store_config_router,
     telegram_router,
+    whatsapp_router,
 )
 from app.api.errors import register_error_handlers
 from app.core.config import settings
 from app.db.session import get_db
-from app.services.telegram_service import register_webhook
+from app.services.channels import registrar_webhooks
 
 logging.basicConfig(level=logging.INFO)
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    await register_webhook()
+    await registrar_webhooks()
     yield
 
 
@@ -80,6 +81,7 @@ api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
+api_router.include_router(whatsapp_router.router, prefix="/whatsapp", tags=["WhatsApp"])
 api_router.include_router(stats_router.router, prefix="/stats", tags=["Stats"])
 api_router.include_router(store_config_router.router, prefix="/store-config", tags=["Store Config"])
 

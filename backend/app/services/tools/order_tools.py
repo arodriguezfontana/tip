@@ -16,6 +16,7 @@ from typing import Annotated
 from langchain_core.tools import InjectedToolArg, tool
 from sqlalchemy.orm import Session
 
+from app.core.channels import Channel
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
@@ -429,7 +430,8 @@ def calcular_y_preparar_pedido(
 @tool
 def confirmar_y_guardar_pedido(
     datos_pedido_json: str,
-    telegram_chat_id: Annotated[str | None, InjectedToolArg] = None,
+    canal: Annotated[Channel | None, InjectedToolArg] = None,
+    chat_id: Annotated[str | None, InjectedToolArg] = None,
 ) -> str:
     """Persiste definitivamente la orden en la base de datos con estado 'Pendiente'.
     Se ejecuta únicamente cuando el usuario confirma explícitamente con un 'Sí'.
@@ -487,7 +489,8 @@ def confirmar_y_guardar_pedido(
             order = create_bot_order(
                 db,
                 pedido,
-                telegram_chat_id=telegram_chat_id,
+                channel=canal,
+                chat_id=chat_id if canal else None,
                 scheduled_for=scheduled_dt.astimezone(timezone.utc) if scheduled_dt else None,
                 payment_method=metodo_pago,
             )

@@ -23,10 +23,10 @@ from app.schemas.order_schemas import (
     WebOrderCreatedResponse,
 )
 from app.services import order_service
+from app.services.channels import enviar_mensaje
 from app.services.mercadopago_service import payment_received_message, reconcile_pending_payments, start_web_payment
 from app.services.order_notification_service import OrderSnapshot, notify_order_status_change
 from app.services.store_config_service import get_or_create_store_config
-from app.services.telegram_service import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -53,8 +53,8 @@ def list_orders(
     (el tablero consulta seguido, así que el 'Abonado' aparece solo).
     """
     for paid in reconcile_pending_payments(db):
-        if paid.telegram_chat_id:
-            background_tasks.add_task(send_telegram_message, int(paid.telegram_chat_id), payment_received_message(paid))
+        if paid.channel and paid.chat_id:
+            background_tasks.add_task(enviar_mensaje, paid.channel, paid.chat_id, payment_received_message(paid))
     return [
         OrderResponse.from_model(order)
         for order in order_service.list_orders(db, date_from, date_to, status, sector)
@@ -119,7 +119,7 @@ def update_order_status(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
-    """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por Telegram."""
+    """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por su canal de chat."""
     order = order_service.change_order_status(
         db,
         order_id,
@@ -153,12 +153,12 @@ def update_order_payment(
 ) -> OrderResponse:
     """Actualiza manualmente el estado de pago del pedido (Abonado)."""
     order = order_service.update_order_payment(db, order_id, payload.is_paid)
-    if order.is_paid and order.telegram_chat_id:
+    if order.is_paid and order.channel and order.chat_id:
         mensaje = (
             f"✅ ¡Tu pedido #{order.id} fue marcado como Abonado!\n"
             f"Registramos el pago en el sistema. ¡Muchas gracias!"
         )
-        background_tasks.add_task(send_telegram_message, int(order.telegram_chat_id), mensaje)
+        background_tasks.add_task(enviar_mensaje, order.channel, order.chat_id, mensaje)
     return OrderResponse.from_model(order)
 
 

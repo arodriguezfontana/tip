@@ -18,6 +18,8 @@ class OrderResponse(BaseModel):
     status: str
     delivery_method: str
     source: str
+    # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
+    channel: str | None = None
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
@@ -48,6 +50,7 @@ class OrderResponse(BaseModel):
             status=order.status,
             delivery_method=order.delivery_method,
             source=order.source,
+            channel=order.channel,
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,

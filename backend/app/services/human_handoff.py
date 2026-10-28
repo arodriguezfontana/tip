@@ -59,10 +59,11 @@ class MensajeDerivacion:
 @dataclass
 class Derivacion:
     id: int
+    # Clave de la conversación (canal y chat del cliente, ver core.channels.session_key).
     chat_id: str
     cliente: str | None
     motivo: str | None
-    # Cómo identificar al cliente: su @usuario de Telegram y el teléfono que dio al bot (si lo dio).
+    # Cómo identificar al cliente: su @usuario (Telegram) y el teléfono que dio al bot (si lo dio).
     usuario: str | None = None
     telefono: str | None = None
     solicitada_en: datetime = field(default_factory=_ahora)

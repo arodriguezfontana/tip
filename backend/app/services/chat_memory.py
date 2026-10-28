@@ -41,7 +41,7 @@ def _describir_items(pedido: dict) -> str:
 class SesionChat:
     historial: list[BaseMessage] = field(default_factory=list)
     cliente: dict[str, str] = field(default_factory=dict)
-    # Datos del perfil de Telegram del chat (nombre y @usuario), para que el personal reconozca al cliente.
+    # Datos del perfil del chat según el canal (nombre, @usuario de Telegram, teléfono de WhatsApp), para que el personal reconozca al cliente.
     perfil: dict[str, str] = field(default_factory=dict)
     pedido_en_curso: dict | None = None
     ultimo_pedido: str | None = None

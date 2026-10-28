@@ -25,6 +25,11 @@ const SOURCE_LABEL: Record<AdminOrder['source'], string> = {
   mostrador: 'Mostrador',
 };
 
+const CHANNEL_LABEL: Record<NonNullable<AdminOrder['channel']>, string> = {
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp',
+};
+
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-AR', {
     hour: '2-digit',
@@ -200,6 +205,7 @@ export function OrderDetailModal({
               </span>
               <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
                 {SOURCE_LABEL[current.source] ?? current.source}
+                {current.channel ? ` · ${CHANNEL_LABEL[current.channel] ?? current.channel}` : ''}
               </span>
             </div>
             <p className="text-sm text-gray-500">

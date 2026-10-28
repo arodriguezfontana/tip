@@ -27,7 +27,8 @@ def _calcular(**args) -> dict:
 def _confirmar(datos: dict, chat_id: str | None = None) -> str:
     args = {"datos_pedido_json": json.dumps(datos)}
     if chat_id is not None:
-        args["telegram_chat_id"] = chat_id
+        args["canal"] = "telegram"
+        args["chat_id"] = chat_id
     return confirmar_y_guardar_pedido.invoke(args)
 
 
@@ -191,7 +192,7 @@ def test_registra_el_pedido_pendiente_con_el_chat_de_telegram(db_session, produc
     order = db_session.query(Order).one()
     assert order.status == "Pendiente"
     assert order.source == "bot"
-    assert order.telegram_chat_id == "98765"
+    assert (order.channel, order.chat_id) == ("telegram", "98765")
     assert order.delivery_method == "domicilio"
     assert order.shipping_address == "Belgrano 95"
     assert order.scheduled_for is None

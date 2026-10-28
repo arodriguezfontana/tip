@@ -6,6 +6,7 @@ from datetime import datetime, timezone
 from langchain_core.messages import AIMessage, SystemMessage, ToolMessage
 from langchain_google_genai import ChatGoogleGenerativeAI
 
+from app.core.channels import split_session_key
 from app.core.config import settings
 from app.services.chat_memory import INACTIVIDAD_PARA_REINICIAR, SesionChat
 from app.services.human_handoff import derivaciones
@@ -19,6 +20,11 @@ logger = logging.getLogger(__name__)
 LLM_TIMEOUT_SECONDS = 90
 MAX_TOOL_ITERATIONS = 8
 MAX_ACTIVE_SESSIONS = 1000
+# Se manda cuando el modelo intenta registrar de nuevo un pedido que ya se registró (ej. el cliente sigue escribiendo).
+MENSAJE_PEDIDO_YA_REGISTRADO = (
+    "Tu pedido ya quedó registrado ✅ (arriba tenés el detalle). "
+    "Si querés hacer otro pedido, contame qué te gustaría pedir."
+)
 MENSAJE_FALLBACK_LOOP = "Disculpá, tardé un poquito más de la cuenta en procesarlo. ¿Podés repetirme tu última consulta?"
 
 
@@ -39,7 +45,7 @@ class ChatService:
         self.llm_con_herramientas = self.llm.bind_tools(self.herramientas)
 
         self.system_prompt = """
-            Sos el asistente virtual de un restaurante local en Telegram. Tu tono es amable, cordial y servicial.
+            Sos el asistente virtual de un restaurante local, que atiende por chat (Telegram o WhatsApp). Tu tono es amable, cordial y servicial.
             NOTA IMPORTANTE DE FORMATO: No uses negritas porque no funcionan para destacar o titulos. En su lugar, empeza con un emoji representativo y luego el texto.
 
             FLUJO OBLIGATORIO DE CONVERSACIÓN:
@@ -137,18 +143,25 @@ class ChatService:
                             session_id,
                         )
                         resultado = f"Herramienta desconocida: {tool_call['name']}"
+                    elif tool_call["name"] == "confirmar_y_guardar_pedido" and sesion.pedido_en_curso is None:
+                        # Solo se puede registrar un pedido que se armó (calcular_y_preparar_pedido) después del último
+                        # registrado: si no, un mensaje más del cliente duplicaría el pedido.
+                        logger.warning("Se evitó registrar dos veces el mismo pedido en la sesión %s", session_id)
+                        resultado = respuesta_directa = MENSAJE_PEDIDO_YA_REGISTRADO
                     else:
                         try:
                             args = tool_call["args"]
+                            canal, chat_id = split_session_key(session_id)
                             if tool_call["name"] == "confirmar_y_guardar_pedido":
-                                args = {**args, "telegram_chat_id": session_id}
+                                args = {**args, "canal": canal, "chat_id": chat_id}
                             elif tool_call["name"] == "derivar_a_empleado":
                                 args = {
                                     **args,
-                                    "telegram_chat_id": session_id,
+                                    "canal": canal,
+                                    "chat_id": chat_id,
                                     "nombre_cliente": sesion.cliente.get("nombre") or sesion.perfil.get("nombre"),
-                                    "usuario_telegram": sesion.perfil.get("usuario"),
-                                    "telefono_cliente": sesion.cliente.get("telefono"),
+                                    "usuario": sesion.perfil.get("usuario"),
+                                    "telefono_cliente": sesion.cliente.get("telefono") or sesion.perfil.get("telefono"),
                                 }
                             inicio = time.perf_counter()
                             resultado = await herramienta.ainvoke(args)

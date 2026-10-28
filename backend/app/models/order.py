@@ -8,6 +8,7 @@ from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
+from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, ConflictError
 from app.core.money import MoneyColumn, to_money
 from app.db.base_class import Base
@@ -85,6 +86,7 @@ class Order(Base):
         CheckConstraint(f"status IN {_values(OrderStatus)}", name="ck_orders_status"),
         CheckConstraint(f"delivery_method IN {_values(DeliveryMethod)}", name="ck_orders_delivery_method"),
         CheckConstraint(f"source IN {_values(OrderSource)}", name="ck_orders_source"),
+        CheckConstraint(f"channel IN {_values(Channel)}", name="ck_orders_channel"),
         CheckConstraint(f"payment_method IN {_values(PaymentMethod)}", name="ck_orders_payment_method"),
     )
 
@@ -111,7 +113,9 @@ class Order(Base):
     is_paid = Column(Boolean, nullable=False, default=False, server_default=false())
     status = Column(String(50), nullable=False, default=OrderStatus.PENDING.value)
     delivery_method = Column(String(20), nullable=False, server_default=DeliveryMethod.DELIVERY.value)
-    telegram_chat_id = Column(String(32), nullable=True)
+    # Pedidos del bot: canal por el que habló el cliente y su chat en ese canal (para avisarle novedades).
+    channel = Column(String(20), nullable=True)
+    chat_id = Column(String(32), nullable=True)
     customer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
     delivery_driver_id = Column(
         Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True

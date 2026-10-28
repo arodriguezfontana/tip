@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.core.channels import Channel
 from app.core.config import settings
 
 WEBHOOK_URL = "/api/v1/telegram/webhook"
@@ -18,7 +19,7 @@ def _headers_de_telegram() -> dict:
 
 @pytest.fixture()
 def procesar():
-    with patch("app.api.telegram_router.telegram_service.recibir_mensaje") as mock:
+    with patch("app.api.telegram_router.bot_service.recibir_mensaje") as mock:
         yield mock
 
 
@@ -35,7 +36,7 @@ def test_mensaje_de_texto_se_encola_para_responderlo(public_client, procesar):
 
     assert response.status_code == 200
     assert response.json() == {"status": "ok"}
-    procesar.assert_called_once_with("98765", "Quiero una muzza")
+    procesar.assert_called_once_with(Channel.TELEGRAM, "98765", "Quiero una muzza")
 
 
 @pytest.mark.parametrize(
@@ -86,3 +87,12 @@ def test_con_secreto_configurado_acepta_el_header_correcto(public_client, proces
 
     assert response.status_code == 200
     procesar.assert_called_once()
+
+
+def test_con_telegram_deshabilitado_el_webhook_no_existe(public_client, procesar, monkeypatch):
+    monkeypatch.setattr(settings, "BOT_CHANNELS", "whatsapp")
+
+    response = public_client.post(WEBHOOK_URL, json=_update(), headers=_headers_de_telegram())
+
+    assert response.status_code == 404
+    procesar.assert_not_called()
