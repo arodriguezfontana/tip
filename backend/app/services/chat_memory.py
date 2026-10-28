@@ -102,6 +102,10 @@ class SesionChat:
             self.pedido_registrado_en_este_turno = True
             return resultado
 
+        elif nombre in ("agregar_items_al_pedido", "cambiar_metodo_de_pago"):
+            # El mensaje ya trae los montos y las opciones calculados por el sistema: sale tal cual.
+            return resultado
+
         elif nombre == "derivar_a_empleado":
             # La conversación pasa a una persona: el aviso al cliente sale tal cual, sin otra llamada al modelo.
             return resultado

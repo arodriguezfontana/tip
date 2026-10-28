@@ -13,6 +13,7 @@ from app.services.human_handoff import derivaciones
 from app.services.tools.handoff_tools import derivar_a_empleado
 from app.services.tools.horario_tools import obtener_estado_del_local
 from app.services.tools.menu_tools import obtener_menu_actual
+from app.services.tools.order_edit_tools import agregar_items_al_pedido, cambiar_metodo_de_pago
 from app.services.tools.order_tools import calcular_y_preparar_pedido, confirmar_y_guardar_pedido
 
 logger = logging.getLogger(__name__)
@@ -25,6 +26,8 @@ MENSAJE_PEDIDO_YA_REGISTRADO = (
     "Tu pedido ya quedó registrado ✅ (arriba tenés el detalle). "
     "Si querés hacer otro pedido, contame qué te gustaría pedir."
 )
+# Herramientas que necesitan saber de qué chat viene el cliente (las completa el sistema, no el modelo).
+HERRAMIENTAS_DEL_CHAT = ("confirmar_y_guardar_pedido", "agregar_items_al_pedido", "cambiar_metodo_de_pago")
 MENSAJE_FALLBACK_LOOP = "Disculpá, tardé un poquito más de la cuenta en procesarlo. ¿Podés repetirme tu última consulta?"
 
 
@@ -39,6 +42,8 @@ class ChatService:
         self.herramientas = [
             calcular_y_preparar_pedido,
             confirmar_y_guardar_pedido,
+            agregar_items_al_pedido,
+            cambiar_metodo_de_pago,
             derivar_a_empleado,
         ]
         self.herramientas_por_nombre = {h.name: h for h in self.herramientas}
@@ -63,6 +68,8 @@ class ChatService:
             REGLA DE OBSERVACIONES: Si en cualquier momento de la conversación el cliente menciona una aclaración importante sobre la comida o la entrega (ej: "sin cebolla", "bien cocida", "es alérgico al maní", "tocar timbre 2B"), incluila en "observaciones" aunque no se la hayas preguntado, y no se la vuelvas a pedir.
 
             REGLA ANTI-REPETICIÓN: Si ya llamaste una herramienta y tienes su resultado disponible, no la vuelvas a llamar con los mismos datos.
+
+            REGLA DE CAMBIOS EN UN PEDIDO YA REGISTRADO: Si el cliente ya registró su pedido y después quiere sumarle productos (ej: "agregame una Coca"), usá "agregar_items_al_pedido" pasando solo lo que se agrega; si quiere cambiar cómo paga (ej: "al final te pago en efectivo") o elige cómo pagar la diferencia de un pedido ya abonado, usá "cambiar_metodo_de_pago". NUNCA armes ni registres un pedido nuevo para esos casos. Estas herramientas controlan el plazo de modificación y calculan los montos: después de usarlas no escribas nada más, el sistema le responde al cliente.
 
             REGLA DE DERIVACIÓN A UNA PERSONA: Si el cliente pide hablar con una persona, un asesor, un empleado o el dueño (ej: "quiero hablar con alguien", "pasame con una persona"), o prefiere que le tome el pedido una persona, usá la herramienta "derivar_a_empleado" con un resumen breve de lo que necesita. No intentes convencerlo de seguir con el bot ni sigas armando el pedido. Después de la herramienta no escribas nada más: el sistema le avisa al cliente que lo van a atender.
 
@@ -152,7 +159,7 @@ class ChatService:
                         try:
                             args = tool_call["args"]
                             canal, chat_id = split_session_key(session_id)
-                            if tool_call["name"] == "confirmar_y_guardar_pedido":
+                            if tool_call["name"] in HERRAMIENTAS_DEL_CHAT:
                                 args = {**args, "canal": canal, "chat_id": chat_id}
                             elif tool_call["name"] == "derivar_a_empleado":
                                 args = {

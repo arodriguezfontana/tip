@@ -68,6 +68,8 @@ interface OrderDetailModalProps {
   simulated?: boolean;
   /** Marca el pedido como abonado. */
   onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Cocina vio los productos que el cliente agregó al pedido. */
+  onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
   /** Cancela el pedido (si se indica, el modal ofrece el botón mientras el pedido siga en curso). */
   onCancel?: (orderId: number) => Promise<void>;
   onClose: () => void;
@@ -77,6 +79,7 @@ export function OrderDetailModal({
   order,
   simulated = false,
   onMarkPaid,
+  onAcknowledgeUpdate,
   onCancel,
   onClose,
 }: OrderDetailModalProps) {
@@ -85,6 +88,7 @@ export function OrderDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -98,6 +102,17 @@ export function OrderDetailModal({
       setDetail((prev) => (prev ? { ...prev, is_paid: true } : prev));
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    if (!onAcknowledgeUpdate) return;
+    setAcknowledging(true);
+    try {
+      await onAcknowledgeUpdate(order.id);
+      setDetail((prev) => (prev ? { ...prev, kitchen_update_pending: false } : prev));
+    } finally {
+      setAcknowledging(false);
     }
   };
 
@@ -293,6 +308,24 @@ export function OrderDetailModal({
             ) : (
               detail && (
                 <div className="space-y-2.5">
+                  {current.kitchen_update_pending && (
+                    <div
+                      role="alert"
+                      className="flex items-center justify-between gap-3 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900"
+                    >
+                      <span>🔔 El cliente agregó productos a este pedido (marcados como “Nuevo”).</span>
+                      {onAcknowledgeUpdate && (
+                        <button
+                          type="button"
+                          onClick={handleAcknowledge}
+                          disabled={acknowledging}
+                          className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-2.5 py-1 transition"
+                        >
+                          Visto
+                        </button>
+                      )}
+                    </div>
+                  )}
                   {itemsBySector.map(([sector, items]) => {
                     const meta = SECTOR_CONFIG[sector as PreparationSector] ?? {
                       key: sector as PreparationSector,
@@ -316,9 +349,16 @@ export function OrderDetailModal({
                         <table className="w-full text-xs">
                           <tbody className="divide-y divide-gray-100">
                             {items.map((item) => (
-                              <tr key={item.product_id} className="hover:bg-gray-50/50 transition">
+                              <tr key={item.id ?? item.product_id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
                                 <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
-                                <td className="py-1.5 pr-2 text-gray-900 font-medium">{item.product_name}</td>
+                                <td className="py-1.5 pr-2 text-gray-900 font-medium">
+                                  {item.product_name}
+                                  {item.added_later && (
+                                    <span className="ml-1.5 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </td>
                                 <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">
                                   {formatCurrency(item.subtotal)}
                                 </td>
@@ -352,6 +392,19 @@ export function OrderDetailModal({
                   <Row label="Método de pago">
                     {detail.payment_method ? PAYMENT_METHOD_LABEL[detail.payment_method] : 'No informado'}
                   </Row>
+                  {!detail.is_paid && (detail.paid_amount ?? 0) > 0 && (
+                    <>
+                      <Row label="Pagado">{formatCurrency(detail.paid_amount ?? 0)}</Row>
+                      <Row label="Falta cobrar">
+                        <span className="font-bold text-amber-800">
+                          {formatCurrency(detail.pending_amount ?? 0)}
+                          {detail.balance_payment_method
+                            ? ` (${PAYMENT_METHOD_LABEL[detail.balance_payment_method]})`
+                            : ' (a definir)'}
+                        </span>
+                      </Row>
+                    </>
+                  )}
                   <Row label="Estado del pago">
                     <div className="flex items-center justify-end gap-2">
                       <span
@@ -359,7 +412,13 @@ export function OrderDetailModal({
                           detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {detail.is_paid ? (detail.payment_method === 'mercadopago' ? 'Abonado' : 'Pagado') : 'Pendiente de pago'}
+                        {detail.is_paid
+                          ? detail.payment_method === 'mercadopago'
+                            ? 'Abonado'
+                            : 'Pagado'
+                          : (detail.paid_amount ?? 0) > 0
+                            ? 'Pago parcial'
+                            : 'Pendiente de pago'}
                       </span>
                       {!detail.is_paid && onMarkPaid && (
                         <button

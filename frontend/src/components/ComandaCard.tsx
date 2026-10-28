@@ -39,6 +39,8 @@ interface ComandaCardProps {
   onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
   /** Marca el pedido como abonado. */
   onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Cocina vio los productos que el cliente agregó al pedido. */
+  onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
   /** Lista de repartidores activos disponibles para asignar. */
   activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
@@ -59,14 +61,19 @@ export function ComandaCard({
   onStatusChange,
   onAssignDriver,
   onMarkPaid,
+  onAcknowledgeUpdate,
   activeDrivers = [],
   onOpenDetail,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
+  const hasKitchenUpdate = Boolean(order.kitchen_update_pending);
+  // Pago mixto: ya se cobró una parte y el resto (la diferencia) se cobra aparte, ej. en efectivo al repartidor.
+  const hasPartialPayment = !order.is_paid && (order.paid_amount ?? 0) > 0;
   // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
   const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
 
@@ -93,7 +100,7 @@ export function ComandaCard({
   return (
     <div
       onClick={onOpenDetail ? () => onOpenDetail(order) : undefined}
-      className={`@container bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
+      className={`@container bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${hasKitchenUpdate ? 'border-amber-400 ring-2 ring-amber-300 bg-amber-50/30' : isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
@@ -125,6 +132,33 @@ export function ComandaCard({
             {formatElapsed(elapsedMs)}
           </span>
         </div>
+
+        {hasKitchenUpdate && (
+          <div
+            role="alert"
+            onClick={stopPropagation}
+            className="flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
+          >
+            <span>🔔 Pedido actualizado: el cliente agregó productos</span>
+            {onAcknowledgeUpdate && (
+              <button
+                type="button"
+                disabled={acknowledging}
+                onClick={async () => {
+                  setAcknowledging(true);
+                  try {
+                    await onAcknowledgeUpdate(order.id);
+                  } finally {
+                    setAcknowledging(false);
+                  }
+                }}
+                className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-2.5 py-1 transition"
+              >
+                Visto
+              </button>
+            )}
+          </div>
+        )}
 
         <div className="text-sm space-y-1">
           <p className="font-medium text-gray-900">{order.customer_name}</p>
@@ -213,7 +247,18 @@ export function ComandaCard({
 
         {/* Medio de pago y si ya está abonado; si está pendiente, un clic lo marca como abonado. */}
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span className="bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1">
+          {hasPartialPayment && (
+            <>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+                Pagado {order.payment_method ? PAYMENT_METHOD_LABEL[order.payment_method] : ''}: {formatCurrency(order.paid_amount ?? 0)}
+              </span>
+              <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+                Cobrar {order.balance_payment_method ? PAYMENT_METHOD_LABEL[order.balance_payment_method] : 'diferencia'}:{' '}
+                {formatCurrency(order.pending_amount ?? 0)}
+              </span>
+            </>
+          )}
+          <span className={`bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1 ${hasPartialPayment ? 'hidden' : ''}`}>
             {order.payment_method ? (
               <>
                 <span aria-hidden="true" className="@max-[205px]:hidden">
@@ -230,7 +275,7 @@ export function ComandaCard({
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
               Abonado
             </span>
-          ) : onMarkPaid ? (
+          ) : hasPartialPayment ? null : onMarkPaid ? (
             <button
               type="button"
               disabled={markingPaid}

@@ -25,6 +25,20 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
     )
 
 
+def latest_for_chat(db: Session, channel: str, chat_id: str) -> Order | None:
+    """Último pedido que hizo el cliente de ese chat (el más reciente, esté en el estado que esté)."""
+    return (
+        db.query(Order)
+        .options(
+            joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.category),
+            joinedload(Order.delivery_driver),
+        )
+        .filter(Order.channel == channel, Order.chat_id == chat_id)
+        .order_by(Order.id.desc())
+        .first()
+    )
+
+
 def list_orders(
     db: Session,
     date_from: datetime | None,

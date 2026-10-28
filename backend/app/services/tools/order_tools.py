@@ -9,6 +9,7 @@ import json
 import logging
 import re
 import unicodedata
+from dataclasses import dataclass, field
 from datetime import date, datetime, time, timedelta, timezone
 from decimal import Decimal
 from typing import Annotated
@@ -227,6 +228,109 @@ def _evaluar_hora_programada(
     return solicitado, None
 
 
+@dataclass
+class ItemsResueltos:
+    """Productos que pidió el cliente, ya buscados en el menú con los precios de la base."""
+
+    validados: list[dict] = field(default_factory=list)
+    resumen: list[str] = field(default_factory=list)
+    total: Decimal = Decimal(0)
+    hay_ambiguos: bool = False
+    hay_cantidades_invalidas: bool = False
+
+    def mensaje_sin_items(self) -> str:
+        """Qué decirle al cliente cuando no se pudo reconocer ningún producto."""
+        if self.hay_ambiguos:
+            return "Necesito que me aclares algunos productos:\n" + "\n".join(self.resumen)
+        if self.hay_cantidades_invalidas:
+            return "Necesito que revises algunos productos del pedido:\n" + "\n".join(self.resumen)
+        return "No se pudieron reconocer productos válidos en el menú para tu pedido."
+
+
+def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
+    """Interpreta lo que pidió el cliente ("2 Pizza Muzzarella, 1 Coca-Cola" o una lista JSON) y lo busca en el menú."""
+    resumen_lineas = []
+    total_general = Decimal(0)
+    items_validados = []
+    hay_ambiguos = False
+    hay_cantidades_invalidas = False
+
+    lista_items = []
+
+    try:
+        parsed = json.loads(items_solicitados)
+        if isinstance(parsed, list):
+            lista_items = parsed
+        elif isinstance(parsed, dict):
+            lista_items = [parsed]
+    except Exception:
+        partes = items_solicitados.split(",")
+        for parte in partes:
+            parte_limpia = parte.strip()
+            match_num = re.search(r'^(\d+)\s*(?:x|-)?\s*(.+)$', parte_limpia)
+            if match_num:
+                cant = int(match_num.group(1))
+                nombre = match_num.group(2).strip()
+                lista_items.append({"nombre": nombre, "cantidad": cant})
+            else:
+                lista_items.append({"nombre": parte_limpia, "cantidad": 1})
+
+    if len(lista_items) > MAX_ITEMS_EN_PEDIDO:
+        lista_items = lista_items[:MAX_ITEMS_EN_PEDIDO]
+
+    for item in lista_items:
+        nombre_buscado = str(item.get("nombre", "")).strip()
+        raw_cant = item.get("cantidad") if item.get("cantidad") is not None else item.get("quantity")
+        try:
+            cantidad = int(raw_cant) if raw_cant is not None else 1
+        except (ValueError, TypeError):
+            cantidad = 1
+
+        if not nombre_buscado:
+            continue
+
+        if cantidad < 1:
+            hay_cantidades_invalidas = True
+            resumen_lineas.append(f"- '{nombre_buscado}': la cantidad debe ser de al menos 1 unidad.")
+            continue
+
+        if cantidad > MAX_QUANTITY_PER_ITEM:
+            hay_cantidades_invalidas = True
+            resumen_lineas.append(
+                f"- '{nombre_buscado}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
+            )
+            continue
+
+        producto = _buscar_producto(db, nombre_buscado)
+
+        if not producto:
+            resumen_lineas.append(f"- No pudimos encontrar el producto: '{nombre_buscado}'")
+            continue
+        if isinstance(producto, list):
+            hay_ambiguos = True
+            opciones = ", ".join(p.name for p in producto)
+            resumen_lineas.append(f"- '{nombre_buscado}' puede ser: {opciones}. ¿Cuál querés?")
+            continue
+
+        subtotal = producto.price * cantidad
+        total_general += subtotal
+        resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
+        items_validados.append({
+            "product_id": producto.id,
+            "nombre": producto.name,
+            "quantity": cantidad,
+            "unit_price": float(producto.price),
+        })
+
+    return ItemsResueltos(
+        validados=items_validados,
+        resumen=resumen_lineas,
+        total=total_general,
+        hay_ambiguos=hay_ambiguos,
+        hay_cantidades_invalidas=hay_cantidades_invalidas,
+    )
+
+
 @tool
 def calcular_y_preparar_pedido(
     items_solicitados: str,
@@ -261,85 +365,14 @@ def calcular_y_preparar_pedido(
         customer_name = (customer_name or "").strip()[:MAX_LARGO_CLIENTE] or None
         shipping_address = (shipping_address or "").strip()[:MAX_LARGO_DIRECCION] or None
 
-        lista_items = []
-
-        try:
-            parsed = json.loads(items_solicitados)
-            if isinstance(parsed, list):
-                lista_items = parsed
-            elif isinstance(parsed, dict):
-                lista_items = [parsed]
-        except Exception:
-            partes = items_solicitados.split(",")
-            for parte in partes:
-                parte_limpia = parte.strip()
-                match_num = re.search(r'^(\d+)\s*(?:x|-)?\s*(.+)$', parte_limpia)
-                if match_num:
-                    cant = int(match_num.group(1))
-                    nombre = match_num.group(2).strip()
-                    lista_items.append({"nombre": nombre, "cantidad": cant})
-                else:
-                    lista_items.append({"nombre": parte_limpia, "cantidad": 1})
-
-        if len(lista_items) > MAX_ITEMS_EN_PEDIDO:
-            lista_items = lista_items[:MAX_ITEMS_EN_PEDIDO]
-
-        resumen_lineas = []
-        total_general = Decimal(0)
-        items_validados = []
-        hay_ambiguos = False
-        hay_cantidades_invalidas = False
-
-        for item in lista_items:
-            nombre_buscado = str(item.get("nombre", "")).strip()
-            raw_cant = item.get("cantidad") if item.get("cantidad") is not None else item.get("quantity")
-            try:
-                cantidad = int(raw_cant) if raw_cant is not None else 1
-            except (ValueError, TypeError):
-                cantidad = 1
-
-            if not nombre_buscado:
-                continue
-
-            if cantidad < 1:
-                hay_cantidades_invalidas = True
-                resumen_lineas.append(f"- '{nombre_buscado}': la cantidad debe ser de al menos 1 unidad.")
-                continue
-
-            if cantidad > MAX_QUANTITY_PER_ITEM:
-                hay_cantidades_invalidas = True
-                resumen_lineas.append(
-                    f"- '{nombre_buscado}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
-                )
-                continue
-
-            producto = _buscar_producto(db, nombre_buscado)
-
-            if not producto:
-                resumen_lineas.append(f"- No pudimos encontrar el producto: '{nombre_buscado}'")
-                continue
-            if isinstance(producto, list):
-                hay_ambiguos = True
-                opciones = ", ".join(p.name for p in producto)
-                resumen_lineas.append(f"- '{nombre_buscado}' puede ser: {opciones}. ¿Cuál querés?")
-                continue
-
-            subtotal = producto.price * cantidad
-            total_general += subtotal
-            resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
-            items_validados.append({
-                "product_id": producto.id,
-                "nombre": producto.name,
-                "quantity": cantidad,
-                "unit_price": float(producto.price),
-            })
-
-        if not items_validados:
-            if hay_ambiguos:
-                return "Necesito que me aclares algunos productos:\n" + "\n".join(resumen_lineas)
-            if hay_cantidades_invalidas:
-                return "Necesito que revises algunos productos del pedido:\n" + "\n".join(resumen_lineas)
-            return "No se pudieron reconocer productos válidos en el menú para tu pedido."
+        resueltos = _resolver_items(db, items_solicitados)
+        if not resueltos.validados:
+            return resueltos.mensaje_sin_items()
+        resumen_lineas = resueltos.resumen
+        total_general = resueltos.total
+        items_validados = resueltos.validados
+        hay_ambiguos = resueltos.hay_ambiguos
+        hay_cantidades_invalidas = resueltos.hay_cantidades_invalidas
 
         es_retiro = metodo_entrega == DeliveryMethod.PICKUP
         falta_direccion = not es_retiro and not shipping_address

@@ -81,6 +81,12 @@ export async function updateOrderPayment(
   return data;
 }
 
+/** Cocina vio los productos que el cliente agregó al pedido: apaga la alerta del tablero. */
+export async function acknowledgeKitchenUpdate(orderId: number): Promise<AdminOrder> {
+  const { data } = await api.post<AdminOrder>(`/orders/${orderId}/kitchen-update/ack`);
+  return data;
+}
+
 /** Marca o desmarca un ítem individual como preparado. */
 export async function updateOrderItemPrepared(
   orderId: number,
