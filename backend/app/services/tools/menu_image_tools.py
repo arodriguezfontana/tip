@@ -67,6 +67,8 @@ async def enviar_menu_en_imagen(
             # El pie de foto va solo en la primera: las demás completan el mismo menú.
             if await canal_de_envio.enviar_imagen(chat_id, imagen, PIE_DE_FOTO if enviadas == 0 else ""):
                 enviadas += 1
+                # Que cada imagen llegue antes que la siguiente y que el mensaje final llegue después de todas.
+                await asyncio.sleep(getattr(canal_de_envio, "segundos_de_entrega_de_imagen", 0))
             elif enviadas == 0:
                 break  # el canal no las admite o falló: no tiene sentido insistir con el resto
         except Exception:

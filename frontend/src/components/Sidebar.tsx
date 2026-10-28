@@ -32,7 +32,6 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'productos', label: 'Productos y categorías' },
       { key: 'ingredientes', label: 'Ingredientes' },
-      { key: 'menu-imagen', label: 'Menú en imagen' },
     ],
   },
   {
@@ -46,6 +45,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     title: 'Configuración',
     items: [
       { key: 'horarios', label: 'Horarios' },
+      { key: 'menu-imagen', label: 'Menú en imagen' },
       { key: 'configuracion-web', label: 'Configuración' },
     ],
   },

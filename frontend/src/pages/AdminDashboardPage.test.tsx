@@ -193,9 +193,9 @@ describe('AdminDashboardPage', () => {
         .getAllByRole('button')
         .map((button) => button.textContent);
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes', 'Repartidores']);
-    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes', 'Menú en imagen']);
+    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios', 'Configuración']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Menú en imagen', 'Configuración']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });

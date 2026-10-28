@@ -348,6 +348,26 @@ def canal_falso():
         yield canal
 
 
+def test_espera_a_que_cada_imagen_se_entregue_para_que_el_mensaje_final_llegue_ultimo(db_session, canal_falso):
+    _cargar_menu(db_session, PNG, JPG)
+    canal_falso.segundos_de_entrega_de_imagen = 1.5
+    pausas = []
+
+    async def pausar(segundos):
+        pausas.append((len(canal_falso.enviadas), segundos))
+
+    with patch("app.services.tools.menu_image_tools.asyncio.sleep", pausar):
+        assert _pedir_menu() == MENSAJE_MENU_ENVIADO
+
+    # Una pausa después de cada imagen, incluida la última, antes de que salga el mensaje que invita a pedir.
+    assert pausas == [(1, 1.5), (2, 1.5)]
+
+
+def test_whatsapp_espera_a_que_se_entregue_la_imagen_pero_telegram_no():
+    assert WhatsAppChannel.segundos_de_entrega_de_imagen > 0
+    assert TelegramChannel.segundos_de_entrega_de_imagen == 0
+
+
 def _cargar_menu(db, *imagenes: bytes):
     for data in imagenes or (PNG,):
         menu_image_service.add_menu_image(db, data)

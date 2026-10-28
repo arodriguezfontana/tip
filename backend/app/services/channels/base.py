@@ -51,6 +51,9 @@ class CanalDeMensajeria(ABC):
     canal: ClassVar[Channel]
     # Cada cuántos segundos hay que renovar el aviso "escribiendo..." mientras se prepara la respuesta.
     segundos_entre_avisos_de_escritura: ClassVar[float]
+    # Tras mandar una imagen, cuánto esperar antes de mandar lo siguiente para que llegue en orden: la plataforma la
+    # acepta enseguida pero puede entregarla después que un texto enviado a continuación.
+    segundos_de_entrega_de_imagen: ClassVar[float] = 0
 
     @abstractmethod
     async def enviar_mensaje(self, chat_id: str, texto: str) -> None:

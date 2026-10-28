@@ -35,6 +35,8 @@ class WhatsAppChannel(CanalDeMensajeria):
     canal: ClassVar[Channel] = Channel.WHATSAPP
     # El aviso de escritura de WhatsApp dura hasta 25 s o hasta que se envía la respuesta: no hace falta renovarlo seguido.
     segundos_entre_avisos_de_escritura: ClassVar[float] = 20
+    # Meta procesa las imágenes más lento que los textos: sin esta pausa el mensaje que sigue puede llegar antes.
+    segundos_de_entrega_de_imagen: ClassVar[float] = 1.5
 
     def __init__(self) -> None:
         self._cliente = ClienteHttpCompartido()
