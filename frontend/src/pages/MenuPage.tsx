@@ -161,7 +161,8 @@ export default function MenuPage() {
                         <button
                           type="button"
                           onClick={() => setHalfAndHalfPizzas(group.products)}
-                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+                          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+                          className="inline-flex items-center gap-1.5 text-white rounded-xl px-4 py-1.5 text-sm font-semibold hover:opacity-90 transition shadow-xs"
                         >
                           <PizzaIcon className="w-4 h-4 shrink-0" /> Armar mitad y mitad
                         </button>
