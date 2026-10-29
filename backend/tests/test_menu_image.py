@@ -8,7 +8,6 @@ from unittest.mock import patch
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
-from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from app.core.config import settings
 from app.models.menu import MAX_IMAGE_BYTES
@@ -484,9 +483,16 @@ def test_las_instrucciones_del_bot_describen_cuando_mandar_el_menu(db_session):
         assert palabra in prompt
 
 
-def test_la_herramienta_no_expone_datos_del_chat_al_modelo():
-    # Lo que se le manda al modelo al enlazar la herramienta: nada, el sistema completa canal y chat. (`.args` no sirve
-    # para esto: según la versión de Python/langchain también lista los argumentos inyectados.)
-    parametros = convert_to_openai_tool(enviar_menu_en_imagen)["function"]["parameters"]
+def test_el_modelo_no_puede_elegir_a_que_chat_se_manda_el_menu(db_session, canal_falso):
+    # Aunque el modelo ponga un canal o un chat (según la versión de Python, langchain los puede mostrar como
+    # parámetros de la herramienta), el sistema los pisa con los de la conversación real.
+    _cargar_menu(db_session)
+    pide_otro_chat = AIMessage(
+        content="",
+        tool_calls=[{"name": "enviar_menu_en_imagen", "args": {"canal": "telegram", "chat_id": "999"}, "id": "c1"}],
+    )
 
-    assert parametros.get("properties", {}) == {}
+    asyncio.run(ChatService(llm=LLM(pide_otro_chat)).obtener_respuesta("el menú", session_id="whatsapp:5491162939338"))
+
+    [(chat_id, _, _)] = canal_falso.enviadas
+    assert chat_id == "5491162939338"
