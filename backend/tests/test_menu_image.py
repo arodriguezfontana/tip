@@ -8,6 +8,7 @@ from unittest.mock import patch
 import httpx
 import pytest
 from langchain_core.messages import AIMessage
+from langchain_core.utils.function_calling import convert_to_openai_tool
 
 from app.core.config import settings
 from app.models.menu import MAX_IMAGE_BYTES
@@ -484,7 +485,8 @@ def test_las_instrucciones_del_bot_describen_cuando_mandar_el_menu(db_session):
 
 
 def test_la_herramienta_no_expone_datos_del_chat_al_modelo():
-    campos = enviar_menu_en_imagen.args  # solo lo que ve el modelo: nada, el sistema completa canal y chat
+    # Lo que se le manda al modelo al enlazar la herramienta: nada, el sistema completa canal y chat. (`.args` no sirve
+    # para esto: según la versión de Python/langchain también lista los argumentos inyectados.)
+    parametros = convert_to_openai_tool(enviar_menu_en_imagen)["function"]["parameters"]
 
-    assert "canal" not in campos and "chat_id" not in campos
-
+    assert parametros.get("properties", {}) == {}
