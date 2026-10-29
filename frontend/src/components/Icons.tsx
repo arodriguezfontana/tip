@@ -96,14 +96,13 @@ export function KitchenIcon({ className = 'w-4 h-4' }: { className?: string }) {
       className={className}
       aria-hidden="true"
     >
-      <path d="M6 13.8V4a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v9.8" />
-      <path d="M2 13h20" />
-      <path d="M4 13a8 8 0 0 0 16 0" />
-      <path d="M9 17v2" />
-      <path d="M15 17v2" />
+      <path d="M6 13.87A4 4 0 0 1 7.41 6a5.11 5.11 0 0 1 1.05-1.54 5 5 0 0 1 7.08 0A5.11 5.11 0 0 1 16.59 6 4 4 0 0 1 18 13.87V21H6Z" />
+      <line x1="6" y1="17" x2="18" y2="17" />
     </svg>
   );
 }
+
+export const ChefHatIcon = KitchenIcon;
 
 export function BarIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (

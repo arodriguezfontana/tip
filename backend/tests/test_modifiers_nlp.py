@@ -1,4 +1,4 @@
-"""Pruebas de US-40: Gestión de Exclusiones y Extras (NLP).
+"""Gestión de Exclusiones y Extras (NLP).
 
 - El motor NLP debe clasificar correctamente los modificadores positivos ("con", "extra", "agregale") y negativos ("sin", "quitale", "no le pongas").
 - Los modificadores positivos que tengan costo adicional asociado deben sumar su valor al total del pedido automáticamente.
