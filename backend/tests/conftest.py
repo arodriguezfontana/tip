@@ -4,6 +4,7 @@ import os
 # corran igual en CI. Se definen antes de importar la app porque la configuración se lee al importarla.
 _TEST_ENV = {
     "DATABASE_URL": "sqlite://",
+    "BOT_CHANNELS": "telegram",
     "TELEGRAM_TOKEN": "test-telegram-token",
     "TELEGRAM_WEBHOOK_SECRET": "",
     "GOOGLE_API_KEY": "test-google-api-key",

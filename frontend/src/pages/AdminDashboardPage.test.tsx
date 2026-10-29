@@ -1,6 +1,6 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { cleanup, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import * as businessHoursService from '@/services/businessHoursService';
 import * as catalogService from '@/services/catalogService';
@@ -85,6 +85,97 @@ async function goTo(user: ReturnType<typeof userEvent.setup>, section: string) {
 }
 
 describe('AdminDashboardPage', () => {
+  it('sin fondo elegido el panel se ve liso', async () => {
+    renderDashboard();
+    await screen.findByRole('button', { name: 'Abrir menú' });
+
+    expect(screen.queryByTestId('admin-panel-bg')).not.toBeInTheDocument();
+  });
+
+  it('con un fondo elegido el panel lo muestra', async () => {
+    vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+      id: 1,
+      store_name: 'RestoIT',
+      address: null,
+      contact_phone: null,
+      logo_url: null,
+      theme_color: 'black',
+      panel_bg: 'custom',
+      panel_bg_image: 'data:image/jpeg;base64,fondo-del-panel',
+    });
+    renderDashboard();
+
+    await waitFor(() =>
+      expect(screen.getByTestId('admin-panel-bg').style.backgroundImage).toContain('data:image/jpeg;base64,fondo-del-panel')
+    );
+    expect(screen.getByTestId('admin-panel-bg')).toHaveClass('blur-md'); // las fotos van desenfocadas
+  });
+
+  it('el color liso elegido se aplica al fondo del panel sin desenfocarlo', async () => {
+    vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
+      id: 1,
+      store_name: 'RestoIT',
+      address: null,
+      contact_phone: null,
+      logo_url: null,
+      theme_color: 'black',
+      panel_bg: 'color',
+      panel_bg_color: '#334155',
+    });
+    renderDashboard();
+
+    const capa = await screen.findByTestId('admin-panel-bg');
+    expect(capa.style.backgroundImage).toContain('rgb(51, 65, 85)'); // #334155
+    expect(capa).not.toHaveClass('blur-md');
+  });
+
+  describe('menú lateral', () => {
+    const anchaPantalla = (ancha: boolean) =>
+      vi.stubGlobal('matchMedia', (query: string) => ({ matches: ancha, media: query, addEventListener: vi.fn(), removeEventListener: vi.fn() }));
+
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
+    it('en pantalla ancha queda abierto al elegir secciones, hasta que se toca la X', async () => {
+      anchaPantalla(true);
+      const { user } = renderDashboard();
+      await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+
+      await user.click(screen.getByRole('button', { name: 'Historial' }));
+      await user.click(screen.getByRole('button', { name: 'Clientes' }));
+
+      expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Historial' })).toBeInTheDocument(); // el menú sigue abierto
+
+      await user.click(within(screen.getByRole('complementary', { hidden: true })).getByRole('button', { name: 'Cerrar menú' }));
+
+      expect(screen.queryByRole('button', { name: 'Historial' })).not.toBeInTheDocument(); // cerrado
+    });
+
+    it('no tapa ni mueve la página: sin fondo oscuro ni corrimiento al abrirlo', async () => {
+      anchaPantalla(true);
+      const { user } = renderDashboard();
+
+      await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+
+      const raiz = screen.getByRole('banner').parentElement;
+      expect(raiz?.className).not.toMatch(/\bl?g?:?pl-/);
+      const fondoOscuro = document.querySelector('div.bg-black\\/40');
+      expect(fondoOscuro).toHaveClass('lg:hidden'); // en pantalla ancha no bloquea la página
+    });
+
+    it('en una pantalla angosta el menú se cierra al elegir una sección', async () => {
+      anchaPantalla(false);
+      const { user } = renderDashboard();
+      await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+
+      await user.click(screen.getByRole('button', { name: 'Historial' }));
+
+      expect(screen.queryByRole('button', { name: 'Historial' })).not.toBeInTheDocument();
+    });
+  });
+
   it('arranca en el panel de comandas', async () => {
     renderDashboard();
 
@@ -104,7 +195,7 @@ describe('AdminDashboardPage', () => {
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes', 'Repartidores']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios', 'Configuración']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Menú en imagen', 'Configuración']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });
@@ -133,40 +224,39 @@ describe('AdminDashboardPage', () => {
     expect(screen.getByRole('button', { name: 'Ingredientes' })).toBeInTheDocument();
   });
 
-  it('navega por las secciones desde el menú lateral', async () => {
+  // Una prueba por sección: recorrerlas todas en una sola se acercaba al tope de tiempo cuando corre toda la suite.
+  it.each<[string, () => Promise<unknown>]>([
+    [
+      'Estadísticas',
+      async () => {
+        expect(await screen.findByText('Panel de Rendimiento y Ventas')).toBeInTheDocument();
+        expect(screen.getByText('Panel de Comandas')).not.toBeVisible();
+      },
+    ],
+    ['Historial', async () => expect(await screen.findByText('No hay pedidos en el rango seleccionado.')).toBeInTheDocument()],
+    ['Tomar pedido', async () => expect(screen.getByRole('heading', { name: 'Datos del cliente' })).toBeVisible()],
+    ['Clientes', async () => expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument()],
+    ['Repartidores', async () => expect(await screen.findByText('Aún no hay repartidores registrados en el sistema.')).toBeInTheDocument()],
+    ['Ingredientes', async () => expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument()],
+    [
+      'Productos y categorías',
+      async () => {
+        expect(screen.getByRole('heading', { name: 'Productos y categorías' })).toBeInTheDocument();
+        expect(await screen.findByText('Todavía no hay productos en el catálogo.')).toBeInTheDocument();
+      },
+    ],
+    [
+      'Reporte de ingredientes',
+      async () => expect(await screen.findByText('No hay consumo de ingredientes en el rango seleccionado.')).toBeInTheDocument(),
+    ],
+    ['Horarios', async () => expect(await screen.findByText(/se aceptan pedidos a cualquier hora/)).toBeInTheDocument()],
+    ['Configuración', async () => expect(await screen.findByRole('heading', { name: 'Configuración' })).toBeInTheDocument()],
+  ])('navega a %s desde el menú lateral', async (section, verify) => {
     const { user } = renderDashboard();
 
-    await goTo(user, 'Estadísticas');
-    expect(await screen.findByText('Panel de Rendimiento y Ventas')).toBeInTheDocument();
-    expect(screen.getByText('Panel de Comandas')).not.toBeVisible();
+    await goTo(user, section);
 
-    await goTo(user, 'Historial');
-    expect(await screen.findByText('No hay pedidos en el rango seleccionado.')).toBeInTheDocument();
-
-    await goTo(user, 'Tomar pedido');
-    expect(screen.getByRole('heading', { name: 'Datos del cliente' })).toBeVisible();
-
-    await goTo(user, 'Clientes');
-    expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument();
-
-    await goTo(user, 'Repartidores');
-    expect(await screen.findByText('Aún no hay repartidores registrados en el sistema.')).toBeInTheDocument();
-
-    await goTo(user, 'Ingredientes');
-    expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument();
-
-    await goTo(user, 'Productos y categorías');
-    expect(screen.getByRole('heading', { name: 'Productos y categorías' })).toBeInTheDocument();
-    expect(await screen.findByText('Todavía no hay productos en el catálogo.')).toBeInTheDocument();
-
-    await goTo(user, 'Reporte de ingredientes');
-    expect(await screen.findByText('No hay consumo de ingredientes en el rango seleccionado.')).toBeInTheDocument();
-
-    await goTo(user, 'Horarios');
-    expect(await screen.findByText(/se aceptan pedidos a cualquier hora/)).toBeInTheDocument();
-
-    await goTo(user, 'Configuración');
-    expect(await screen.findByRole('heading', { name: 'Configuración' })).toBeInTheDocument();
+    await verify();
   });
 
   it('el pedido a medio cargar se conserva al cambiar de sección', async () => {

@@ -36,6 +36,13 @@ Cada capa tiene una sola responsabilidad y solo depende de las que están debajo
 
 Los montos de dinero se manejan con `Decimal` (`app/core/money.py`), nunca con `float`.
 
+### Canales del bot (Telegram y WhatsApp)
+El bot atiende por Telegram, por WhatsApp o por ambos. Se elige con `BOT_CHANNELS` en el `.env` (`telegram`, `whatsapp` o `telegram,whatsapp`); cada canal habilitado exige sus credenciales y la API no arranca si faltan.
+
+La conversación (`app/services/bot_service.py`, `chat_service.py`, herramientas de pedidos) no sabe por qué canal habla. Cada canal es una clase de `app/services/channels` que implementa `CanalDeMensajeria` (enviar mensaje, "escribiendo...", registrar webhook) y tiene su router de webhook en `app/api`. Los pedidos guardan `channel` y `chat_id` para avisarle al cliente por el mismo canal. Para sumar un canal nuevo: un valor en `core/channels.py`, una clase en `services/channels`, su router y sus credenciales en `config.py`.
+
+Configuración de credenciales de WhatsApp: [docs/whatsapp.md](docs/whatsapp.md).
+
 ### Tests y lint
 ```bash
 cd backend

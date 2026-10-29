@@ -3,6 +3,7 @@ from typing import Annotated, Literal
 
 from pydantic import BaseModel, StringConstraints
 
+from app.core.channels import split_session_key
 from app.services.human_handoff import AutorMensaje, Derivacion, MensajeDerivacion
 
 
@@ -27,6 +28,8 @@ def _ultimo_mensaje(derivacion: Derivacion) -> "HandoffMessageResponse | None":
 class HandoffSummaryResponse(BaseModel):
     id: int
     customer_name: str | None
+    # Canal por el que escribe el cliente (telegram, whatsapp).
+    channel: str | None = None
     customer_username: str | None = None
     customer_phone: str | None = None
     reason: str | None
@@ -41,6 +44,7 @@ class HandoffSummaryResponse(BaseModel):
         return cls(
             id=derivacion.id,
             customer_name=derivacion.cliente,
+            channel=getattr(split_session_key(derivacion.chat_id)[0], "value", None),
             customer_username=derivacion.usuario,
             customer_phone=derivacion.telefono,
             reason=derivacion.motivo,

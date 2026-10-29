@@ -348,7 +348,7 @@ export function TomarPedidoView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
         {/* Catálogo */}
-        <section className="lg:col-span-7 bg-white rounded-2xl shadow-md p-4 flex flex-col gap-4 lg:min-h-0">
+        <section className="lg:col-span-7 bg-white rounded-2xl shadow-md p-4 flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700">Productos</h2>
             <input
@@ -400,7 +400,7 @@ export function TomarPedidoView() {
             <p className="text-sm text-gray-500 text-center py-12">No hay productos que coincidan.</p>
           )}
 
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-0">
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
             {visibleGroups.map((group) => (
               <div key={group.category.id}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">{group.category.name}</h3>
@@ -441,7 +441,7 @@ export function TomarPedidoView() {
         </section>
 
         {/* Resumen del pedido */}
-        <section className="lg:col-span-5 bg-white rounded-2xl shadow-md p-4 flex flex-col lg:min-h-0">
+        <section className="lg:col-span-5 bg-white rounded-2xl shadow-md p-4 flex flex-col lg:min-h-0 lg:overflow-y-auto">
           <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-3">Resumen del pedido</h2>
 
           {lines.length === 0 ? (
@@ -449,7 +449,7 @@ export function TomarPedidoView() {
               Hacé click en un producto para agregarlo.
             </p>
           ) : (
-            <div className="overflow-auto -mx-1 lg:flex-1 lg:min-h-0">
+            <div className="overflow-auto -mx-1 lg:flex-1 lg:min-h-28">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
@@ -513,8 +513,8 @@ export function TomarPedidoView() {
 
           {errors.items && <p className="text-xs text-red-600 mt-2">{errors.items}</p>}
 
-          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-3">
-            <div className="flex flex-1 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
+          <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-3">
+            <div className="flex flex-1 min-w-48 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
               {COUNTER_PAYMENT_METHODS.map((method) => (
                 <button
                   key={method}
@@ -561,7 +561,7 @@ export function TomarPedidoView() {
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
@@ -569,14 +569,14 @@ export function TomarPedidoView() {
                 setLastOrderId(null);
               }}
               disabled={submitting}
-              className="px-4 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
+              className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
             >
               Limpiar
             </button>
             <button
               type="submit"
               disabled={submitting}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
+              className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? 'Registrando...' : 'Confirmar pedido'}
             </button>

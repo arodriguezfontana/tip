@@ -18,6 +18,8 @@ class OrderResponse(BaseModel):
     status: str
     delivery_method: str
     source: str
+    # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
+    channel: str | None = None
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
@@ -28,6 +30,12 @@ class OrderResponse(BaseModel):
     delivery_driver_name: str | None = None
     payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
+    # Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda.
+    paid_amount: float = 0
+    pending_amount: float = 0
+    balance_payment_method: PaymentMethod | None = None  # type: ignore[assignment]
+    # Se agregaron productos y cocina todavía no lo vio.
+    kitchen_update_pending: bool = False
     items: list["WebOrderItemResponse"] = Field(default_factory=list)
     items_prepared_count: int = 0
     is_all_prepared: bool = False
@@ -48,6 +56,7 @@ class OrderResponse(BaseModel):
             status=order.status,
             delivery_method=order.delivery_method,
             source=order.source,
+            channel=order.channel,
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,
@@ -58,6 +67,10 @@ class OrderResponse(BaseModel):
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
             payment_method=order.payment_method,
             is_paid=bool(order.is_paid),
+            paid_amount=order.amount_paid,
+            pending_amount=order.amount_pending,
+            balance_payment_method=order.balance_payment_method,
+            kitchen_update_pending=bool(order.kitchen_update_pending),
             items=[WebOrderItemResponse.from_model(item) for item in order.items] if order.items else [],
             items_prepared_count=order.items_prepared_count,
             is_all_prepared=order.is_all_prepared,
@@ -142,6 +155,7 @@ class WebOrderItemResponse(BaseModel):
     subtotal: float
     sector: str = "cocina"
     is_prepared: bool = False
+    added_later: bool = False
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
@@ -154,6 +168,7 @@ class WebOrderItemResponse(BaseModel):
             subtotal=item.subtotal,
             sector=item.sector,
             is_prepared=bool(item.is_prepared),
+            added_later=bool(item.added_later),
         )
 
 

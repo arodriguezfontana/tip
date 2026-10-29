@@ -76,6 +76,11 @@ class AgrupadorDeMensajes:
         # Se limpia al terminar la tarea, también si se cancela antes de empezar (ahí su cuerpo nunca corre).
         chat.temporizador.add_done_callback(lambda _tarea: self._tarea_terminada(chat_id, chat))
 
+    def hay_mensajes_esperando(self, chat_id: str) -> bool:
+        """Si el chat tiene mensajes que llegaron mientras se respondía el grupo anterior y todavía no se atendieron."""
+        chat = self._chats.get(chat_id)
+        return chat is not None and bool(chat.mensajes)
+
     def _lanzar(self, corrutina: Awaitable[None]) -> asyncio.Task:
         tarea = asyncio.ensure_future(corrutina)
         self._tareas.add(tarea)

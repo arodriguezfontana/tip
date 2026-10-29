@@ -1,9 +1,8 @@
-import re
-
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import validates
 from sqlalchemy.sql import func
 
+from app.core.phone import normalize_phone
 from app.db.base_class import Base
 
 
@@ -17,7 +16,8 @@ class Client(Base):
     __tablename__ = "clients"
 
     id = Column(Integer, primary_key=True, index=True)
-    # Solo dígitos (y '+' inicial), para que "11 4444-5555" y "1144445555" sean el mismo cliente.
+    # En el formato único de teléfonos (ver core.phone): "11 4444-5555", "+54 9 11 4444-5555" y "1144445555"
+    # son el mismo cliente.
     phone = Column(String(30), unique=True, index=True, nullable=False)
     full_name = Column(String(150), nullable=False)
     address = Column(String(255), nullable=True)
@@ -26,10 +26,8 @@ class Client(Base):
 
     @staticmethod
     def normalize_phone(phone: str) -> str:
-        """Deja solo los dígitos (y el '+' inicial) para comparar teléfonos escritos con distinto formato."""
-        phone = phone.strip()
-        digits = re.sub(r"\D", "", phone)
-        return f"+{digits}" if phone.startswith("+") else digits
+        """Pasa el teléfono al formato único para comparar números escritos de distinta manera."""
+        return normalize_phone(phone)
 
     @validates("phone")
     def _normalize_phone(self, _key: str, phone: str) -> str:

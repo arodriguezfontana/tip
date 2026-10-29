@@ -167,7 +167,7 @@ def test_pedido_con_sesion_queda_asociado_y_respeta_los_datos_modificados(public
     order = db_session.query(Order).one()
     customer = db_session.query(User).one()
     assert order.customer_id == customer.id
-    assert order.customer_phone == "11 9999-0000"
+    assert order.customer_phone == "1199990000"
     assert order.shipping_address == "Oficina: Av. Corrientes 1000"
     # Los datos modificados en el pedido no pisan los guardados en la cuenta.
     assert (customer.phone, customer.address) == ("11 5555-1234", "Calle Falsa 123")

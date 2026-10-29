@@ -115,6 +115,8 @@ export interface WebOrderItem {
   subtotal: number;
   sector?: PreparationSector | string;
   is_prepared?: boolean;
+  /** Lo agregó el cliente después de registrar el pedido. */
+  added_later?: boolean;
 }
 
 export interface WebOrderCreated {
@@ -161,6 +163,9 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
 
 export type OrderSource = 'bot' | 'web' | 'mostrador';
 
+/** Canal de chat de los pedidos del bot. */
+export type OrderChannel = 'telegram' | 'whatsapp';
+
 export interface AdminOrder {
   id: number;
   customer_name: string;
@@ -169,6 +174,7 @@ export interface AdminOrder {
   status: OrderStatus;
   delivery_method: DeliveryMethod;
   source: OrderSource;
+  channel?: OrderChannel | null;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;
@@ -179,6 +185,12 @@ export interface AdminOrder {
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
+  /** Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda. */
+  paid_amount?: number;
+  pending_amount?: number;
+  balance_payment_method?: PaymentMethod | null;
+  /** Se agregaron productos y cocina todavía no lo vio. */
+  kitchen_update_pending?: boolean;
   items?: WebOrderItem[];
   items_prepared_count?: number;
   is_all_prepared?: boolean;

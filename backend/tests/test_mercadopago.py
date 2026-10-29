@@ -22,7 +22,8 @@ def sample_order(db_session, products):
         total_amount=17000.0,
         status="Pendiente",
         delivery_method=DeliveryMethod.DELIVERY.value,
-        telegram_chat_id="12345678",
+        channel="telegram",
+        chat_id="12345678",
         payment_method="mercadopago",
         is_paid=False,
     )
@@ -94,7 +95,7 @@ def test_webhook_endpoint_updates_order_and_triggers_notification(client, db_ses
         "data": {"id": "pay_11111"},
     }
 
-    with patch("app.api.mercadopago_router.send_telegram_message"):
+    with patch("app.api.mercadopago_router.enviar_mensaje"):
         response = client.post("/api/v1/mercadopago/webhook", json=payload)
         assert response.status_code == 200
         assert response.json() == {"status": "ok"}
@@ -112,7 +113,7 @@ def test_webhook_notifies_telegram_only_once_for_repeated_notifications(client, 
     }
     updated = {**created, "action": "payment.updated"}
 
-    with patch("app.api.mercadopago_router.send_telegram_message") as send:
+    with patch("app.api.mercadopago_router.enviar_mensaje") as send:
         client.post("/api/v1/mercadopago/webhook", json=created)
         client.post("/api/v1/mercadopago/webhook", json=updated)
 
@@ -127,7 +128,7 @@ def test_webhook_get_ping(client):
 
 def test_manual_mark_order_as_paid(client, db_session, sample_order):
     assert sample_order.is_paid is False
-    with patch("app.api.order_router.send_telegram_message"):
+    with patch("app.api.order_router.enviar_mensaje"):
         response = client.patch(f"/api/v1/orders/{sample_order.id}/payment", json={"is_paid": True})
         assert response.status_code == 200
         data = response.json()
@@ -286,20 +287,20 @@ def test_find_approved_payment_id_returns_none_when_mercadopago_fails(sample_ord
 
 def test_listing_orders_credits_paid_mercadopago_orders_and_notifies_telegram(client, db_session, sample_order, mp_credentials):
     _with_preference(db_session, sample_order)
-    with patch("app.services.mercadopago_service.find_approved_payment_id", return_value="184507"),          patch("app.api.order_router.send_telegram_message") as send:
+    with patch("app.services.mercadopago_service.find_approved_payment_id", return_value="184507"),          patch("app.api.order_router.enviar_mensaje") as send:
         response = client.get("/api/v1/orders")
 
     assert response.status_code == 200
     listed = next(o for o in response.json() if o["id"] == sample_order.id)
     assert listed["is_paid"] is True
     send.assert_called_once()
-    assert send.call_args.args[0] == 12345678
-    assert "Recibimos tu pago" in send.call_args.args[1]
+    assert send.call_args.args[:2] == ("telegram", "12345678")
+    assert "Recibimos tu pago" in send.call_args.args[2]
 
 
 def test_listing_orders_does_not_notify_twice(client, db_session, sample_order, mp_credentials):
     _with_preference(db_session, sample_order)
-    with patch("app.services.mercadopago_service.find_approved_payment_id", return_value="184507"),          patch("app.api.order_router.send_telegram_message") as send:
+    with patch("app.services.mercadopago_service.find_approved_payment_id", return_value="184507"),          patch("app.api.order_router.enviar_mensaje") as send:
         client.get("/api/v1/orders")
         _last_checked.clear()
         client.get("/api/v1/orders")

@@ -21,7 +21,7 @@ export function DateRangeFilter({
   onCustomToChange,
 }: DateRangeFilterProps) {
   return (
-    <div>
+    <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100">
       <span className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2">
         Rango de fechas
       </span>

@@ -18,6 +18,8 @@ export default defineConfig({
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
     include: ['src/**/*.test.{ts,tsx}'],
+    // Con toda la suite en paralelo (como en el CI) las pruebas de pantallas completas pueden tardar más que los 5 s por defecto.
+    testTimeout: 20000,
     // Misma zona horaria que el local para que las fechas de los tests no dependan de la máquina.
     env: { TZ: 'America/Argentina/Buenos_Aires' },
     coverage: {

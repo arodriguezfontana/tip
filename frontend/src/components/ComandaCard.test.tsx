@@ -12,6 +12,7 @@ function renderCard(
     activeDrivers?: DeliveryDriver[];
     onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
     onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+    onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
     selectedSector?: SectorFilter;
     onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
     onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
@@ -29,6 +30,7 @@ function renderCard(
       onStatusChange={onStatusChange}
       onAssignDriver={onAssignDriver}
       onMarkPaid={extraProps.onMarkPaid}
+      onAcknowledgeUpdate={extraProps.onAcknowledgeUpdate}
       activeDrivers={extraProps.activeDrivers}
       onOpenDetail={onOpenDetail}
       selectedSector={extraProps.selectedSector}
@@ -60,6 +62,19 @@ describe('ComandaCard', () => {
     expect(screen.getByText('Tel: 11 4444-5555')).toBeInTheDocument();
     expect(screen.getByText('“Sin cebolla”')).toBeInTheDocument();
     expect(screen.getByText(/19\.500,00/)).toBeInTheDocument();
+  });
+
+  it('en un pedido a domicilio muestra la dirección en lugar de "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: 'Belgrano 95, piso 2' });
+
+    expect(screen.getByText('Belgrano 95, piso 2')).toBeInTheDocument();
+    expect(screen.queryByText('A domicilio')).not.toBeInTheDocument();
+  });
+
+  it('si el pedido a domicilio no tiene dirección cargada vuelve a decir "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: '  ' });
+
+    expect(screen.getByText('A domicilio')).toBeInTheDocument();
   });
 
   it('muestra la insignia de Abonado cuando el pedido ya está pagado', () => {
@@ -379,6 +394,48 @@ describe('ComandaCard', () => {
       // Muestra datos esenciales de la comanda
       expect(screen.getByText('#101')).toBeInTheDocument();
       expect(screen.getByText('Paula Gómez')).toBeInTheDocument();
+    });
+  });
+
+  describe('pedido modificado por el cliente (US-37)', () => {
+    it('muestra el pago mixto: lo pagado por MercadoPago y lo que falta cobrar en efectivo', () => {
+      renderCard({
+        total_amount: 15000,
+        payment_method: 'mercadopago',
+        is_paid: false,
+        paid_amount: 12000,
+        pending_amount: 3000,
+        balance_payment_method: 'efectivo',
+      });
+
+      expect(screen.getByText(/Pagado MercadoPago/)).toHaveTextContent(/12.000,00/);
+      expect(screen.getByText(/Cobrar Efectivo/)).toHaveTextContent(/3.000,00/);
+      expect(screen.queryByText('Pago Pendiente')).not.toBeInTheDocument();
+    });
+
+    it('sin pago parcial sigue mostrando el estado de siempre', () => {
+      renderCard({ payment_method: 'efectivo', is_paid: false });
+
+      expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
+      expect(screen.queryByText(/Cobrar/)).not.toBeInTheDocument();
+    });
+
+    it('alerta a cocina cuando se agregaron productos y se apaga al marcarla como vista', async () => {
+      const onAcknowledgeUpdate = vi.fn().mockResolvedValue(undefined);
+      const { user, order, onOpenDetail } = renderCard({ kitchen_update_pending: true }, { onAcknowledgeUpdate });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Pedido actualizado');
+      await user.click(screen.getByRole('button', { name: 'Visto' }));
+
+      expect(onAcknowledgeUpdate).toHaveBeenCalledWith(order.id);
+      // El clic en "Visto" no abre el detalle del pedido.
+      expect(onOpenDetail).not.toHaveBeenCalled();
+    });
+
+    it('sin cambios no hay alerta', () => {
+      renderCard({ kitchen_update_pending: false });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
     });
   });
 });

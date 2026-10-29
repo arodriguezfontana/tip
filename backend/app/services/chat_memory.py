@@ -8,6 +8,7 @@ from datetime import datetime, timedelta, timezone
 from langchain_core.messages import BaseMessage, HumanMessage
 
 from app.services.human_handoff import AutorMensaje, MensajeDerivacion
+from app.services.tools.menu_image_tools import MENSAJE_MENU_ENVIADO
 from app.services.tools.order_tools import MARCA_PEDIDO_REGISTRADO
 
 # Mensajes recientes que se le mandan al modelo (cada pregunta del cliente, llamadas a herramientas y respuestas).
@@ -41,8 +42,14 @@ def _describir_items(pedido: dict) -> str:
 class SesionChat:
     historial: list[BaseMessage] = field(default_factory=list)
     cliente: dict[str, str] = field(default_factory=dict)
-    # Datos del perfil de Telegram del chat (nombre y @usuario), para que el personal reconozca al cliente.
+    # Datos del perfil del chat según el canal (nombre, @usuario de Telegram, teléfono de WhatsApp), para que el personal reconozca al cliente.
     perfil: dict[str, str] = field(default_factory=dict)
+    # Perfil de la agenda del local (solo WhatsApp, donde el teléfono del chat identifica al cliente).
+    telefono_del_canal: str | None = None
+    cliente_registrado: bool = False
+    cliente_nuevo: bool = False
+    cliente_consultado: bool = False
+    direccion_habitual: str | None = None
     pedido_en_curso: dict | None = None
     ultimo_pedido: str | None = None
     pedido_registrado_en_este_turno: bool = False
@@ -62,10 +69,29 @@ class SesionChat:
             self.historial = []
             self.pedido_en_curso = None
             self.transcripcion = []
+            self.cliente_consultado = False  # se vuelve a leer el perfil: el local pudo haberlo editado
         self.ultima_actividad = _ahora()
         self.pedido_registrado_en_este_turno = False
         self.historial.append(HumanMessage(content=mensaje_usuario))
         self._anotar(AutorMensaje.CLIENTE, mensaje_usuario)
+
+    def cargar_perfil(self, telefono: str, nombre: str | None, direccion: str | None) -> None:
+        """Datos del cliente según la agenda del local: así no se los pide de nuevo en cada pedido."""
+        self.cliente_consultado = True
+        self.telefono_del_canal = telefono
+        self.cliente_registrado = nombre is not None
+        self.cliente_nuevo = nombre is None
+        if nombre:
+            self.cliente["nombre"] = nombre
+        if direccion:
+            self.cliente["direccion"] = direccion
+            self.direccion_habitual = direccion
+
+    def recordar_nombre(self, nombre: str) -> None:
+        """El cliente nuevo dijo su nombre y quedó guardado en su perfil."""
+        self.cliente["nombre"] = nombre
+        self.cliente_registrado = True
+        self.cliente_nuevo = False
 
     def registrar_resultado_herramienta(self, nombre: str, resultado: str) -> str | None:
         """Extrae de los resultados de las herramientas lo que vale la pena recordar.
@@ -102,6 +128,14 @@ class SesionChat:
             self.pedido_registrado_en_este_turno = True
             return resultado
 
+        elif nombre in ("agregar_items_al_pedido", "cambiar_metodo_de_pago", "guardar_nombre_del_cliente"):
+            # El mensaje ya trae los montos y las opciones calculados por el sistema: sale tal cual.
+            return resultado
+
+        elif nombre == "enviar_menu_en_imagen" and resultado == MENSAJE_MENU_ENVIADO:
+            # La imagen ya salió con su pie de foto: solo queda invitarlo a pedir, sin otra llamada al modelo.
+            return resultado
+
         elif nombre == "derivar_a_empleado":
             # La conversación pasa a una persona: el aviso al cliente sale tal cual, sin otra llamada al modelo.
             return resultado
@@ -126,6 +160,26 @@ class SesionChat:
                 "los confirme o corrija):"
             )
             lineas += [f"- {etiquetas[clave]}: {valor}" for clave, valor in self.cliente.items()]
+        if self.telefono_del_canal:
+            lineas.append(
+                "TELÉFONO DE CONTACTO: ya lo tenés, es el número de WhatsApp desde el que escribe "
+                f"({self.telefono_del_canal}). Usalo en los pedidos y no se lo pidas."
+            )
+        if self.cliente_registrado and self.cliente.get("nombre"):
+            lineas.append(
+                f"CLIENTE CONOCIDO: se llama {self.cliente['nombre']}. En el saludo llamalo por su nombre y no se lo pidas."
+            )
+        elif self.cliente_nuevo:
+            lineas.append(
+                "CLIENTE NUEVO: todavía no sabés cómo se llama. Después de saludarlo pedile su nombre y, apenas te lo "
+                'diga, usá "guardar_nombre_del_cliente".'
+            )
+        if self.direccion_habitual:
+            lineas.append(
+                f"DIRECCIÓN HABITUAL: {self.direccion_habitual}. Si el cliente pide envío a domicilio, preguntale: "
+                f'"¿Te lo enviamos a la dirección de siempre: {self.direccion_habitual}?". Si acepta, usala y no le pidas '
+                "otra; si la rechaza, pedile la nueva dirección."
+            )
         if self.pedido_en_curso:
             lineas.append(
                 f"PEDIDO EN CURSO ({_describir_items(self.pedido_en_curso)}). Datos a usar en "
