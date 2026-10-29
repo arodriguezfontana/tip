@@ -1,3 +1,4 @@
+import json
 import re
 from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
@@ -5,7 +6,18 @@ from decimal import Decimal
 from enum import Enum
 from typing import TYPE_CHECKING, ClassVar
 
-from sqlalchemy import Boolean, CheckConstraint, Column, DateTime, ForeignKey, Integer, String, Text, false
+from sqlalchemy import (
+    JSON,
+    Boolean,
+    CheckConstraint,
+    Column,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text,
+    false,
+)
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
@@ -212,33 +224,44 @@ class Order(Base):
         Valida las reglas comunes a todos los canales: que haya productos, que estén disponibles y que no
         se supere el máximo de unidades por producto. Las líneas de un mismo producto se suman.
         """
-        parsed_lines: list[tuple[Product, int, Product | None, str | None]] = []
+        parsed_lines: list[tuple[Product, int, Product | None, str | None, list[dict]]] = []
         for line in lines:
             if len(line) == 2:
                 product, quantity = line
-                secondary_product, custom_name = None, None
+                secondary_product, custom_name, mods = None, None, []
+            elif len(line) == 4:
+                product, quantity, secondary_product, custom_name = line[:4]
+                mods = []
             else:
                 product, quantity, secondary_product, custom_name = line[:4]
+                mods = list(line[4]) if len(line) > 4 and line[4] else []
             if quantity < 1:
                 raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name))
+            parsed_lines.append((product, quantity, secondary_product, custom_name, mods))
 
         if not parsed_lines:
             raise InvalidOrderError("El pedido no tiene productos.")
 
-        consolidated: dict[tuple[int, int | None, str | None], tuple[Product, Product | None, str | None, Decimal, int]] = {}
-        for p1, qty, p2, cname in parsed_lines:
+        consolidated: dict[tuple, tuple[Product, Product | None, str | None, Decimal, int, list[dict]]] = {}
+        for p1, qty, p2, cname, mods in parsed_lines:
             cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-            key = (p1.id, p2.id if p2 else None, cname)
-            price = max(p1.price, p2.price) if p2 else p1.price
+            mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+            key = (p1.id, p2.id if p2 else None, cname, mods_key)
+            base_price = max(p1.price, p2.price) if p2 else p1.price
+            extra_cost = sum(
+                to_money(m.get("price", 0))
+                for m in mods
+                if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+            )
+            price = base_price + extra_cost
             if key in consolidated:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty = consolidated[key]
-                consolidated[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty)
+                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods = consolidated[key]
+                consolidated[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods)
             else:
-                consolidated[key] = (p1, p2, cname, price, qty)
+                consolidated[key] = (p1, p2, cname, price, qty, mods)
 
         unavailable = []
-        for p1, p2, _, _, _ in consolidated.values():
+        for p1, p2, _, _, _, _ in consolidated.values():
             if not p1.is_available:
                 unavailable.append(p1.name)
             if p2 is not None and not p2.is_available:
@@ -249,7 +272,7 @@ class Order(Base):
             )
 
         exceeded = []
-        for p1, _p2, cname, _, qty in consolidated.values():
+        for p1, _p2, cname, _, qty, _ in consolidated.values():
             if qty > MAX_QUANTITY_PER_ITEM:
                 exceeded.append(cname or p1.name)
         if exceeded:
@@ -266,8 +289,9 @@ class Order(Base):
                 quantity=qty,
                 unit_price=price,
                 custom_name=cname,
+                modifications=mods,
             )
-            for p1, p2, cname, price, qty in consolidated.values()
+            for p1, p2, cname, price, qty, mods in consolidated.values()
         ]
         self.total_amount = self.subtotal + (self.shipping_cost or Decimal(0))
 
@@ -353,33 +377,44 @@ class Order(Base):
         if not self.is_within_modification_window(now):
             raise ModificationWindowClosedError()
 
-        parsed_lines: list[tuple[Product, int, Product | None, str | None]] = []
+        parsed_lines: list[tuple[Product, int, Product | None, str | None, list[dict]]] = []
         for line in lines:
             if len(line) == 2:
                 product, quantity = line
-                secondary_product, custom_name = None, None
+                secondary_product, custom_name, mods = None, None, []
+            elif len(line) == 4:
+                product, quantity, secondary_product, custom_name = line[:4]
+                mods = []
             else:
                 product, quantity, secondary_product, custom_name = line[:4]
+                mods = list(line[4]) if len(line) > 4 and line[4] else []
             if quantity < 1:
                 raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name))
+            parsed_lines.append((product, quantity, secondary_product, custom_name, mods))
 
         if not parsed_lines:
             raise InvalidOrderError("No hay productos para agregar.")
 
-        added: dict[tuple[int, int | None, str | None], tuple[Product, Product | None, str | None, Decimal, int]] = {}
-        for p1, qty, p2, cname in parsed_lines:
+        added: dict[tuple, tuple[Product, Product | None, str | None, Decimal, int, list[dict]]] = {}
+        for p1, qty, p2, cname, mods in parsed_lines:
             cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-            key = (p1.id, p2.id if p2 else None, cname)
-            price = max(p1.price, p2.price) if p2 else p1.price
+            mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+            key = (p1.id, p2.id if p2 else None, cname, mods_key)
+            base_price = max(p1.price, p2.price) if p2 else p1.price
+            extra_cost = sum(
+                to_money(m.get("price", 0))
+                for m in mods
+                if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+            )
+            price = base_price + extra_cost
             if key in added:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty = added[key]
-                added[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty)
+                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods = added[key]
+                added[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods)
             else:
-                added[key] = (p1, p2, cname, price, qty)
+                added[key] = (p1, p2, cname, price, qty, mods)
 
         unavailable = []
-        for p1, p2, _, _, _ in added.values():
+        for p1, p2, _, _, _, _ in added.values():
             if not p1.is_available:
                 unavailable.append(p1.name)
             if p2 is not None and not p2.is_available:
@@ -389,13 +424,14 @@ class Order(Base):
                 f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
             )
 
-        current_quantities: dict[tuple[int, int | None, str | None], int] = {}
+        current_quantities: dict[tuple, int] = {}
         for item in self.items:
-            key = (item.product_id, item.secondary_product_id, item.custom_name)
+            mods_key = json.dumps(item.modifications, sort_keys=True) if item.modifications else ""
+            key = (item.product_id, item.secondary_product_id, item.custom_name, mods_key)
             current_quantities[key] = current_quantities.get(key, 0) + item.quantity
 
         exceeded = []
-        for key, (p1, _p2, cname, _, qty) in added.items():
+        for key, (p1, _p2, cname, _, qty, _) in added.items():
             if current_quantities.get(key, 0) + qty > MAX_QUANTITY_PER_ITEM:
                 exceeded.append(cname or p1.name)
         if exceeded:
@@ -414,9 +450,10 @@ class Order(Base):
                 quantity=qty,
                 unit_price=price,
                 custom_name=cname,
+                modifications=mods,
                 added_later=True,
             )
-            for p1, p2, cname, price, qty in added.values()
+            for p1, p2, cname, price, qty, mods in added.values()
         ]
         self.items.extend(new_items)
         cost = sum((item.subtotal for item in new_items), Decimal(0))
@@ -488,6 +525,7 @@ class OrderItem(Base):
     is_prepared = Column(Boolean, nullable=False, default=False, server_default=false())
     # Se agregó después de registrado el pedido (cocina lo ve resaltado).
     added_later = Column(Boolean, nullable=False, default=False, server_default=false())
+    modifications = Column(JSON, nullable=True, default=list)
 
     order = relationship("Order", back_populates="items")
     product = relationship("Product", foreign_keys=[product_id])
@@ -504,6 +542,14 @@ class OrderItem(Base):
         if self.secondary_product and self.product:
             return format_half_and_half_name(self.product.name, self.secondary_product.name)
         return self.product.name if self.product else ""
+
+    @property
+    def comanda_display(self) -> str:
+        tags = " ".join(
+            m.get("tag") or (f"[SIN {m.get('name', '').upper()}]" if m.get("type") == "negative" or m.get("action") == "remove" else f"[EXTRA {m.get('name', '').upper()}]")
+            for m in (self.modifications or [])
+        ).strip()
+        return f"{self.display_name} {tags}".strip() if tags else self.display_name
 
     @property
     def subtotal(self) -> Decimal:

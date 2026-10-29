@@ -267,4 +267,37 @@ describe('OrderDetailModal', () => {
       );
     });
   });
+
+  describe('Modificaciones en comanda (US-40)', () => {
+    it('resalta las modificaciones en mayúsculas o negritas debajo del ítem principal', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              product_id: 1,
+              product_name: 'Hamburguesa Completa',
+              quantity: 1,
+              unit_price: 11000,
+              subtotal: 11000,
+              sector: 'cocina',
+              modifications: [
+                { type: 'negative', name: 'cebolla', tag: '[SIN CEBOLLA]' },
+                { type: 'positive', name: 'queso', tag: '[EXTRA QUESO]', price: 1000 },
+              ],
+            },
+          ],
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Hamburguesa Completa')).toBeInTheDocument();
+      expect(within(dialog).getByText('[SIN CEBOLLA]')).toBeInTheDocument();
+      expect(within(dialog).getByText('[EXTRA QUESO]')).toBeInTheDocument();
+      expect(within(dialog).getByText('[SIN CEBOLLA]')).toHaveClass('font-bold');
+      expect(within(dialog).getByText('[EXTRA QUESO]')).toHaveClass('font-bold');
+    });
+  });
 });

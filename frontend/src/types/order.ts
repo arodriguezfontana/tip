@@ -111,6 +111,15 @@ export const SECTOR_CONFIG: Record<PreparationSector, SectorMeta> = {
   },
 };
 
+export interface OrderItemModification {
+  type: 'positive' | 'negative';
+  action?: 'add' | 'remove';
+  name: string;
+  tag?: string;
+  price?: number;
+  ingredient_id?: number | null;
+}
+
 export interface WebOrderItem {
   id?: number;
   product_id: number;
@@ -122,6 +131,7 @@ export interface WebOrderItem {
   is_prepared?: boolean;
   /** Lo agregó el cliente después de registrar el pedido. */
   added_later?: boolean;
+  modifications?: OrderItemModification[];
 }
 
 export interface WebOrderCreated {

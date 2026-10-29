@@ -89,6 +89,7 @@ class WebOrderItemCreate(BaseModel):
     quantity: int = Field(..., ge=1)
     secondary_product_id: int | None = Field(None, gt=0)
     custom_name: str | None = None
+    modifications: list[dict] = Field(default_factory=list)
 
 
 class _OrderCreate(BaseModel):
@@ -116,7 +117,7 @@ class _OrderCreate(BaseModel):
             delivery_method=self.delivery_method,
             shipping_address=self.shipping_address,
             notes=self.notes,
-            items=[(item.product_id, item.quantity, item.secondary_product_id, item.custom_name) for item in self.items],
+            items=[(item.product_id, item.quantity, item.secondary_product_id, item.custom_name, item.modifications) for item in self.items],
         )
 
 
@@ -159,6 +160,7 @@ class WebOrderItemResponse(BaseModel):
     is_prepared: bool = False
     added_later: bool = False
     secondary_product_id: int | None = None
+    modifications: list[dict] = Field(default_factory=list)
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
@@ -173,6 +175,7 @@ class WebOrderItemResponse(BaseModel):
             is_prepared=bool(item.is_prepared),
             added_later=bool(item.added_later),
             secondary_product_id=item.secondary_product_id,
+            modifications=item.modifications or [],
         )
 
 

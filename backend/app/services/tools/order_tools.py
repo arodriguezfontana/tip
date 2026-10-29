@@ -18,6 +18,7 @@ from langchain_core.tools import InjectedToolArg, tool
 from sqlalchemy.orm import Session
 
 from app.core.channels import Channel
+from app.core.money import to_money
 from app.core.phone import normalize_phone
 from app.core.time import ahora_local
 from app.db.session import SessionLocal
@@ -36,6 +37,10 @@ from app.services.business_hours_service import (
 )
 from app.services.catalog_service import find_available_products_by_name
 from app.services.mercadopago_service import create_payment_preference
+from app.services.modifier_nlp import (
+    extraer_modificadores_de_texto,
+    vincular_modificadores_con_db,
+)
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
 from app.services.store_config_service import get_or_create_store_config
 
@@ -144,7 +149,7 @@ def _limpiar_observaciones(observaciones: str | None) -> str | None:
 
 
 def _items_del_modelo(items: list) -> list[tuple] | None:
-    """(product_id, cantidad, secondary_product_id, custom_name) de cada ítem que armó el modelo, o None si no se pueden interpretar.
+    """(product_id, cantidad, secondary_product_id, custom_name, modifications) de cada ítem que armó el modelo, o None si no se pueden interpretar.
 
     Solo se toman los ids y las cantidades: los precios y el total los calcula siempre el pedido con los
     de la base, nunca con lo que haya armado el modelo.
@@ -156,7 +161,8 @@ def _items_del_modelo(items: list) -> list[tuple] | None:
             qty = int(item.get("quantity") or 1)
             sec_id = int(item["secondary_product_id"]) if item.get("secondary_product_id") is not None else None
             custom_name = str(item["nombre"]) if (item.get("nombre") and sec_id is not None) else None
-            resultado.append((p_id, qty, sec_id, custom_name))
+            mods = list(item.get("modifications") or item.get("modificaciones") or [])
+            resultado.append((p_id, qty, sec_id, custom_name, mods))
         return resultado
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
@@ -418,6 +424,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
         lista_items = lista_items[:MAX_ITEMS_EN_PEDIDO]
 
     for item in lista_items:
+        item_mods = list(item.get("modifications") or item.get("modificaciones") or [])
         es_mitad, s1_str, s2_str, size_hint, cant_mitad = _detectar_mitad_y_mitad(item)
         if es_mitad:
             cantidad = cant_mitad
@@ -432,8 +439,12 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                 )
                 continue
 
-            p1 = _buscar_sabor_pizza(db, s1_str, size_hint)
-            p2 = _buscar_sabor_pizza(db, s2_str, size_hint)
+            s1_base, s1_mods = extraer_modificadores_de_texto(s1_str, db=db)
+            s2_base, s2_mods = extraer_modificadores_de_texto(s2_str, db=db)
+            all_mitad_mods = vincular_modificadores_con_db(db, item_mods + s1_mods + s2_mods)
+
+            p1 = _buscar_sabor_pizza(db, s1_base, size_hint)
+            p2 = _buscar_sabor_pizza(db, s2_base, size_hint)
 
             if not p1 or not p2:
                 if not p1:
@@ -453,62 +464,89 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                 continue
 
             # Regla de cobro: la pizza mitad y mitad toma el valor del gusto más caro
-            precio_unitario = max(p1.price, p2.price)
+            base_unitario = max(p1.price, p2.price)
+            extra_cost = sum(
+                to_money(m.get("price", 0))
+                for m in all_mitad_mods
+                if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+            )
+            precio_unitario = base_unitario + extra_cost
             subtotal = precio_unitario * cantidad
             total_general += subtotal
 
             nombre_unificado = format_half_and_half_name(p1.name, p2.name, size_hint)
-            resumen_lineas.append(f"- {nombre_unificado} (x{cantidad}) ${subtotal:,.2f}")
+            tags_texto = " ".join(m["tag"] for m in all_mitad_mods if m.get("tag"))
+            nombre_mostrado = f"{nombre_unificado} {tags_texto}".strip() if tags_texto else nombre_unificado
+            resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
             items_validados.append({
                 "product_id": p1.id,
                 "secondary_product_id": p2.id,
                 "nombre": nombre_unificado,
                 "quantity": cantidad,
                 "unit_price": float(precio_unitario),
+                "modifications": all_mitad_mods,
             })
             continue
 
-        nombre_buscado = str(item.get("nombre", "")).strip()
+        raw_nombre = str(item.get("nombre", "")).strip()
         raw_cant = item.get("cantidad") if item.get("cantidad") is not None else item.get("quantity")
         try:
             cantidad = int(raw_cant) if raw_cant is not None else 1
         except (ValueError, TypeError):
             cantidad = 1
 
-        if not nombre_buscado:
+        if not raw_nombre:
             continue
+
+        base_nombre, parsed_mods = extraer_modificadores_de_texto(raw_nombre, db=db)
+        all_item_mods = vincular_modificadores_con_db(db, item_mods + parsed_mods)
 
         if cantidad < 1:
             hay_cantidades_invalidas = True
-            resumen_lineas.append(f"- '{nombre_buscado}': la cantidad debe ser de al menos 1 unidad.")
+            resumen_lineas.append(f"- '{raw_nombre}': la cantidad debe ser de al menos 1 unidad.")
             continue
 
         if cantidad > MAX_QUANTITY_PER_ITEM:
             hay_cantidades_invalidas = True
             resumen_lineas.append(
-                f"- '{nombre_buscado}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
+                f"- '{raw_nombre}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
             )
             continue
 
-        producto = _buscar_producto(db, nombre_buscado)
+        producto = _buscar_producto(db, base_nombre)
+        if not producto and raw_nombre != base_nombre:
+            prod_directo = _buscar_producto(db, raw_nombre)
+            if prod_directo:
+                producto = prod_directo
+                all_item_mods = []
 
         if not producto:
-            resumen_lineas.append(f"- No pudimos encontrar el producto: '{nombre_buscado}'")
+            resumen_lineas.append(f"- No pudimos encontrar el producto: '{raw_nombre}'")
             continue
         if isinstance(producto, list):
             hay_ambiguos = True
             opciones = ", ".join(p.name for p in producto)
-            resumen_lineas.append(f"- '{nombre_buscado}' puede ser: {opciones}. ¿Cuál querés?")
+            resumen_lineas.append(f"- '{base_nombre}' puede ser: {opciones}. ¿Cuál querés?")
             continue
 
-        subtotal = producto.price * cantidad
+        extra_cost = sum(
+            to_money(m.get("price", 0))
+            for m in all_item_mods
+            if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+        )
+        precio_unitario = producto.price + extra_cost
+        subtotal = precio_unitario * cantidad
         total_general += subtotal
-        resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
+
+        tags_texto = " ".join(m["tag"] for m in all_item_mods if m.get("tag"))
+        nombre_mostrado = f"{producto.name} {tags_texto}".strip() if tags_texto else producto.name
+        resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
         items_validados.append({
             "product_id": producto.id,
             "nombre": producto.name,
             "quantity": cantidad,
-            "unit_price": float(producto.price),
+            "unit_price": float(precio_unitario),
+            "modifications": all_item_mods,
         })
 
     return ItemsResueltos(

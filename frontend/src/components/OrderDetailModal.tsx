@@ -356,11 +356,29 @@ export function OrderDetailModal({
                               <tr key={item.id ?? item.product_id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
                                 <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
                                 <td className="py-1.5 pr-2 text-gray-900 font-medium">
-                                  {item.product_name}
-                                  {item.added_later && (
-                                    <span className="ml-1.5 text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
-                                      Nuevo
-                                    </span>
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    <span>{item.product_name}</span>
+                                    {item.added_later && (
+                                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                                        Nuevo
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.modifications && item.modifications.length > 0 && (
+                                    <div className="text-[11px] font-bold uppercase mt-0.5 flex flex-wrap gap-1.5">
+                                      {item.modifications.map((mod, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={`font-bold px-1.5 py-0.5 rounded ${
+                                            mod.type === 'negative'
+                                              ? 'bg-rose-100 text-rose-800'
+                                              : 'bg-emerald-100 text-emerald-800'
+                                          }`}
+                                        >
+                                          {mod.tag || (mod.type === 'negative' ? `[SIN ${mod.name.toUpperCase()}]` : `[EXTRA ${mod.name.toUpperCase()}]`)}
+                                        </span>
+                                      ))}
+                                    </div>
                                   )}
                                 </td>
                                 <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">

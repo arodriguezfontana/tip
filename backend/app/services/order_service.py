@@ -84,7 +84,9 @@ def validate_schedule(db: Session, requested: datetime, now: datetime, tolerance
 # --- Alta de pedidos ----------------------------------------------------------------------------------
 
 
-def _products_for(db: Session, items: list[tuple]) -> list[tuple[Product, int, Product | None, str | None]]:
+def _products_for(
+    db: Session, items: list[tuple]
+) -> list[tuple[Product, int, Product | None, str | None, list[dict]]]:
     ids = set()
     for item in items:
         ids.add(item[0])
@@ -99,7 +101,8 @@ def _products_for(db: Session, items: list[tuple]) -> list[tuple[Product, int, P
         qty = item[1]
         p2 = products[item[2]] if len(item) > 2 and item[2] is not None else None
         custom_name = item[3] if len(item) > 3 else None
-        result.append((p1, qty, p2, custom_name))
+        mods = item[4] if len(item) > 4 and item[4] else []
+        result.append((p1, qty, p2, custom_name, mods))
     return result
 
 
