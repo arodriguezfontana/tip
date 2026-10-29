@@ -245,7 +245,7 @@ describe('ComandaCard', () => {
     );
 
     const label = screen.getByText('Asignar repartidor');
-    expect(label.parentElement).toHaveTextContent('🛵');
+    expect(label.parentElement?.querySelector('svg')).toBeInTheDocument();
     // Va en el mismo lugar que el cartel del repartidor: debajo de las observaciones y arriba de la demora.
     const before = (x: Element, y: Element) => Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(before(screen.getByText('“Sin cebolla”'), label)).toBe(true);

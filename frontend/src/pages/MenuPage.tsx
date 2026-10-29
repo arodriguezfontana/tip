@@ -13,6 +13,7 @@ import { StoreClosedNotice } from '@/components/StoreClosedNotice';
 import { StoreInfoCard } from '@/components/StoreInfoCard';
 import { PaymentReturn } from '@/components/PaymentReturn';
 import { PizzaMitadYMitadModal } from '@/components/PizzaMitadYMitadModal';
+import { PizzaIcon } from '@/components/Icons';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useBusinessHours } from '@/hooks/useBusinessHours';
@@ -162,7 +163,7 @@ export default function MenuPage() {
                           onClick={() => setHalfAndHalfPizzas(group.products)}
                           className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition shadow-2xs"
                         >
-                          <span aria-hidden="true">🍕</span> Armar mitad y mitad
+                          <PizzaIcon className="w-4 h-4 shrink-0" /> Armar mitad y mitad
                         </button>
                       )}
                     </div>

@@ -15,6 +15,7 @@ import {
 } from '@/types/storeConfig';
 import { resizeImageToDataUrl } from '@/utils/images';
 import { applyThemeColor } from '@/utils/theme';
+import { CreditCardIcon, LocationPinIcon, PhoneIcon } from '@/components/Icons';
 
 const LOGIN_BG_CHOICES: {
   id: Exclude<LoginBgOption, 'custom'>;
@@ -501,7 +502,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📍
+                      <LocationPinIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Dirección</span>
@@ -515,7 +516,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📞
+                      <PhoneIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Teléfonos</span>
@@ -529,7 +530,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      💳
+                      <CreditCardIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Alias MercadoPago</span>

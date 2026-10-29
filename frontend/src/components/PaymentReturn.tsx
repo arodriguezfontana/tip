@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { OrderSuccess } from '@/components/OrderSuccess';
 import { confirmMercadoPagoPayment } from '@/services/mercadopagoService';
 import type { PendingPaymentOrder } from '@/utils/pendingPayment';
+import { CheckIcon, ClockIcon } from '@/components/Icons';
 
 type PaymentOutcome = 'checking' | 'approved' | 'pending' | 'failed';
 
@@ -18,8 +19,6 @@ const BANNER_STYLES: Record<PaymentOutcome, string> = {
   pending: 'bg-amber-50 text-amber-800',
   failed: 'bg-red-50 text-red-800',
 };
-
-const BANNER_ICON: Record<PaymentOutcome, string> = { checking: '…', approved: '✓', pending: '⏳', failed: '!' };
 
 interface PaymentReturnProps {
   orderId: string;
@@ -64,11 +63,20 @@ export function PaymentReturn({ orderId, paymentId, status, saved, onNewOrder }:
     failed: `Tu pedido #${orderId} quedó registrado como pendiente de pago. Podés intentar pagar de nuevo o comunicarte con el local para coordinar cómo abonarlo.`,
   }[outcome];
 
+  const icon = {
+    checking: <ClockIcon className="w-5 h-5 text-gray-500 animate-spin shrink-0 mt-0.5" />,
+    approved: <CheckIcon className="w-5 h-5 text-green-700 shrink-0 mt-0.5" />,
+    pending: <ClockIcon className="w-5 h-5 text-amber-700 shrink-0 mt-0.5" />,
+    failed: (
+      <span className="w-5 h-5 rounded-full bg-red-200 text-red-800 flex items-center justify-center text-xs font-bold shrink-0 mt-0.5">
+        !
+      </span>
+    ),
+  }[outcome];
+
   const banner = (
     <div role="status" aria-live="polite" className={`rounded-xl px-4 py-3 text-sm mb-6 flex items-start gap-3 ${BANNER_STYLES[outcome]}`}>
-      <span aria-hidden="true" className="text-lg leading-none mt-0.5">
-        {BANNER_ICON[outcome]}
-      </span>
+      {icon}
       <div>
         <p className="font-bold">{title}</p>
         <p className="mt-0.5">{message}</p>

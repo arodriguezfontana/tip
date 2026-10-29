@@ -5,6 +5,7 @@ import { useCart } from '@/hooks/useCart';
 import { formatCurrency } from '@/utils/currency';
 import { formatPizzaHalfName } from '@/utils/pizzaHalf';
 import { INPUT_FULL_CLASS } from '@/styles/forms';
+import { PizzaIcon } from '@/components/Icons';
 
 interface PizzaMitadYMitadModalProps {
   pizzas: Product[];
@@ -60,8 +61,10 @@ export function PizzaMitadYMitadModal({ pizzas, onClose }: PizzaMitadYMitadModal
           ×
         </button>
 
-        <div className="flex items-center gap-2 mb-4">
-          <span className="text-2xl" aria-hidden="true">🍕</span>
+        <div className="flex items-center gap-3 mb-4">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 border border-amber-200 text-amber-700 flex items-center justify-center shrink-0 shadow-2xs">
+            <PizzaIcon className="w-5 h-5" />
+          </div>
           <div>
             <h2 id="mitad-mitad-title" className="text-xl font-bold text-gray-900">
               Armar pizza mitad y mitad

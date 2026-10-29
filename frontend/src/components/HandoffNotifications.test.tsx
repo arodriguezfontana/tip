@@ -159,7 +159,7 @@ describe('HandoffNotifications', () => {
     await userEvent.click(await screen.findByRole('button', { name: 'Atender' }));
 
     expect(await screen.findByText(/quieres ver el menu/)).toBeInTheDocument();
-    expect(screen.getByText('🤖 Bot')).toBeInTheDocument();
+    expect(screen.getByText('Bot')).toBeInTheDocument();
   });
 
   it('la flecha vuelve a la lista sin soltar la conversación, y avisa de mensajes nuevos en otros chats', async () => {

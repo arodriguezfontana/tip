@@ -109,9 +109,9 @@ export function CategoryFormModal({ category, products, onClose, onSave }: Categ
               onChange={(e) => setSector(e.target.value as PreparationSector)}
               className={INPUT_CLASS}
             >
-              <option value="cocina">🍳 Cocina</option>
-              <option value="pizzeria">🍕 Pizzería</option>
-              <option value="barra">🍺 Barra</option>
+              <option value="cocina">Cocina</option>
+              <option value="pizzeria">Pizzería</option>
+              <option value="barra">Barra</option>
             </select>
             <p className="text-[11px] text-gray-500 mt-1">
               Área de trabajo del tablero donde se visualizan y preparan los platos de esta categoría.

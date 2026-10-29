@@ -12,6 +12,7 @@ import { groupByCategory } from '@/utils/productGrouping';
 import { PHONE_PATTERN } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
 import { INPUT_FULL_CLASS as INPUT_CLASS } from '@/styles/forms';
+import { CheckIcon } from '@/components/Icons';
 
 const ALL_CATEGORIES = 'all';
 
@@ -224,7 +225,7 @@ export function TomarPedidoView() {
     <form onSubmit={handleConfirm} className="flex flex-col gap-4 lg:h-full" noValidate>
       {lastOrderId !== null && (
         <div role="status" className="rounded-xl bg-green-50 text-green-800 px-4 py-3 text-sm flex items-center gap-2">
-          <span className="text-lg">✓</span>
+          <CheckIcon className="w-5 h-5 text-green-700 shrink-0" />
           <span>
             Pedido <strong>#{lastOrderId}</strong> registrado correctamente. Ya podés tomar el siguiente.
           </span>
@@ -258,7 +259,10 @@ export function TomarPedidoView() {
               <p id="tp-phone-status" aria-live="polite" className="text-xs mt-1 min-h-4">
                 {clientLookup.status === 'searching' && <span className="text-gray-500">Buscando cliente…</span>}
                 {clientLookup.status === 'found' && (
-                  <span className="text-green-700">✓ Cliente registrado: datos completados.</span>
+                  <span className="text-green-700 inline-flex items-center gap-1">
+                    <CheckIcon className="w-3.5 h-3.5 shrink-0" />
+                    Cliente registrado: datos completados.
+                  </span>
                 )}
                 {clientLookup.status === 'new' && (
                   <span className="text-gray-500">Cliente nuevo: se registrará al confirmar.</span>

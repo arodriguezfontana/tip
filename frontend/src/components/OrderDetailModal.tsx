@@ -6,6 +6,7 @@ import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/ty
 import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector, WebOrderItem } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
+import { BellIcon, SectorIcon } from '@/components/Icons';
 
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
@@ -313,7 +314,10 @@ export function OrderDetailModal({
                       role="alert"
                       className="flex items-center justify-between gap-3 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900"
                     >
-                      <span>🔔 El cliente agregó productos a este pedido (marcados como “Nuevo”).</span>
+                      <span className="inline-flex items-center gap-1.5">
+                        <BellIcon className="w-4 h-4 text-amber-700 shrink-0" />
+                        El cliente agregó productos a este pedido (marcados como “Nuevo”).
+                      </span>
                       {onAcknowledgeUpdate && (
                         <button
                           type="button"
@@ -330,7 +334,7 @@ export function OrderDetailModal({
                     const meta = SECTOR_CONFIG[sector as PreparationSector] ?? {
                       key: sector as PreparationSector,
                       label: sector.charAt(0).toUpperCase() + sector.slice(1),
-                      icon: '🍽️',
+                      icon: sector,
                       badgeClass: 'bg-gray-100 text-gray-800 border border-gray-200',
                       activeTabClass: '',
                     };
@@ -339,7 +343,7 @@ export function OrderDetailModal({
                       <div key={sector} className="rounded-xl border border-gray-200/80 overflow-hidden bg-white">
                         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/90 border-b border-gray-100 text-xs font-bold text-gray-800">
                           <span className="flex items-center gap-1.5">
-                            <span aria-hidden="true">{meta.icon}</span>
+                            <SectorIcon sector={sector} className="w-3.5 h-3.5 shrink-0" />
                             <span>{meta.label}</span>
                           </span>
                           <span className="text-[11px] font-medium text-gray-500">
