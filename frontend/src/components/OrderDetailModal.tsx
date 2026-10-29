@@ -175,7 +175,7 @@ export function OrderDetailModal({
     setReloadKey((key) => key + 1);
   };
 
-  // Agrupación de productos por sector de preparación (US-34)
+  // Agrupación de productos por sector de preparación
   const detailItems = detail?.items;
   const itemsBySector = useMemo(() => {
     if (!detailItems) return [];

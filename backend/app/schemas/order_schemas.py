@@ -87,6 +87,8 @@ class OrderStatusUpdate(BaseModel):
 class WebOrderItemCreate(BaseModel):
     product_id: int = Field(..., gt=0)
     quantity: int = Field(..., ge=1)
+    secondary_product_id: int | None = Field(None, gt=0)
+    custom_name: str | None = None
 
 
 class _OrderCreate(BaseModel):
@@ -114,7 +116,7 @@ class _OrderCreate(BaseModel):
             delivery_method=self.delivery_method,
             shipping_address=self.shipping_address,
             notes=self.notes,
-            items=[(item.product_id, item.quantity) for item in self.items],
+            items=[(item.product_id, item.quantity, item.secondary_product_id, item.custom_name) for item in self.items],
         )
 
 
@@ -156,19 +158,21 @@ class WebOrderItemResponse(BaseModel):
     sector: str = "cocina"
     is_prepared: bool = False
     added_later: bool = False
+    secondary_product_id: int | None = None
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
         return cls(
             id=item.id,
             product_id=item.product_id,
-            product_name=item.product.name if item.product else "",
+            product_name=item.display_name,
             quantity=item.quantity,
             unit_price=item.unit_price,
             subtotal=item.subtotal,
             sector=item.sector,
             is_prepared=bool(item.is_prepared),
             added_later=bool(item.added_later),
+            secondary_product_id=item.secondary_product_id,
         )
 
 

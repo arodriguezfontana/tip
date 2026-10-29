@@ -1,4 +1,4 @@
-"""US-41: el local carga la imagen de su menú y el bot se la manda a los clientes que la piden."""
+"""el local carga la imagen de su menú y el bot se la manda a los clientes que la piden."""
 
 import asyncio
 import json

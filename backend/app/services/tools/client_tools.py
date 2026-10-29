@@ -1,4 +1,4 @@
-"""Herramienta del bot para guardar en la agenda el nombre de un cliente nuevo (US-38)."""
+"""Herramienta del bot para guardar en la agenda el nombre de un cliente nuevo."""
 
 import logging
 import re

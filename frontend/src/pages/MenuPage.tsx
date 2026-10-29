@@ -12,6 +12,7 @@ import { MobileCartBar } from '@/components/MobileCartBar';
 import { StoreClosedNotice } from '@/components/StoreClosedNotice';
 import { StoreInfoCard } from '@/components/StoreInfoCard';
 import { PaymentReturn } from '@/components/PaymentReturn';
+import { PizzaMitadYMitadModal } from '@/components/PizzaMitadYMitadModal';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useBusinessHours } from '@/hooks/useBusinessHours';
@@ -22,7 +23,7 @@ import { applyThemeColor } from '@/utils/theme';
 import { clearPendingPaymentOrder, loadPendingPaymentOrder, savePendingPaymentOrder } from '@/utils/pendingPayment';
 import { groupWeeklySchedule } from '@/utils/businessHours';
 import { getThemeOption, type StoreConfig } from '@/types/storeConfig';
-import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
+import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
 
 interface SubmittedOrder {
   order: WebOrderCreated;
@@ -39,6 +40,7 @@ export default function MenuPage() {
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  const [halfAndHalfPizzas, setHalfAndHalfPizzas] = useState<Product[] | null>(null);
   // Al volver del checkout de MercadoPago la URL trae el pedido y el resultado del pago.
   const [searchParams, setSearchParams] = useSearchParams();
   const returningOrderId = searchParams.get('pedido');
@@ -146,16 +148,32 @@ export default function MenuPage() {
                 </p>
               )}
 
-              {productGroups.map((group) => (
-                <section key={group.category.id}>
-                  <h2 className="text-lg font-bold text-gray-900 mb-3">{group.category.name}</h2>
-                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {group.products.map((product) => (
-                      <ProductCard key={product.id} product={product} />
-                    ))}
-                  </div>
-                </section>
-              ))}
+              {productGroups.map((group) => {
+                const isPizzaCategory = group.category.name.toLowerCase().includes('pizza');
+                const canMakeHalfAndHalf = isPizzaCategory && group.products.length >= 2;
+
+                return (
+                  <section key={group.category.id}>
+                    <div className="flex items-center justify-between mb-3 flex-wrap gap-2">
+                      <h2 className="text-lg font-bold text-gray-900">{group.category.name}</h2>
+                      {canMakeHalfAndHalf && (
+                        <button
+                          type="button"
+                          onClick={() => setHalfAndHalfPizzas(group.products)}
+                          className="inline-flex items-center gap-1.5 px-3 py-1.5 text-xs sm:text-sm font-semibold rounded-xl border border-amber-300 bg-amber-50 text-amber-800 hover:bg-amber-100 transition shadow-2xs"
+                        >
+                          <span aria-hidden="true">🍕</span> Armar mitad y mitad
+                        </button>
+                      )}
+                    </div>
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                      {group.products.map((product) => (
+                        <ProductCard key={product.id} product={product} />
+                      ))}
+                    </div>
+                  </section>
+                );
+              })}
             </div>
 
             <div id="pedido" tabIndex={-1} className="lg:col-span-1 scroll-mt-4 focus:outline-none">
@@ -187,6 +205,13 @@ export default function MenuPage() {
       {!showingConfirmation && !storeClosed && <MobileCartBar targetId="pedido" />}
 
       {authModalMode && <CustomerAuthModal initialMode={authModalMode} onClose={() => setAuthModalMode(null)} />}
+
+      {halfAndHalfPizzas && (
+        <PizzaMitadYMitadModal
+          pizzas={halfAndHalfPizzas}
+          onClose={() => setHalfAndHalfPizzas(null)}
+        />
+      )}
     </div>
   );
 }

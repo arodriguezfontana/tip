@@ -314,3 +314,168 @@ def test_confirmar_y_guardar_pedido_con_alias_lo_incluye_en_respuesta(db_session
     resultado = _confirmar(datos)
 
     assert "mipizzeria.mp" in resultado
+
+
+# --- Pizzas Mitad y Mitad ---
+
+
+def test_pizza_mitad_y_mitad_calcula_precio_con_el_gusto_mas_caro(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    # Muzza cuesta 8500, Napo cuesta 9500 -> Debe costar 9500 (el gusto más caro)
+    respuesta = _calcular(items_solicitados="una grande mitad muzzarella, mitad napolitana")
+    datos = respuesta["datos_temporales"]
+
+    assert datos["total"] == 9500.0
+    assert len(datos["items"]) == 1
+    item = datos["items"][0]
+    assert item["nombre"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert item["unit_price"] == 9500.0
+    assert item["quantity"] == 1
+    assert item["product_id"] == products["muzza"].id
+    assert item["secondary_product_id"] == napo.id
+
+
+def test_pizza_mitad_y_mitad_cuando_primer_gusto_es_el_mas_caro(db_session, products):
+    from app.models.menu import Product
+
+    roquefort = Product(name="Pizza Roquefort", price=10800.0, category_id=products["muzza"].category_id)
+    db_session.add(roquefort)
+    db_session.commit()
+
+    # Roquefort cuesta 10800, Muzza cuesta 8500 -> Debe costar 10800
+    respuesta = _calcular(items_solicitados="1 pizza mitad roquefort y mitad muzzarella")
+    datos = respuesta["datos_temporales"]
+
+    assert datos["total"] == 10800.0
+    item = datos["items"][0]
+    assert item["nombre"] == "Pizza [1/2 Roquefort | 1/2 Muzzarella]"
+    assert item["unit_price"] == 10800.0
+
+
+def test_pizza_mitad_y_mitad_mismo_precio_ambos_gustos(db_session, products):
+    from app.models.menu import Product
+
+    especial = Product(name="Pizza Especial", price=8500.0, category_id=products["muzza"].category_id)
+    db_session.add(especial)
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="1 pizza mitad muzzarella, mitad especial")
+    datos = respuesta["datos_temporales"]
+
+    assert datos["total"] == 8500.0
+    assert datos["items"][0]["unit_price"] == 8500.0
+
+
+def test_restriccion_ui_bot_solo_informa_precio_total_sin_explicar_regla_de_cobro(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="una grande mitad muzzarella, mitad napolitana")
+    mensaje = respuesta["mensaje_para_usuario"]
+
+    # Muestra el ítem con su total
+    assert "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana] (x1) $9,500.00" in mensaje
+    assert "Total: $9,500.00" in mensaje
+
+    # Restricción: No debe explicar la regla ni justificar el cobro al cliente
+    prohibidas = ["más caro", "mas caro", "mayor valor", "regla", "política", "politica", "gusto más caro", "gusto mas caro", "criterio"]
+    for frase in prohibidas:
+        assert frase not in mensaje.lower(), f"El mensaje del bot no debe contener la explicación: '{frase}'"
+
+
+def test_pizza_mitad_y_mitad_acepta_formato_corchetes(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="1x Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]")
+    datos = respuesta["datos_temporales"]
+
+    assert datos["total"] == 9500.0
+    assert datos["items"][0]["nombre"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+
+
+def test_pizza_mitad_y_mitad_con_cantidad_multiple(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="2 grandes mitad muzzarella, mitad napolitana")
+    datos = respuesta["datos_temporales"]
+
+    assert datos["total"] == 9500.0 * 2
+    assert datos["items"][0]["quantity"] == 2
+    assert datos["items"][0]["unit_price"] == 9500.0
+
+
+def test_pizza_mitad_y_mitad_junto_con_otros_productos(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    respuesta = _calcular(items_solicitados="1 grande mitad muzzarella, mitad napolitana, 2 Coca-Cola 500ml")
+    datos = respuesta["datos_temporales"]
+
+    # Pizza (9500) + 2 Coca-Cola (2 x 2500 = 5000) = 14500
+    assert datos["total"] == 9500.0 + 5000.0
+    assert len(datos["items"]) == 2
+    assert datos["items"][0]["nombre"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert datos["items"][1]["nombre"] == "Coca-Cola 500ml"
+
+
+def test_pizza_mitad_y_mitad_sabor_no_encontrado(db_session, products):
+    # Si la única pizza tiene un sabor que no existe, no se reconoce ningún ítem válido
+    resultado = calcular_y_preparar_pedido.invoke({"items_solicitados": "una grande mitad muzzarella, mitad sushi"})
+    assert resultado == "No se pudieron reconocer productos válidos en el menú para tu pedido."
+
+    # Si acompaña a otro producto válido, se informa el sabor faltante en el resumen
+    respuesta = _calcular(items_solicitados="1 Coca-Cola 500ml, 1 grande mitad muzzarella, mitad sushi")
+    mensaje = respuesta["mensaje_para_usuario"]
+    assert "No pudimos encontrar el sabor: 'sushi'" in mensaje
+    assert len(respuesta["datos_temporales"]["items"]) == 1
+
+
+def test_pizza_mitad_y_mitad_persiste_en_bd_unificada(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    calculo = _calcular(
+        items_solicitados="una grande mitad muzzarella, mitad napolitana",
+        customer_name="Juan Perez",
+        customer_phone="11 5555-6666",
+        shipping_address="Av. Corrientes 1234",
+        metodo_entrega="domicilio",
+        metodo_pago="efectivo",
+    )
+    datos = calculo["datos_temporales"]
+
+    resultado_confirmar = _confirmar(datos)
+    assert "Recibimos tu pedido" in resultado_confirmar
+
+    order = db_session.query(Order).one()
+    assert len(order.items) == 1
+    item = order.items[0]
+    assert item.quantity == 1
+    assert item.unit_price == 9500.0
+    assert item.display_name == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert item.product_id == products["muzza"].id
+    assert item.secondary_product_id == napo.id
+    assert order.total_amount == 9500.0
+

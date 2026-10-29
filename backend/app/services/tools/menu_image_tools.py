@@ -1,4 +1,4 @@
-"""Herramienta del bot para mandarle al cliente el menú del local en formato imagen (US-41)."""
+"""Herramienta del bot para mandarle al cliente el menú del local en formato imagen."""
 
 import asyncio
 import logging

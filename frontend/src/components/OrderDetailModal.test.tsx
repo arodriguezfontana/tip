@@ -206,7 +206,7 @@ describe('OrderDetailModal', () => {
 
     expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
   });
-  describe('Separación de productos por sector en el detalle (US-34)', () => {
+  describe('Separación de productos por sector en el detalle', () => {
     it('agrupa los productos por sector de preparación arriba y abajo sin etiquetas individuales', async () => {
       service.fetchOrderDetail.mockResolvedValueOnce(
         makeOrderDetail({
@@ -236,6 +236,35 @@ describe('OrderDetailModal', () => {
       expect(within(dialog).getByText('1 ítem')).toBeInTheDocument();
       expect(within(dialog).getByText('2 ítems')).toBeInTheDocument();
       expect(within(dialog).getByText('3 ítems')).toBeInTheDocument();
+    });
+  });
+
+  describe('Pizzas mitad y mitad', () => {
+    it('muestra el ítem de pizza mitad y mitad de forma clara y unificada en la comanda', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              product_id: 10,
+              product_name: 'Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]',
+              quantity: 1,
+              unit_price: 9500,
+              subtotal: 9500,
+              sector: 'pizzeria',
+            },
+          ],
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]')).toBeInTheDocument();
+      const rows = await within(dialog).findAllByRole('row');
+      expect(rows.map((row) => plain(row.textContent))).toContain(
+        '1Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]$ 9.500,00'
+      );
     });
   });
 });

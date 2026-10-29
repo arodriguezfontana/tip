@@ -20,6 +20,9 @@ export const MAX_QUANTITY_PER_ITEM = 20;
 export interface CartItem {
   product: Product;
   quantity: number;
+  secondary_product?: Product;
+  custom_name?: string;
+  unit_price?: number;
 }
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
@@ -52,6 +55,8 @@ export interface CheckoutFormData {
 export interface WebOrderItemPayload {
   product_id: number;
   quantity: number;
+  secondary_product_id?: number;
+  custom_name?: string;
 }
 
 export interface WebOrderPayload {

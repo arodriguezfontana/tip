@@ -2,6 +2,7 @@ from unittest.mock import patch
 
 import pytest
 
+from app.models.menu import Product
 from app.models.order import Order, OrderItem
 
 WEB_ORDERS_URL = "/api/v1/orders/web"
@@ -227,3 +228,69 @@ def test_pedido_web_rechaza_medios_de_pago_no_ofrecidos(public_client, products,
     )
 
     assert response.status_code == 422
+
+
+def test_pedido_web_pizza_mitad_y_mitad_cobra_gusto_mas_caro(public_client, client, db_session, products):
+    napo = Product(
+        name="Pizza Napolitana",
+        price=9500.0,
+        category_id=products["muzza"].category_id,
+        dietary_restrictions=[],
+    )
+    db_session.add(napo)
+    db_session.commit()
+
+    items = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 2,
+            "secondary_product_id": napo.id,
+        }
+    ]
+
+    response = public_client.post(WEB_ORDERS_URL, json=_payload(items))
+    assert response.status_code == 201
+    body = response.json()
+    assert body["total_amount"] == 2 * 9500.0
+    assert body["items"][0]["product_name"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert body["items"][0]["secondary_product_id"] == napo.id
+
+    order = db_session.query(Order).filter(Order.id == body["id"]).one()
+    assert len(order.items) == 1
+    item = order.items[0]
+    assert item.product_id == products["muzza"].id
+    assert item.secondary_product_id == napo.id
+    assert item.unit_price == 9500.0
+    assert item.display_name == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+
+    # Verificación en la comanda / detalle de gestión
+    comanda = client.get(f"/api/v1/orders/{order.id}")
+    assert comanda.status_code == 200
+    assert comanda.json()["items"][0]["product_name"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+
+
+def test_pedido_web_pizza_mitad_y_mitad_valida_disponibilidad_ambos_gustos(public_client, db_session, products):
+    # Gusto secundario agotado
+    items = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 1,
+            "secondary_product_id": products["agotada"].id,
+        }
+    ]
+    response = public_client.post(WEB_ORDERS_URL, json=_payload(items))
+    assert response.status_code == 400
+    assert "Pizza Agotada" in response.json()["detail"]
+
+    # Gusto secundario inexistente
+    items_inexistente = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 1,
+            "secondary_product_id": 99999,
+        }
+    ]
+    response2 = public_client.post(WEB_ORDERS_URL, json=_payload(items_inexistente))
+    assert response2.status_code == 400
+    assert "no existen" in response2.json()["detail"]
+

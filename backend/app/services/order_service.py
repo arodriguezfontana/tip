@@ -35,8 +35,8 @@ class OrderRequest:
     delivery_method: DeliveryMethod | str
     shipping_address: str | None
     notes: str | None
-    # (product_id, cantidad). Puede repetir productos: se suman.
-    items: list[tuple[int, int]]
+    # (product_id, cantidad) o (product_id, cantidad, secondary_product_id, custom_name).
+    items: list[tuple]
 
 
 @dataclass(frozen=True)
@@ -84,12 +84,23 @@ def validate_schedule(db: Session, requested: datetime, now: datetime, tolerance
 # --- Alta de pedidos ----------------------------------------------------------------------------------
 
 
-def _products_for(db: Session, items: list[tuple[int, int]]) -> list[tuple[Product, int]]:
-    ids = {product_id for product_id, _ in items}
+def _products_for(db: Session, items: list[tuple]) -> list[tuple[Product, int, Product | None, str | None]]:
+    ids = set()
+    for item in items:
+        ids.add(item[0])
+        if len(item) > 2 and item[2] is not None:
+            ids.add(item[2])
     products = product_repository.get_many(db, ids)
     if len(products) != len(ids):
         raise InvalidOrderError("Algunos productos del pedido ya no existen en el menú.")
-    return [(products[product_id], quantity) for product_id, quantity in items]
+    result = []
+    for item in items:
+        p1 = products[item[0]]
+        qty = item[1]
+        p2 = products[item[2]] if len(item) > 2 and item[2] is not None else None
+        custom_name = item[3] if len(item) > 3 else None
+        result.append((p1, qty, p2, custom_name))
+    return result
 
 
 def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order:
@@ -309,7 +320,7 @@ def find_latest_chat_order(db: Session, channel: Channel | str, chat_id: str) ->
     return order_repository.latest_for_chat(db, Channel(channel).value, chat_id)
 
 
-def add_items_to_order(db: Session, order: Order, items: list[tuple[int, int]]) -> Decimal:
+def add_items_to_order(db: Session, order: Order, items: list[tuple]) -> Decimal:
     """Suma productos a un pedido ya registrado y devuelve lo que costaron. Cocina ve el aviso en su tablero."""
     products = _products_for(db, items)
     with transaction(db):
