@@ -112,11 +112,13 @@ export function orderCard(scope: Page | Locator, orderId: number): Locator {
 }
 
 export async function goToSection(page: Page, section: string) {
-  const openMenu = page.getByRole('button', { name: 'Abrir menú' });
-  if (await openMenu.isVisible()) await openMenu.click();
+  const menu = page.locator('aside');
+  if ((await menu.getAttribute('aria-hidden')) !== 'false') await page.getByRole('button', { name: 'Abrir menú' }).click();
   await page.getByRole('navigation').getByRole('button', { name: section }).click();
-  // Al elegir una sección el menú lateral se cierra solo.
-  await expect(page.locator('aside')).toHaveAttribute('aria-hidden', 'true');
+  // En pantallas anchas el menú queda abierto hasta que se toca la X (en el celular se cierra solo): se cierra
+  // para que no tape la página en los pasos que siguen.
+  if ((await menu.getAttribute('aria-hidden')) === 'false') await menu.getByRole('button', { name: 'Cerrar menú' }).click();
+  await expect(menu).toHaveAttribute('aria-hidden', 'true');
 }
 
 /** Texto con los espacios no separables de Intl normalizados. */
