@@ -129,6 +129,95 @@ def _products_for(
     return result
 
 
+def _attach_notes_modifiers(db: Session, notes: str | None, parsed_items: list[tuple]) -> list[tuple]:
+    """Interpreta exclusiones y extras en lenguaje natural de las observaciones y los asocia a los ítems del pedido."""
+    if not notes or not str(notes).strip():
+        return parsed_items
+    # Si los ítems ya traen modificaciones explícitas (ej. bot con desglose previo), no las sobreescribimos
+    if any(len(line) > 4 and line[4] for line in parsed_items):
+        return parsed_items
+
+    from app.services.modifier_nlp import (
+        extraer_modificadores_de_texto,
+        vincular_modificadores_con_db,
+    )
+
+    _, raw_mods = extraer_modificadores_de_texto(str(notes), db=db)
+    if not raw_mods:
+        return parsed_items
+
+    linked_mods = vincular_modificadores_con_db(db, raw_mods)
+    # Solo consideramos modificadores que correspondan a ingredientes del sistema o extras con costo
+    valid_mods = [
+        m for m in linked_mods
+        if m.get("ingredient_id") is not None or (float(m.get("price") or 0) > 0)
+    ]
+    if not valid_mods:
+        return parsed_items
+
+    # Obtener ingredientes de cada ítem para asociar modificaciones a la receta correcta
+    item_ing_map: list[set[int]] = []
+    for line in parsed_items:
+        p1 = line[0]
+        p2 = line[2] if len(line) > 2 else None
+        promo = line[5] if len(line) > 5 else None
+
+        prods = []
+        if promo is not None and hasattr(promo, "items"):
+            prods.extend([item.product for item in promo.items if getattr(item, "product", None)])
+        if p1 is not None:
+            prods.append(p1)
+        if p2 is not None:
+            prods.append(p2)
+
+        ing_ids = set()
+        for p in prods:
+            if hasattr(p, "recipe_items") and p.recipe_items:
+                for ri in p.recipe_items:
+                    if ri.ingredient_id is not None:
+                        ing_ids.add(ri.ingredient_id)
+        item_ing_map.append(ing_ids)
+
+    item_mods_to_add: dict[int, list[dict]] = {i: [] for i in range(len(parsed_items))}
+
+    for mod in valid_mods:
+        mod_ing_id = mod.get("ingredient_id")
+        assigned_idx = None
+
+        if mod_ing_id is not None:
+            matching_indices = [i for i, ings in enumerate(item_ing_map) if mod_ing_id in ings]
+            if matching_indices:
+                assigned_idx = matching_indices[0]
+
+        if assigned_idx is None:
+            if len(parsed_items) == 1:
+                assigned_idx = 0
+            else:
+                # Priorizar el primer ítem que no sea bebida/barra
+                food_indices = [
+                    i for i, line in enumerate(parsed_items)
+                    if line[0] is not None
+                    and getattr(line[0], "category", None)
+                    and getattr(line[0].category, "sector", "") != "barra"
+                ]
+                assigned_idx = food_indices[0] if food_indices else 0
+
+        item_mods_to_add[assigned_idx].append(mod)
+
+    updated_items = []
+    for i, line in enumerate(parsed_items):
+        p1 = line[0]
+        qty = line[1]
+        p2 = line[2] if len(line) > 2 else None
+        cname = line[3] if len(line) > 3 else None
+        existing_mods = list(line[4]) if len(line) > 4 and line[4] else []
+        promo = line[5] if len(line) > 5 else None
+        all_mods = existing_mods + item_mods_to_add.get(i, [])
+        updated_items.append((p1, qty, p2, cname, all_mods, promo))
+
+    return updated_items
+
+
 def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order:
     """Arma el pedido (sin guardarlo) validándolo contra el menú actual, con los precios de la base."""
     order = Order(
@@ -139,7 +228,9 @@ def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order
         status=OrderStatus.PENDING.value,
     )
     order.set_delivery(request.delivery_method, request.shipping_address)
-    order.set_items(_products_for(db, request.items))
+    parsed_items = _products_for(db, request.items)
+    parsed_items = _attach_notes_modifiers(db, request.notes, parsed_items)
+    order.set_items(parsed_items)
     return order
 
 

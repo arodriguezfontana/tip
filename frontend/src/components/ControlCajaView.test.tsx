@@ -182,7 +182,7 @@ describe('ControlCajaView', () => {
     await screen.findByText('Caja abierta');
 
     // Cambiar a pestaña de cierre
-    const cierreTab = screen.getByRole('button', { name: /Cierre de caja y arqueo/i });
+    const cierreTab = screen.getByRole('button', { name: /Cierre de caja/i });
     await user.click(cierreTab);
 
     expect(screen.getByText('Arqueo y cierre de caja')).toBeInTheDocument();

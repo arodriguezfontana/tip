@@ -268,7 +268,7 @@ export function ControlCajaView() {
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Control de caja</h1>
           <p className="text-sm text-gray-500 mt-0.5">
-            Gestión de turnos de caja, movimientos de efectivo y arqueo en tiempo real.
+            Gestión de turnos de caja y movimientos de efectivo en tiempo real.
           </p>
         </div>
         <div className="flex items-center gap-3">
@@ -507,7 +507,7 @@ export function ControlCajaView() {
                   : 'border-transparent text-gray-500 hover:text-gray-900'
               }`}
             >
-              Cierre de caja y arqueo
+              Cierre de caja
             </button>
             <button
               type="button"
