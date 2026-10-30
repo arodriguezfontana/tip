@@ -301,24 +301,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
-
-            <div className="md:col-span-2">
-              <label htmlFor="mp-alias" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
-                Alias de MercadoPago
-              </label>
-              <input
-                id="mp-alias"
-                type="text"
-                value={mpAlias}
-                onChange={(e) => setMpAlias(e.target.value)}
-                maxLength={100}
-                placeholder="Ej. restoit.mp"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Alias de tu cuenta de MercadoPago al cual los clientes abonarán o transferirán en los pedidos del chatbot.
-              </p>
-            </div>
           </div>
         </section>
 

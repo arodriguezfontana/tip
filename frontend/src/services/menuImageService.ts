@@ -1,5 +1,6 @@
 import { api } from './api';
 import type { MenuImages } from '@/types/menuImage';
+import type { MenuConfig } from '@/types/promotion';
 
 /** El archivo viaja tal cual en el cuerpo del pedido. */
 const fileRequest = (file: File) => ({
@@ -31,5 +32,15 @@ export async function deleteMenuImage(id: number): Promise<void> {
 /** Deja las imágenes en el orden indicado (tienen que estar todas). */
 export async function reorderMenuImages(ids: number[]): Promise<MenuImages> {
   const { data } = await api.put<MenuImages>('/menu-image/order', { ids });
+  return data;
+}
+
+export async function fetchMenuConfig(): Promise<MenuConfig> {
+  const { data } = await api.get<MenuConfig>('/menu-images/config');
+  return data;
+}
+
+export async function updateMenuConfig(menuLink: string | null): Promise<MenuConfig> {
+  const { data } = await api.put<MenuConfig>('/menu-images/config', { menu_link: menuLink });
   return data;
 }

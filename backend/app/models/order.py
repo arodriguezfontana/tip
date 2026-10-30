@@ -4,7 +4,7 @@ from collections.abc import Iterable
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar
 
 from sqlalchemy import (
     JSON,
@@ -30,6 +30,7 @@ from app.db.base_class import Base
 
 if TYPE_CHECKING:
     from app.models.menu import Product
+    from app.models.promotion import Promotion
 
 
 class _StrEnum(str, Enum):
@@ -221,60 +222,76 @@ class Order(Base):
     def set_items(self, lines: Iterable[tuple]) -> None:
         """Arma los ítems con los precios actuales del menú y recalcula el total.
 
-        Valida las reglas comunes a todos los canales: que haya productos, que estén disponibles y que no
-        se supere el máximo de unidades por producto. Las líneas de un mismo producto se suman.
+        Valida las reglas comunes a todos los canales: que haya productos o promociones, que estén disponibles y que no
+        se supere el máximo de unidades por producto. Las líneas de un mismo producto o promoción se suman.
         """
-        parsed_lines: list[tuple[Product, int, Product | None, str | None, list[dict]]] = []
+        parsed_lines: list[tuple[Any, int, Any, str | None, list[dict], Any]] = []
         for line in lines:
+            promotion = None
             if len(line) == 2:
                 product, quantity = line
                 secondary_product, custom_name, mods = None, None, []
             elif len(line) == 4:
                 product, quantity, secondary_product, custom_name = line[:4]
                 mods = []
+            elif len(line) == 5:
+                product, quantity, secondary_product, custom_name = line[:4]
+                mods = list(line[4]) if line[4] else []
             else:
                 product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if len(line) > 4 and line[4] else []
+                mods = list(line[4]) if line[4] else []
+                promotion = line[5] if len(line) > 5 else None
             if quantity < 1:
                 raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name, mods))
+            parsed_lines.append((product, quantity, secondary_product, custom_name, mods, promotion))
 
         if not parsed_lines:
             raise InvalidOrderError("El pedido no tiene productos.")
 
-        consolidated: dict[tuple, tuple[Product, Product | None, str | None, Decimal, int, list[dict]]] = {}
-        for p1, qty, p2, cname, mods in parsed_lines:
-            cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-            mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-            key = (p1.id, p2.id if p2 else None, cname, mods_key)
-            base_price = max(p1.price, p2.price) if p2 else p1.price
-            extra_cost = sum(
-                to_money(m.get("price", 0))
-                for m in mods
-                if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
-            )
-            price = base_price + extra_cost
-            if key in consolidated:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods = consolidated[key]
-                consolidated[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods)
+        consolidated: dict[tuple, tuple[Any, Any, str | None, Decimal, int, list[dict], Any]] = {}
+        for p1, qty, p2, cname, mods, promo in parsed_lines:
+            if promo is not None:
+                cname = cname or promo.name
+                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+                key = ("promo", promo.id, cname, mods_key)
+                price = promo.price
             else:
-                consolidated[key] = (p1, p2, cname, price, qty, mods)
+                cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
+                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+                key = (p1.id, p2.id if p2 else None, cname, mods_key)
+                base_price = max(p1.price, p2.price) if p2 else p1.price
+                extra_cost = sum(
+                    to_money(m.get("price", 0))
+                    for m in mods
+                    if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+                )
+                price = base_price + extra_cost
+
+            if key in consolidated:
+                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods, prev_promo = consolidated[key]
+                consolidated[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods, prev_promo)
+            else:
+                consolidated[key] = (p1, p2, cname, price, qty, mods, promo)
 
         unavailable = []
-        for p1, p2, _, _, _, _ in consolidated.values():
-            if not p1.is_available:
-                unavailable.append(p1.name)
-            if p2 is not None and not p2.is_available:
-                unavailable.append(p2.name)
+        for p1, p2, _, _, _, _, promo in consolidated.values():
+            if promo is not None:
+                if not promo.is_available:
+                    unavailable.append(promo.name)
+            else:
+                if p1 is not None and not p1.is_available:
+                    unavailable.append(p1.name)
+                if p2 is not None and not p2.is_available:
+                    unavailable.append(p2.name)
         if unavailable:
             raise InvalidOrderError(
                 f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
             )
 
         exceeded = []
-        for p1, _p2, cname, _, qty, _ in consolidated.values():
+        for p1, _p2, cname, _, qty, _, promo in consolidated.values():
             if qty > MAX_QUANTITY_PER_ITEM:
-                exceeded.append(cname or p1.name)
+                exceeded.append(cname or (promo.name if promo else (p1.name if p1 else "")))
         if exceeded:
             raise InvalidOrderError(
                 f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
@@ -282,16 +299,18 @@ class Order(Base):
 
         self.items = [
             OrderItem(
-                product_id=p1.id,
+                product_id=p1.id if p1 else None,
                 secondary_product_id=p2.id if p2 else None,
+                promotion_id=promo.id if promo else None,
                 product=p1,
                 secondary_product=p2,
+                promotion=promo,
                 quantity=qty,
                 unit_price=price,
                 custom_name=cname,
                 modifications=mods,
             )
-            for p1, p2, cname, price, qty, mods in consolidated.values()
+            for p1, p2, cname, price, qty, mods, promo in consolidated.values()
         ]
         self.total_amount = self.subtotal + (self.shipping_cost or Decimal(0))
 
@@ -367,8 +386,8 @@ class Order(Base):
             created = created.replace(tzinfo=timezone.utc)
         return (now or datetime.now(timezone.utc)) - created <= MODIFICATION_WINDOW
 
-    def add_items(self, lines: Iterable[tuple["Product", int]], now: datetime | None = None) -> Decimal:
-        """Suma productos a este mismo pedido (un solo ticket de cocina y un solo envío) y devuelve lo que costaron.
+    def add_items(self, lines: Iterable[tuple], now: datetime | None = None) -> Decimal:
+        """Suma productos o promociones a este mismo pedido (un solo ticket de cocina y un solo envío) y devuelve lo que costaron.
 
         Solo dentro de la ventana de modificación. Si el pedido ya estaba abonado queda con un pago parcial: lo
         pagado hasta ahora y la diferencia por cobrar. Los productos agregados se marcan para que cocina los vea.
@@ -377,48 +396,64 @@ class Order(Base):
         if not self.is_within_modification_window(now):
             raise ModificationWindowClosedError()
 
-        parsed_lines: list[tuple[Product, int, Product | None, str | None, list[dict]]] = []
+        parsed_lines: list[tuple[Any, int, Any, str | None, list[dict], Any]] = []
         for line in lines:
+            promotion = None
             if len(line) == 2:
                 product, quantity = line
                 secondary_product, custom_name, mods = None, None, []
             elif len(line) == 4:
                 product, quantity, secondary_product, custom_name = line[:4]
                 mods = []
+            elif len(line) == 5:
+                product, quantity, secondary_product, custom_name = line[:4]
+                mods = list(line[4]) if line[4] else []
             else:
                 product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if len(line) > 4 and line[4] else []
+                mods = list(line[4]) if line[4] else []
+                promotion = line[5] if len(line) > 5 else None
             if quantity < 1:
                 raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name, mods))
+            parsed_lines.append((product, quantity, secondary_product, custom_name, mods, promotion))
 
         if not parsed_lines:
             raise InvalidOrderError("No hay productos para agregar.")
 
-        added: dict[tuple, tuple[Product, Product | None, str | None, Decimal, int, list[dict]]] = {}
-        for p1, qty, p2, cname, mods in parsed_lines:
-            cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-            mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-            key = (p1.id, p2.id if p2 else None, cname, mods_key)
-            base_price = max(p1.price, p2.price) if p2 else p1.price
-            extra_cost = sum(
-                to_money(m.get("price", 0))
-                for m in mods
-                if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
-            )
-            price = base_price + extra_cost
-            if key in added:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods = added[key]
-                added[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods)
+        added: dict[tuple, tuple[Any, Any, str | None, Decimal, int, list[dict], Any]] = {}
+        for p1, qty, p2, cname, mods, promo in parsed_lines:
+            if promo is not None:
+                cname = cname or promo.name
+                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+                key = ("promo", promo.id, cname, mods_key)
+                price = promo.price
             else:
-                added[key] = (p1, p2, cname, price, qty, mods)
+                cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
+                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
+                key = (p1.id, p2.id if p2 else None, cname, mods_key)
+                base_price = max(p1.price, p2.price) if p2 else p1.price
+                extra_cost = sum(
+                    to_money(m.get("price", 0))
+                    for m in mods
+                    if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
+                )
+                price = base_price + extra_cost
+
+            if key in added:
+                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods, prev_promo = added[key]
+                added[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods, prev_promo)
+            else:
+                added[key] = (p1, p2, cname, price, qty, mods, promo)
 
         unavailable = []
-        for p1, p2, _, _, _, _ in added.values():
-            if not p1.is_available:
-                unavailable.append(p1.name)
-            if p2 is not None and not p2.is_available:
-                unavailable.append(p2.name)
+        for p1, p2, _, _, _, _, promo in added.values():
+            if promo is not None:
+                if not promo.is_available:
+                    unavailable.append(promo.name)
+            else:
+                if p1 is not None and not p1.is_available:
+                    unavailable.append(p1.name)
+                if p2 is not None and not p2.is_available:
+                    unavailable.append(p2.name)
         if unavailable:
             raise InvalidOrderError(
                 f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
@@ -427,13 +462,16 @@ class Order(Base):
         current_quantities: dict[tuple, int] = {}
         for item in self.items:
             mods_key = json.dumps(item.modifications, sort_keys=True) if item.modifications else ""
-            key = (item.product_id, item.secondary_product_id, item.custom_name, mods_key)
+            if item.promotion_id:
+                key = ("promo", item.promotion_id, item.custom_name, mods_key)
+            else:
+                key = (item.product_id, item.secondary_product_id, item.custom_name, mods_key)
             current_quantities[key] = current_quantities.get(key, 0) + item.quantity
 
         exceeded = []
-        for key, (p1, _p2, cname, _, qty, _) in added.items():
+        for key, (p1, _p2, cname, _, qty, _, promo) in added.items():
             if current_quantities.get(key, 0) + qty > MAX_QUANTITY_PER_ITEM:
-                exceeded.append(cname or p1.name)
+                exceeded.append(cname or (promo.name if promo else (p1.name if p1 else "")))
         if exceeded:
             raise InvalidOrderError(
                 f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
@@ -443,17 +481,19 @@ class Order(Base):
         was_paid = bool(self.is_paid)
         new_items = [
             OrderItem(
-                product_id=p1.id,
+                product_id=p1.id if p1 else None,
                 secondary_product_id=p2.id if p2 else None,
+                promotion_id=promo.id if promo else None,
                 product=p1,
                 secondary_product=p2,
+                promotion=promo,
                 quantity=qty,
                 unit_price=price,
                 custom_name=cname,
                 modifications=mods,
                 added_later=True,
             )
-            for p1, p2, cname, price, qty, mods in added.values()
+            for p1, p2, cname, price, qty, mods, promo in added.values()
         ]
         self.items.extend(new_items)
         cost = sum((item.subtotal for item in new_items), Decimal(0))
@@ -517,8 +557,9 @@ class OrderItem(Base):
 
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=False)
+    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
     secondary_product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True)
     custom_name = Column(String(255), nullable=True)
     quantity = Column(Integer, nullable=False)
     unit_price = Column(MoneyColumn, nullable=False)
@@ -530,6 +571,7 @@ class OrderItem(Base):
     order = relationship("Order", back_populates="items")
     product = relationship("Product", foreign_keys=[product_id])
     secondary_product = relationship("Product", foreign_keys=[secondary_product_id])
+    promotion = relationship("Promotion", foreign_keys=[promotion_id])
 
     @validates("unit_price")
     def _as_money(self, _key: str, value) -> Decimal:
@@ -539,12 +581,17 @@ class OrderItem(Base):
     def display_name(self) -> str:
         if self.custom_name:
             return self.custom_name
+        if self.promotion:
+            return self.promotion.name
         if self.secondary_product and self.product:
             return format_half_and_half_name(self.product.name, self.secondary_product.name)
         return self.product.name if self.product else ""
 
     @property
     def comanda_display(self) -> str:
+        if self.promotion:
+            items_str = ", ".join(f"{it.quantity}x {it.product.name}" for it in self.promotion.items if it.product) if self.promotion.items else ""
+            return f"PROMO: {self.promotion.name}" + (f" ({items_str})" if items_str else "")
         tags = " ".join(
             m.get("tag") or (f"[SIN {m.get('name', '').upper()}]" if m.get("type") == "negative" or m.get("action") == "remove" else f"[EXTRA {m.get('name', '').upper()}]")
             for m in (self.modifications or [])
@@ -557,6 +604,11 @@ class OrderItem(Base):
 
     @property
     def sector(self) -> str:
+        if self.promotion and self.promotion.items:
+            sectors = [it.product.effective_sector for it in self.promotion.items if it.product]
+            if "cocina" in sectors:
+                return "cocina"
+            return sectors[0] if sectors else "cocina"
         if self.product:
             return self.product.effective_sector
         return "cocina"

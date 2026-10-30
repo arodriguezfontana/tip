@@ -129,25 +129,11 @@ describe('ConfiguracionWebView', () => {
     expect(await screen.findByText(/¡Configuración guardada exitosamente!/i)).toBeInTheDocument();
   });
 
-  it('permite registrar y modificar el alias de MercadoPago', async () => {
-    const user = userEvent.setup();
+  it('no muestra el campo para agregar el alias de MercadoPago', async () => {
     render(<ConfiguracionWebView />);
 
-    const aliasInput = await screen.findByLabelText(/Alias de MercadoPago/i);
-    await user.clear(aliasInput);
-    await user.type(aliasInput, 'donmario.mp');
-
-    await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
-
-    await waitFor(() => {
-      expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
-        expect.objectContaining({
-          mp_alias: 'donmario.mp',
-        })
-      );
-    });
-
-    expect(await screen.findByText(/¡Configuración guardada exitosamente!/i)).toBeInTheDocument();
+    await screen.findByDisplayValue('Pizzería Los Troncos');
+    expect(screen.queryByLabelText(/Alias de MercadoPago/i)).not.toBeInTheDocument();
   });
 
   it('permite subir un archivo de imagen como logo y luego quitarlo', async () => {

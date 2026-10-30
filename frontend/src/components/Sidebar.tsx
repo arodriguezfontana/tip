@@ -10,6 +10,7 @@ export type ViewKey =
   | 'clientes'
   | 'repartidores'
   | 'productos'
+  | 'promociones'
   | 'ingredientes'
   | 'menu-imagen'
   | 'horarios'
@@ -31,6 +32,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     title: 'Catálogo',
     items: [
       { key: 'productos', label: 'Productos y categorías' },
+      { key: 'promociones', label: 'Promociones' },
       { key: 'ingredientes', label: 'Ingredientes' },
     ],
   },
@@ -45,7 +47,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     title: 'Configuración',
     items: [
       { key: 'horarios', label: 'Horarios' },
-      { key: 'menu-imagen', label: 'Menú en imagen' },
+      { key: 'menu-imagen', label: 'Menú y promociones' },
       { key: 'configuracion-web', label: 'Configuración' },
     ],
   },
@@ -110,7 +112,7 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
           style={themeHex ? { backgroundColor: themeHex } : undefined}
         >
           <h2 className="text-lg font-bold">Menú</h2>
-            <button
+          <button
             type="button"
             onClick={onClose}
             aria-label="Cerrar menú"

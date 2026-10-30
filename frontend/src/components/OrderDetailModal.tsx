@@ -352,11 +352,16 @@ export function OrderDetailModal({
                         </div>
                         <table className="w-full text-xs">
                           <tbody className="divide-y divide-gray-100">
-                            {items.map((item) => (
-                              <tr key={item.id ?? item.product_id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
+                            {items.map((item, idx) => (
+                              <tr key={item.id ?? (item.promotion_id ? `promo-${item.promotion_id}` : item.product_id ?? idx)} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
                                 <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
                                 <td className="py-1.5 pr-2 text-gray-900 font-medium">
                                   <div className="flex items-center gap-1.5 flex-wrap">
+                                    {item.promotion_id && (
+                                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                                        Promo
+                                      </span>
+                                    )}
                                     <span>{item.product_name}</span>
                                     {item.added_later && (
                                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">

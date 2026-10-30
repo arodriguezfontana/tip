@@ -5,6 +5,7 @@ import logging
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy.exc import SQLAlchemyError
 from sqlalchemy.orm import Session
@@ -15,7 +16,7 @@ from app.db.session import transaction
 from app.models.menu import Product
 from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus, PaymentMethod
 from app.models.user import User
-from app.repositories import delivery_driver_repository, order_repository, product_repository
+from app.repositories import delivery_driver_repository, order_repository, product_repository, promotion_repository
 from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 
@@ -35,7 +36,7 @@ class OrderRequest:
     delivery_method: DeliveryMethod | str
     shipping_address: str | None
     notes: str | None
-    # (product_id, cantidad) o (product_id, cantidad, secondary_product_id, custom_name).
+    # (product_id, cantidad) o (product_id, cantidad, secondary_product_id, custom_name, mods, promotion_id).
     items: list[tuple]
 
 
@@ -86,23 +87,45 @@ def validate_schedule(db: Session, requested: datetime, now: datetime, tolerance
 
 def _products_for(
     db: Session, items: list[tuple]
-) -> list[tuple[Product, int, Product | None, str | None, list[dict]]]:
-    ids = set()
+) -> list[tuple[Any, int, Any, str | None, list[dict], Any]]:
+    product_ids = set()
+    promotion_ids = set()
     for item in items:
-        ids.add(item[0])
-        if len(item) > 2 and item[2] is not None:
-            ids.add(item[2])
-    products = product_repository.get_many(db, ids)
-    if len(products) != len(ids):
+        p_id = item[0]
+        promo_id = item[5] if len(item) > 5 else None
+        if promo_id is not None:
+            promotion_ids.add(promo_id)
+        elif p_id is not None:
+            product_ids.add(p_id)
+            if len(item) > 2 and item[2] is not None:
+                product_ids.add(item[2])
+        else:
+            raise InvalidOrderError("Cada ítem debe tener un producto o una promoción.")
+
+    products = product_repository.get_many(db, product_ids) if product_ids else {}
+    if len(products) != len(product_ids):
         raise InvalidOrderError("Algunos productos del pedido ya no existen en el menú.")
+
+    promotions = promotion_repository.get_many(db, promotion_ids) if promotion_ids else {}
+    if len(promotions) != len(promotion_ids):
+        raise InvalidOrderError("Algunas promociones del pedido ya no están disponibles.")
+
     result = []
     for item in items:
-        p1 = products[item[0]]
+        p_id = item[0]
         qty = item[1]
-        p2 = products[item[2]] if len(item) > 2 and item[2] is not None else None
+        p2_id = item[2] if len(item) > 2 and item[2] is not None else None
         custom_name = item[3] if len(item) > 3 else None
         mods = item[4] if len(item) > 4 and item[4] else []
-        result.append((p1, qty, p2, custom_name, mods))
+        promo_id = item[5] if len(item) > 5 else None
+
+        if promo_id is not None:
+            promo = promotions[promo_id]
+            result.append((None, qty, None, custom_name or promo.name, mods, promo))
+        else:
+            p1 = products[p_id]
+            p2 = products[p2_id] if p2_id is not None else None
+            result.append((p1, qty, p2, custom_name, mods, None))
     return result
 
 
@@ -312,7 +335,6 @@ def update_order_sector_prepared(db: Session, order_id: int, sector: str, is_pre
         pass
     db.refresh(order)
     return order
-
 
 
 # --- Cambios que pide el cliente sobre un pedido ya registrado ----------------------------------------

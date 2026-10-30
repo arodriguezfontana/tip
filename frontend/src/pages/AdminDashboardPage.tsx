@@ -11,6 +11,7 @@ import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ClientesView } from '@/components/ClientesView';
 import { RepartidoresView } from '@/components/RepartidoresView';
 import { CatalogoView } from '@/components/CatalogoView';
+import { PromocionesView } from '@/components/PromocionesView';
 import { IngredientesView } from '@/components/IngredientesView';
 import { MenuImagenView } from '@/components/MenuImagenView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
@@ -93,6 +94,19 @@ export default function AdminDashboardPage() {
           {activeView === 'clientes' && <ClientesView />}
           {activeView === 'repartidores' && <RepartidoresView themeColor={storeConfig?.theme_color} />}
           {activeView === 'productos' && <CatalogoView />}
+          {activeView === 'promociones' && (
+            <div className="flex flex-col gap-4 lg:h-full">
+              <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1">
+                  <h1 className="text-lg font-bold text-gray-900">Promociones</h1>
+                  <p className="text-xs text-gray-500">
+                    Organizá los combos y promociones del local. Lo que cambies acá se ve al instante en el menú web y en el chatbot.
+                  </p>
+                </div>
+              </div>
+              <PromocionesView />
+            </div>
+          )}
           {activeView === 'ingredientes' && <IngredientesView />}
           {activeView === 'menu-imagen' && <MenuImagenView />}
           {activeView === 'horarios' && <HorariosView />}
@@ -109,19 +123,18 @@ export default function AdminDashboardPage() {
         </div>
       </main>
 
-      <HandoffNotifications onVisibleChange={setChatColumnVisible} />
-
       <Sidebar
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         activeView={activeView}
-        themeColor={storeConfig?.theme_color}
         onSelect={(view) => {
           setActiveView(view);
-          // En pantallas anchas el menú se queda abierto hasta que se toca la X; en el celular tapa la página y se cierra.
           if (!canKeepMenuOpen()) setMenuOpen(false);
         }}
+        themeColor={storeConfig?.theme_color}
       />
+
+      <HandoffNotifications onVisibleChange={setChatColumnVisible} />
     </div>
   );
 }

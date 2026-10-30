@@ -21,6 +21,8 @@ from app.api import (
     mercadopago_router,
     order_router,
     product_router,
+    promotion_image_router,
+    promotion_router,
     stats_router,
     store_config_router,
     telegram_router,
@@ -36,6 +38,12 @@ logging.basicConfig(level=logging.INFO)
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    try:
+        from app.db.base import Base
+        from app.db.session import engine
+        Base.metadata.create_all(bind=engine)
+    except Exception as e:
+        logging.getLogger(__name__).warning("No se pudo ejecutar create_all en startup: %s", e)
     await registrar_webhooks()
     yield
 
@@ -78,9 +86,13 @@ api_router.include_router(delivery_driver_router.router, prefix="/delivery-drive
 api_router.include_router(handoff_router.router, prefix="/handoffs", tags=["Handoffs"])
 api_router.include_router(ingredient_router.router, prefix="/ingredients", tags=["Ingredients"])
 api_router.include_router(menu_image_router.router, prefix="/menu-image", tags=["Menu image"])
+api_router.include_router(menu_image_router.router, prefix="/menu-images", tags=["Menu images"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags=["MercadoPago"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
+api_router.include_router(promotion_router.router, prefix="/promotions", tags=["Promotions"])
+api_router.include_router(promotion_image_router.router, prefix="/promotion-images", tags=["Promotion images"])
+api_router.include_router(promotion_image_router.router, prefix="/promotion-image", tags=["Promotion images"])
 api_router.include_router(order_router.router, prefix="/orders", tags=["Orders"])
 api_router.include_router(telegram_router.router, prefix="/telegram", tags=["Telegram"])
 api_router.include_router(whatsapp_router.router, prefix="/whatsapp", tags=["WhatsApp"])

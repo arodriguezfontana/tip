@@ -35,6 +35,7 @@ from app.services.business_hours_service import (
     proxima_apertura,
     proxima_fecha_abierta_a_la_hora,
 )
+from app.repositories import promotion_repository
 from app.services.catalog_service import find_available_products_by_name
 from app.services.mercadopago_service import create_payment_preference
 from app.services.modifier_nlp import (
@@ -149,7 +150,7 @@ def _limpiar_observaciones(observaciones: str | None) -> str | None:
 
 
 def _items_del_modelo(items: list) -> list[tuple] | None:
-    """(product_id, cantidad, secondary_product_id, custom_name, modifications) de cada ítem que armó el modelo, o None si no se pueden interpretar.
+    """(product_id, cantidad, secondary_product_id, custom_name, modifications, promotion_id) de cada ítem que armó el modelo, o None si no se pueden interpretar.
 
     Solo se toman los ids y las cantidades: los precios y el total los calcula siempre el pedido con los
     de la base, nunca con lo que haya armado el modelo.
@@ -157,12 +158,15 @@ def _items_del_modelo(items: list) -> list[tuple] | None:
     try:
         resultado = []
         for item in items:
-            p_id = int(item["product_id"])
+            promo_id = int(item["promotion_id"]) if item.get("promotion_id") is not None else None
+            p_id = int(item["product_id"]) if item.get("product_id") is not None else None
+            if promo_id is None and p_id is None:
+                return None
             qty = int(item.get("quantity") or 1)
             sec_id = int(item["secondary_product_id"]) if item.get("secondary_product_id") is not None else None
-            custom_name = str(item["nombre"]) if (item.get("nombre") and sec_id is not None) else None
+            custom_name = str(item["nombre"]) if (item.get("nombre") and (sec_id is not None or promo_id is not None)) else None
             mods = list(item.get("modifications") or item.get("modificaciones") or [])
-            resultado.append((p_id, qty, sec_id, custom_name, mods))
+            resultado.append((p_id, qty, sec_id, custom_name, mods, promo_id))
         return resultado
     except (KeyError, TypeError, ValueError, AttributeError):
         return None
@@ -512,6 +516,45 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                 f"- '{raw_nombre}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
             )
             continue
+
+        # Verificar si coincide con una promoción disponible
+        promociones = promotion_repository.find_available_by_name(db, raw_nombre)
+        if not promociones and base_nombre != raw_nombre:
+            promociones = promotion_repository.find_available_by_name(db, base_nombre)
+
+        if promociones:
+            if len(promociones) == 1:
+                promo = promociones[0]
+                if cantidad < 1:
+                    hay_cantidades_invalidas = True
+                    resumen_lineas.append(f"- Promo '{promo.name}': la cantidad debe ser de al menos 1 unidad.")
+                    continue
+                if cantidad > MAX_QUANTITY_PER_ITEM:
+                    hay_cantidades_invalidas = True
+                    resumen_lineas.append(
+                        f"- Promo '{promo.name}': supera la cantidad máxima permitida ({MAX_QUANTITY_PER_ITEM} unidades)."
+                    )
+                    continue
+
+                precio_unitario = promo.price
+                subtotal = precio_unitario * cantidad
+                total_general += subtotal
+                resumen_lineas.append(f"- Promo: {promo.name} (x{cantidad}) ${subtotal:,.2f}")
+                items_validados.append({
+                    "product_id": None,
+                    "secondary_product_id": None,
+                    "promotion_id": promo.id,
+                    "nombre": promo.name,
+                    "quantity": cantidad,
+                    "unit_price": float(precio_unitario),
+                    "modifications": [],
+                })
+                continue
+            else:
+                hay_ambiguos = True
+                opciones = ", ".join(p.name for p in promociones)
+                resumen_lineas.append(f"- '{raw_nombre}' puede referirse a las promociones: {opciones}. ¿Cuál querés?")
+                continue
 
         producto = _buscar_producto(db, base_nombre)
         if not producto and raw_nombre != base_nombre:

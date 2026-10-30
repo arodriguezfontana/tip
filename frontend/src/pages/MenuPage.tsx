@@ -2,6 +2,7 @@ import { useEffect, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
+import { PromotionCard } from '@/components/PromotionCard';
 import { CartSummary } from '@/components/CartSummary';
 import { CheckoutForm } from '@/components/CheckoutForm';
 import { OrderSuccess } from '@/components/OrderSuccess';
@@ -20,11 +21,13 @@ import { useBusinessHours } from '@/hooks/useBusinessHours';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { groupByCategory } from '@/utils/productGrouping';
 import { fetchStoreConfig } from '@/services/storeConfigService';
+import { fetchAvailablePromotions } from '@/services/promotionService';
 import { applyThemeColor } from '@/utils/theme';
 import { clearPendingPaymentOrder, loadPendingPaymentOrder, savePendingPaymentOrder } from '@/utils/pendingPayment';
 import { groupWeeklySchedule } from '@/utils/businessHours';
 import { getThemeOption, type StoreConfig } from '@/types/storeConfig';
 import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
+import type { Promotion } from '@/types/promotion';
 
 interface SubmittedOrder {
   order: WebOrderCreated;
@@ -41,6 +44,7 @@ export default function MenuPage() {
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
   const [halfAndHalfPizzas, setHalfAndHalfPizzas] = useState<Product[] | null>(null);
   // Al volver del checkout de MercadoPago la URL trae el pedido y el resultado del pago.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -52,6 +56,12 @@ export default function MenuPage() {
     error: productsError,
     reload: loadProducts,
   } = useMenuProducts('No pudimos cargar el menú.');
+
+  const loadPromos = () => {
+    fetchAvailablePromotions()
+      .then((data) => setPromotions(data))
+      .catch(() => {});
+  };
 
   useEffect(() => {
     let cancelled = false;
@@ -65,6 +75,7 @@ export default function MenuPage() {
         }
       })
       .catch(() => {});
+    loadPromos();
     return () => {
       cancelled = true;
     };
@@ -86,6 +97,7 @@ export default function MenuPage() {
     setSubmittedOrder(null);
     setSearchParams({}, { replace: true });
     loadProducts();
+    loadPromos();
   };
 
   return (
@@ -141,6 +153,18 @@ export default function MenuPage() {
                     Reintentar
                   </button>
                 </div>
+              )}
+
+              {/* Sección de Promociones vigentes */}
+              {promotions.length > 0 && (
+                <section className="space-y-3">
+                  <h2 className="text-lg font-bold text-gray-900">Promociones</h2>
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                    {promotions.map((promo) => (
+                      <PromotionCard key={promo.id} promotion={promo} />
+                    ))}
+                  </div>
+                </section>
               )}
 
               {!loadingProducts && !productsError && products.length === 0 && (

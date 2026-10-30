@@ -6,7 +6,7 @@ import { formatCurrency } from '@/utils/currency';
 
 export function ProductCard({ product }: { product: Product }) {
   const { items, addItem, updateQuantity } = useCart();
-  const cartItem = items.find((item) => item.product.id === product.id);
+  const cartItem = items.find((item) => item.product?.id === product.id);
 
   return (
     <div className="bg-white rounded-2xl shadow-md p-4 flex gap-4">

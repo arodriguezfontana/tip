@@ -85,11 +85,18 @@ class OrderStatusUpdate(BaseModel):
 
 
 class WebOrderItemCreate(BaseModel):
-    product_id: int = Field(..., gt=0)
+    product_id: int | None = Field(None, gt=0)
+    promotion_id: int | None = Field(None, gt=0)
     quantity: int = Field(..., ge=1)
     secondary_product_id: int | None = Field(None, gt=0)
     custom_name: str | None = None
     modifications: list[dict] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_item_source(self) -> "WebOrderItemCreate":
+        if self.product_id is None and self.promotion_id is None:
+            raise ValueError("Cada ítem debe indicar un producto o una promoción.")
+        return self
 
 
 class _OrderCreate(BaseModel):
@@ -117,7 +124,17 @@ class _OrderCreate(BaseModel):
             delivery_method=self.delivery_method,
             shipping_address=self.shipping_address,
             notes=self.notes,
-            items=[(item.product_id, item.quantity, item.secondary_product_id, item.custom_name, item.modifications) for item in self.items],
+            items=[
+                (
+                    item.product_id,
+                    item.quantity,
+                    item.secondary_product_id,
+                    item.custom_name,
+                    item.modifications,
+                    item.promotion_id,
+                )
+                for item in self.items
+            ],
         )
 
 
@@ -151,7 +168,9 @@ class CounterOrderCreate(_OrderCreate):
 
 class WebOrderItemResponse(BaseModel):
     id: int | None = None
-    product_id: int
+    product_id: int | None = None
+    promotion_id: int | None = None
+    is_promotion: bool = False
     product_name: str
     quantity: int
     unit_price: float
@@ -167,6 +186,8 @@ class WebOrderItemResponse(BaseModel):
         return cls(
             id=item.id,
             product_id=item.product_id,
+            promotion_id=item.promotion_id,
+            is_promotion=item.promotion_id is not None,
             product_name=item.display_name,
             quantity=item.quantity,
             unit_price=item.unit_price,

@@ -11,6 +11,7 @@ from app.models.delivery_driver import DeliveryDriver
 from app.models.menu import Category, Ingredient, Product, ProductImage, ProductIngredient
 from app.models.menu_image import MenuImage
 from app.models.order import Order, OrderItem
+from app.models.promotion import Promotion, PromotionImage, PromotionPhoto, PromotionProduct
 from app.models.store_config import StoreConfig
 from app.models.user import User
 
@@ -27,6 +28,10 @@ __all__ = [
     "Product",
     "ProductImage",
     "ProductIngredient",
+    "Promotion",
+    "PromotionImage",
+    "PromotionPhoto",
+    "PromotionProduct",
     "StoreConfig",
     "User",
 ]

@@ -1,3 +1,5 @@
+import type { Promotion } from './promotion';
+
 export interface ProductCategory {
   id: number;
   name: string;
@@ -19,6 +21,7 @@ export const MAX_QUANTITY_PER_ITEM = 20;
 
 export interface CartItem {
   product: Product;
+  promotion?: Promotion;
   quantity: number;
   secondary_product?: Product;
   custom_name?: string;
@@ -53,7 +56,8 @@ export interface CheckoutFormData {
 }
 
 export interface WebOrderItemPayload {
-  product_id: number;
+  product_id?: number;
+  promotion_id?: number;
   quantity: number;
   secondary_product_id?: number;
   custom_name?: string;
@@ -122,7 +126,8 @@ export interface OrderItemModification {
 
 export interface WebOrderItem {
   id?: number;
-  product_id: number;
+  product_id?: number | null;
+  promotion_id?: number | null;
   product_name: string;
   quantity: number;
   unit_price: number;
