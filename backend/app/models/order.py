@@ -557,7 +557,7 @@ class OrderItem(Base):
     id = Column(Integer, primary_key=True, index=True)
     order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
     product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
-    secondary_product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
+    secondary_product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
     promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True)
     custom_name = Column(String(255), nullable=True)
     quantity = Column(Integer, nullable=False)
