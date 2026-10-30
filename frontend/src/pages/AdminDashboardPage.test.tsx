@@ -3,6 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import AdminDashboardPage from '@/pages/AdminDashboardPage';
 import * as businessHoursService from '@/services/businessHoursService';
+import * as cashShiftService from '@/services/cashShiftService';
 import * as catalogService from '@/services/catalogService';
 import * as clientService from '@/services/clientService';
 import * as deliveryDriverService from '@/services/deliveryDriverService';
@@ -25,6 +26,7 @@ vi.mock('@/services/statsService');
 vi.mock('@/services/clientService');
 vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
+vi.mock('@/services/cashShiftService');
 vi.mock('@/services/businessHoursService');
 vi.mock('@/services/storeConfigService');
 vi.mock('@/services/promotionService');
@@ -46,6 +48,8 @@ beforeEach(() => {
   vi.mocked(clientService.fetchClients).mockResolvedValue({ items: [], total: 0, page: 1, per_page: 10, total_pages: 1 });
   vi.mocked(ingredientService.fetchIngredients).mockResolvedValue([]);
   vi.mocked(catalogService.fetchAdminProducts).mockResolvedValue([]);
+  vi.mocked(cashShiftService.fetchCurrentCashShift).mockResolvedValue({ is_open: true, shift: null });
+  vi.mocked(cashShiftService.fetchCashShiftsHistory).mockResolvedValue({ items: [], total: 0 });
   vi.mocked(catalogService.fetchCategories).mockResolvedValue([]);
   vi.mocked(promotionService.fetchPromotions).mockResolvedValue([]);
   vi.mocked(promotionService.fetchPromotionsConfig).mockResolvedValue({ promotions_link: null });
@@ -203,7 +207,7 @@ describe('AdminDashboardPage', () => {
       within(screen.getByRole('group', { name: group }))
         .getAllByRole('button')
         .map((button) => button.textContent);
-    expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes', 'Repartidores']);
+    expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Control de caja', 'Historial', 'Clientes', 'Repartidores']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Promociones', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
     expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Configuración']);
@@ -246,6 +250,7 @@ describe('AdminDashboardPage', () => {
     ],
     ['Historial', async () => expect(await screen.findByText('No hay pedidos en el rango seleccionado.')).toBeInTheDocument()],
     ['Tomar pedido', async () => expect(screen.getByRole('heading', { name: 'Datos del cliente' })).toBeVisible()],
+    ['Control de caja', async () => expect(await screen.findByRole('heading', { name: 'Control de caja' })).toBeInTheDocument()],
     ['Clientes', async () => expect(await screen.findByText('Aún no hay clientes registrados en el sistema.')).toBeInTheDocument()],
     ['Repartidores', async () => expect(await screen.findByText('Aún no hay repartidores registrados en el sistema.')).toBeInTheDocument()],
     ['Ingredientes', async () => expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument()],

@@ -20,7 +20,13 @@ def _payload(items, **overrides):
     return payload
 
 
-def test_registra_pedido_presencial_confirmado_con_demora(client, db_session, products):
+def test_no_permite_crear_pedido_presencial_sin_caja_abierta(client, products):
+    response = client.post(COUNTER_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}]))
+    assert response.status_code == 400
+    assert "caja no está abierta" in response.json()["detail"].lower()
+
+
+def test_registra_pedido_presencial_confirmado_con_demora(client, db_session, products, open_shift):
     items = [
         {"product_id": products["muzza"].id, "quantity": 2},
         {"product_id": products["coca"].id, "quantity": 1},
@@ -40,9 +46,10 @@ def test_registra_pedido_presencial_confirmado_con_demora(client, db_session, pr
     assert order.customer_phone == "1144445555"
     assert order.notes == "Sin cebolla"
     assert len(order.items) == 2
+    assert order.cash_shift_id == open_shift.id
 
 
-def test_pedido_presencial_aparece_en_el_panel_de_comandas(client, products):
+def test_pedido_presencial_aparece_en_el_panel_de_comandas(client, products, open_shift):
     client.post(COUNTER_URL, json=_payload([{"product_id": products["muzza"].id, "quantity": 1}]))
 
     response = client.get("/api/v1/orders", params={"status": ["Confirmado"]})
@@ -51,7 +58,7 @@ def test_pedido_presencial_aparece_en_el_panel_de_comandas(client, products):
     assert [o["source"] for o in response.json()] == ["mostrador"]
 
 
-def test_retiro_en_el_local_no_requiere_direccion(client, db_session, products):
+def test_retiro_en_el_local_no_requiere_direccion(client, db_session, products, open_shift):
     payload = _payload(
         [{"product_id": products["muzza"].id, "quantity": 1}], delivery_method="retiro", shipping_address=None
     )
@@ -71,7 +78,7 @@ def test_retiro_en_el_local_no_requiere_direccion(client, db_session, products):
         {"items": []},
     ],
 )
-def test_valida_campos_obligatorios(client, db_session, products, overrides):
+def test_valida_campos_obligatorios(client, db_session, products, open_shift, overrides):
     payload = _payload([{"product_id": products["muzza"].id, "quantity": 1}])
     payload.update(overrides)
 
@@ -81,7 +88,7 @@ def test_valida_campos_obligatorios(client, db_session, products, overrides):
     assert db_session.query(Order).count() == 0
 
 
-def test_rechaza_productos_no_disponibles(client, db_session, products):
+def test_rechaza_productos_no_disponibles(client, db_session, products, open_shift):
     response = client.post(COUNTER_URL, json=_payload([{"product_id": products["agotada"].id, "quantity": 1}]))
 
     assert response.status_code == 400
@@ -89,7 +96,7 @@ def test_rechaza_productos_no_disponibles(client, db_session, products):
     assert db_session.query(Order).count() == 0
 
 
-def test_solo_el_personal_del_local_puede_cargar_pedidos_presenciales(public_client, db_session, products):
+def test_solo_el_personal_del_local_puede_cargar_pedidos_presenciales(public_client, db_session, products, open_shift):
     cliente = User(email="cliente@mail.com", hashed_password="x", role="CUSTOMER", is_active=True)
     db_session.add(cliente)
     db_session.commit()

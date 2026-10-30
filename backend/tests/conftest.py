@@ -31,6 +31,7 @@ from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.cash_shift import CashShift  # noqa: E402
 from app.models.menu import Category, Product  # noqa: E402
 from app.models.user import User  # noqa: E402
 
@@ -58,6 +59,15 @@ def db_session():
     finally:
         session.close()
         Base.metadata.drop_all(bind=engine)
+
+
+@pytest.fixture()
+def open_shift(db_session):
+    """Abre un turno de caja para permitir pedidos de mostrador y cobros."""
+    shift = CashShift(initial_amount=10000.0, status="abierta")
+    db_session.add(shift)
+    db_session.commit()
+    return shift
 
 
 @pytest.fixture()

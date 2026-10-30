@@ -3,6 +3,7 @@ import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 export type ViewKey =
   | 'tomar-pedido'
+  | 'caja'
   | 'comandas'
   | 'historial'
   | 'estadisticas'
@@ -23,6 +24,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'comandas', label: 'Comandas' },
       { key: 'tomar-pedido', label: 'Tomar pedido' },
+      { key: 'caja', label: 'Control de caja' },
       { key: 'historial', label: 'Historial' },
       { key: 'clientes', label: 'Clientes' },
       { key: 'repartidores', label: 'Repartidores' },

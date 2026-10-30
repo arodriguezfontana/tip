@@ -8,6 +8,7 @@ import { ComandasBoard } from '@/components/ComandasBoard';
 import { HistorialView } from '@/components/HistorialView';
 import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
+import { ControlCajaView } from '@/components/ControlCajaView';
 import { ClientesView } from '@/components/ClientesView';
 import { RepartidoresView } from '@/components/RepartidoresView';
 import { CatalogoView } from '@/components/CatalogoView';
@@ -82,6 +83,7 @@ export default function AdminDashboardPage() {
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
           </div>
+          {activeView === 'caja' && <ControlCajaView />}
           <div hidden={activeView !== 'comandas'} className="lg:h-full">
             <ComandasBoard
               onTakeOrder={() => setActiveView('tomar-pedido')}

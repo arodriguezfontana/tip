@@ -94,7 +94,7 @@ def test_el_panel_busca_al_cliente_con_cualquier_formato(client, db_session):
     assert respuesta.json()["full_name"] == "Carlos"
 
 
-def test_el_telefono_del_pedido_queda_en_el_formato_unico(db_session, products):
+def test_el_telefono_del_pedido_queda_en_el_formato_unico(db_session, products, open_shift):
     pedido = OrderRequest(
         customer_name="Carlos",
         customer_phone="+54 9 11 6293-9338",

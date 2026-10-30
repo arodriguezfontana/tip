@@ -126,7 +126,7 @@ def test_webhook_get_ping(client):
     assert response.json() == {"status": "ok"}
 
 
-def test_manual_mark_order_as_paid(client, db_session, sample_order):
+def test_manual_mark_order_as_paid(client, db_session, sample_order, open_shift):
     assert sample_order.is_paid is False
     with patch("app.api.order_router.enviar_mensaje"):
         response = client.patch(f"/api/v1/orders/{sample_order.id}/payment", json={"is_paid": True})

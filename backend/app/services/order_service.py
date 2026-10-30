@@ -16,6 +16,7 @@ from app.db.session import transaction
 from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus, PaymentMethod
 from app.models.user import User
 from app.repositories import delivery_driver_repository, order_repository, product_repository, promotion_repository
+from app.services import cash_shift_service
 from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 
@@ -169,6 +170,9 @@ def create_web_order(
     order.estimated_minutes = estimate_delay_minutes(db)
     order.payment_method = PaymentMethod(payment_method).value
     order.is_paid = False
+    shift = cash_shift_service.get_current_open_shift(db)
+    if shift:
+        order.cash_shift_id = shift.id
     return _save(db, order)
 
 
@@ -180,7 +184,12 @@ def create_counter_order(db: Session, request: OrderRequest, payment: CounterPay
     Además registra (o actualiza) al cliente en la agenda del local para autocompletar sus
     próximos pedidos.
     """
+    shift = cash_shift_service.get_current_open_shift(db)
+    if not shift:
+        raise BusinessRuleError("No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.")
+
     order = _new_order(db, request, OrderSource.COUNTER)
+    order.cash_shift_id = shift.id
     order.status = OrderStatus.CONFIRMED.value
     order.estimated_minutes = estimate_delay_minutes(db)
     order.payment_method = payment.method
@@ -205,6 +214,9 @@ def create_bot_order(
     order.scheduled_for = scheduled_for
     order.payment_method = payment_method
     order.is_paid = False
+    shift = cash_shift_service.get_current_open_shift(db)
+    if shift:
+        order.cash_shift_id = shift.id
     order = _save(db, order)
     # Queda en la agenda (nombre, teléfono y dirección de envío) para reconocerlo en su próximo pedido.
     _register_client(db, request)
@@ -299,6 +311,13 @@ def assign_delivery_driver(
 def update_order_payment(db: Session, order_id: int, is_paid: bool) -> Order:
     """Actualiza manualmente el estado de cobro de un pedido."""
     order = get_order(db, order_id)
+    if order.is_shift_closed:
+        raise BusinessRuleError("No se puede modificar el pago de un pedido con turno de caja cerrado.")
+    if is_paid and not order.cash_shift_id:
+        shift = cash_shift_service.get_current_open_shift(db)
+        if not shift:
+            raise BusinessRuleError("No se pueden cobrar pedidos porque no hay una caja abierta.")
+        order.cash_shift_id = shift.id
     order.is_paid = is_paid
     with transaction(db):
         pass
