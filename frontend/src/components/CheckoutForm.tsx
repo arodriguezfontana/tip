@@ -73,7 +73,13 @@ export function CheckoutForm({
         delivery_method: deliveryMethod,
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
-        items: items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+        items: items.map((item) => ({
+          product_id: item.promotion ? undefined : item.product?.id,
+          promotion_id: item.promotion ? item.promotion.id : undefined,
+          quantity: item.quantity,
+          secondary_product_id: item.secondary_product?.id,
+          custom_name: item.custom_name,
+        })),
         payment_method: paymentMethod,
       });
       onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes, paymentMethod });

@@ -1,4 +1,4 @@
-"""Herramientas del bot para cambiar un pedido que el cliente acaba de registrar (US-37).
+"""Herramientas del bot para cambiar un pedido que el cliente acaba de registrar.
 
 Ubican el pedido por el chat del cliente (su último pedido) y devuelven el mensaje final para mandarle tal
 cual: los montos, la ventana de modificación y el cobro de la diferencia los decide el sistema, no el modelo.

@@ -8,8 +8,11 @@ import * as clientService from '@/services/clientService';
 import * as deliveryDriverService from '@/services/deliveryDriverService';
 import * as handoffService from '@/services/handoffService';
 import * as ingredientService from '@/services/ingredientService';
+import * as menuImageService from '@/services/menuImageService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
+import * as promotionImageService from '@/services/promotionImageService';
+import * as promotionService from '@/services/promotionService';
 import * as statsService from '@/services/statsService';
 import * as storeConfigService from '@/services/storeConfigService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
@@ -24,6 +27,9 @@ vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
 vi.mock('@/services/businessHoursService');
 vi.mock('@/services/storeConfigService');
+vi.mock('@/services/promotionService');
+vi.mock('@/services/menuImageService');
+vi.mock('@/services/promotionImageService');
 vi.mock('@/hooks/useNewOrderAlert', () => ({
   useNewOrderAlert: () => ({ enabled: true, toggleEnabled: vi.fn(), unlockAudio: vi.fn(), audioSupported: true, audioBlocked: false }),
 }));
@@ -41,6 +47,11 @@ beforeEach(() => {
   vi.mocked(ingredientService.fetchIngredients).mockResolvedValue([]);
   vi.mocked(catalogService.fetchAdminProducts).mockResolvedValue([]);
   vi.mocked(catalogService.fetchCategories).mockResolvedValue([]);
+  vi.mocked(promotionService.fetchPromotions).mockResolvedValue([]);
+  vi.mocked(promotionService.fetchPromotionsConfig).mockResolvedValue({ promotions_link: null });
+  vi.mocked(menuImageService.fetchMenuImages).mockResolvedValue({ max_images: 3, images: [] });
+  vi.mocked(menuImageService.fetchMenuConfig).mockResolvedValue({ menu_link: null });
+  vi.mocked(promotionImageService.fetchPromotionImages).mockResolvedValue({ max_images: 3, images: [] });
   vi.mocked(ingredientService.fetchIngredientConsumption).mockResolvedValue({
     completed_orders: 0,
     items: [],
@@ -193,9 +204,9 @@ describe('AdminDashboardPage', () => {
         .getAllByRole('button')
         .map((button) => button.textContent);
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Historial', 'Clientes', 'Repartidores']);
-    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Ingredientes']);
+    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Promociones', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios', 'Menú en imagen', 'Configuración']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Configuración']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });
@@ -243,6 +254,18 @@ describe('AdminDashboardPage', () => {
       async () => {
         expect(screen.getByRole('heading', { name: 'Productos y categorías' })).toBeInTheDocument();
         expect(await screen.findByText('Todavía no hay productos en el catálogo.')).toBeInTheDocument();
+      },
+    ],
+    [
+      'Promociones',
+      async () => {
+        expect(await screen.findByPlaceholderText('Buscar promoción...')).toBeInTheDocument();
+      },
+    ],
+    [
+      'Menú y promociones',
+      async () => {
+        expect(await screen.findByRole('heading', { name: 'Menú y promociones' })).toBeInTheDocument();
       },
     ],
     [

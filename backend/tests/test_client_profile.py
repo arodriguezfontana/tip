@@ -1,4 +1,4 @@
-"""US-38: el bot reconoce al cliente de WhatsApp por su teléfono, recuerda su nombre y su última dirección."""
+"""el bot reconoce al cliente de WhatsApp por su teléfono, recuerda su nombre y su última dirección."""
 
 import asyncio
 import json

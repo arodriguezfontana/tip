@@ -245,7 +245,7 @@ describe('ComandaCard', () => {
     );
 
     const label = screen.getByText('Asignar repartidor');
-    expect(label.parentElement).toHaveTextContent('🛵');
+    expect(label.parentElement?.querySelector('svg')).toBeInTheDocument();
     // Va en el mismo lugar que el cartel del repartidor: debajo de las observaciones y arriba de la demora.
     const before = (x: Element, y: Element) => Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(before(screen.getByText('“Sin cebolla”'), label)).toBe(true);
@@ -370,7 +370,7 @@ describe('ComandaCard', () => {
     expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
   });
-  describe('Separación de comandas por sector (US-34)', () => {
+  describe('Separación de comandas por sector', () => {
     const mockItems = [
       { id: 1, product_id: 10, product_name: 'Pizza Napolitana', quantity: 2, unit_price: 9000, subtotal: 18000, sector: 'pizzeria' },
       { id: 2, product_id: 20, product_name: 'Milanesa con Papas', quantity: 1, unit_price: 11000, subtotal: 11000, sector: 'cocina' },
@@ -397,7 +397,7 @@ describe('ComandaCard', () => {
     });
   });
 
-  describe('pedido modificado por el cliente (US-37)', () => {
+  describe('pedido modificado por el cliente', () => {
     it('muestra el pago mixto: lo pagado por MercadoPago y lo que falta cobrar en efectivo', () => {
       renderCard({
         total_amount: 15000,

@@ -4,6 +4,7 @@ import { fetchHandoff, finishHandoff, sendHandoffMessage, takeHandoff } from '@/
 import type { HandoffDetail } from '@/types/handoff';
 import { getErrorMessage } from '@/utils/errors';
 import { handoffAvatarColor, handoffDetails, handoffName } from '@/utils/handoff';
+import { BotIcon } from '@/components/Icons';
 
 export const CHAT_POLL_INTERVAL_MS = 2000;
 
@@ -151,7 +152,12 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
             key={index}
             className={`max-w-[85%] whitespace-pre-wrap rounded-2xl px-3 py-2 text-sm ${BUBBLE_CLASSES[message.author]}`}
           >
-            {message.author === 'bot' && <span className="mb-0.5 block text-[10px] font-bold uppercase">🤖 Bot</span>}
+            {message.author === 'bot' && (
+              <span className="mb-0.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase">
+                <BotIcon className="w-3 h-3 shrink-0" />
+                <span>Bot</span>
+              </span>
+            )}
             {message.text}
           </p>
         ))}

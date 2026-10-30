@@ -4,10 +4,12 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.api.uploads import image_body
-from app.db.session import get_db
+from app.db.session import get_db, transaction
 from app.models.user import User
 from app.schemas.menu_image_schemas import MenuImageOrder, MenuImagesResponse
+from app.schemas.promotion_schemas import MenuLinkUpdate
 from app.services import menu_image_service
+from app.services.store_config_service import get_or_create_store_config
 
 router = APIRouter()
 
@@ -23,6 +25,28 @@ def list_menu_images(
 ) -> MenuImagesResponse:
     """Las imágenes del menú, en el orden en que el bot las manda, para el panel."""
     return _all(db)
+
+
+@router.get("/config")
+def get_menu_config(
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> dict:
+    config = get_or_create_store_config(db)
+    return {"menu_link": config.menu_link}
+
+
+@router.put("/config")
+def update_menu_config(
+    payload: MenuLinkUpdate,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> dict:
+    config = get_or_create_store_config(db)
+    with transaction(db):
+        config.menu_link = payload.menu_link
+    db.refresh(config)
+    return {"menu_link": config.menu_link}
 
 
 @router.post("", response_model=MenuImagesResponse, status_code=http_status.HTTP_201_CREATED)

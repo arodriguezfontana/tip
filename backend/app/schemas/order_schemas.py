@@ -85,8 +85,18 @@ class OrderStatusUpdate(BaseModel):
 
 
 class WebOrderItemCreate(BaseModel):
-    product_id: int = Field(..., gt=0)
+    product_id: int | None = Field(None, gt=0)
+    promotion_id: int | None = Field(None, gt=0)
     quantity: int = Field(..., ge=1)
+    secondary_product_id: int | None = Field(None, gt=0)
+    custom_name: str | None = None
+    modifications: list[dict] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_item_source(self) -> "WebOrderItemCreate":
+        if self.product_id is None and self.promotion_id is None:
+            raise ValueError("Cada ítem debe indicar un producto o una promoción.")
+        return self
 
 
 class _OrderCreate(BaseModel):
@@ -114,7 +124,17 @@ class _OrderCreate(BaseModel):
             delivery_method=self.delivery_method,
             shipping_address=self.shipping_address,
             notes=self.notes,
-            items=[(item.product_id, item.quantity) for item in self.items],
+            items=[
+                (
+                    item.product_id,
+                    item.quantity,
+                    item.secondary_product_id,
+                    item.custom_name,
+                    item.modifications,
+                    item.promotion_id,
+                )
+                for item in self.items
+            ],
         )
 
 
@@ -146,9 +166,18 @@ class CounterOrderCreate(_OrderCreate):
         )
 
 
+class PromotionProductDetail(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: int
+    sector: str = "cocina"
+
+
 class WebOrderItemResponse(BaseModel):
     id: int | None = None
-    product_id: int
+    product_id: int | None = None
+    promotion_id: int | None = None
+    is_promotion: bool = False
     product_name: str
     quantity: int
     unit_price: float
@@ -156,19 +185,41 @@ class WebOrderItemResponse(BaseModel):
     sector: str = "cocina"
     is_prepared: bool = False
     added_later: bool = False
+    secondary_product_id: int | None = None
+    modifications: list[dict] = Field(default_factory=list)
+    promotion_products: list[PromotionProductDetail] = Field(default_factory=list)
+    promotion_description: str | None = None
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
+        promo_products = []
+        if item.promotion and item.promotion.items:
+            for it in item.promotion.items:
+                if it.product:
+                    promo_products.append(
+                        PromotionProductDetail(
+                            product_id=it.product_id,
+                            product_name=it.product.name,
+                            quantity=it.quantity * item.quantity,
+                            sector=it.product.effective_sector,
+                        )
+                    )
         return cls(
             id=item.id,
             product_id=item.product_id,
-            product_name=item.product.name if item.product else "",
+            promotion_id=item.promotion_id,
+            is_promotion=item.promotion_id is not None,
+            product_name=item.display_name,
             quantity=item.quantity,
             unit_price=item.unit_price,
             subtotal=item.subtotal,
             sector=item.sector,
             is_prepared=bool(item.is_prepared),
             added_later=bool(item.added_later),
+            secondary_product_id=item.secondary_product_id,
+            modifications=item.modifications or [],
+            promotion_products=promo_products,
+            promotion_description=item.promotion.description if item.promotion else None,
         )
 
 

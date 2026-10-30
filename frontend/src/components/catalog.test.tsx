@@ -393,6 +393,6 @@ describe('ProductThumbnail', () => {
 
     rerender(<ProductThumbnail product={{ name: 'Muzza', image_url: null, category: PIZZAS }} />);
     expect(screen.queryByRole('img')).not.toBeInTheDocument();
-    expect(screen.getByText('🍕')).toBeInTheDocument();
+    expect(screen.getByTestId('category-icon')).toBeInTheDocument();
   });
 });

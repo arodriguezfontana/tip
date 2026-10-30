@@ -100,8 +100,13 @@ class Ingredient(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
     unit = Column(String(30), nullable=False, server_default="unidades")
+    extra_price = Column(MoneyColumn, nullable=False, default=0, server_default="0")
 
     used_in_products = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
+
+    @validates("extra_price")
+    def _as_money(self, _key: str, value) -> Decimal:
+        return to_money(value)
 
     def ensure_can_be_deleted(self) -> None:
         """Un ingrediente que figura en alguna receta no se puede borrar: el consumo dejaría de cerrar."""

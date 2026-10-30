@@ -15,6 +15,7 @@ import {
 } from '@/types/storeConfig';
 import { resizeImageToDataUrl } from '@/utils/images';
 import { applyThemeColor } from '@/utils/theme';
+import { CreditCardIcon, LocationPinIcon, PhoneIcon } from '@/components/Icons';
 
 const LOGIN_BG_CHOICES: {
   id: Exclude<LoginBgOption, 'custom'>;
@@ -300,24 +301,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
-
-            <div className="md:col-span-2">
-              <label htmlFor="mp-alias" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
-                Alias de MercadoPago
-              </label>
-              <input
-                id="mp-alias"
-                type="text"
-                value={mpAlias}
-                onChange={(e) => setMpAlias(e.target.value)}
-                maxLength={100}
-                placeholder="Ej. restoit.mp"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Alias de tu cuenta de MercadoPago al cual los clientes abonarán o transferirán en los pedidos del chatbot.
-              </p>
-            </div>
           </div>
         </section>
 
@@ -501,7 +484,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📍
+                      <LocationPinIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Dirección</span>
@@ -515,7 +498,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📞
+                      <PhoneIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Teléfonos</span>
@@ -529,7 +512,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      💳
+                      <CreditCardIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Alias MercadoPago</span>

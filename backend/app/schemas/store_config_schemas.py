@@ -21,6 +21,8 @@ class StoreConfigResponse(BaseModel):
     panel_bg: str = "none"
     panel_bg_image: str | None = None
     panel_bg_color: str | None = None
+    menu_link: str | None = None
+    promotions_link: str | None = None
     mp_alias: str | None = None
     created_at: datetime
     updated_at: datetime
@@ -53,6 +55,8 @@ class StoreConfigUpdate(BaseModel):
     panel_bg_color: str | None = Field(
         None, pattern=r"^#[0-9a-fA-F]{6}$", description="Color del fondo del panel, en formato #rrggbb"
     )
+    menu_link: str | None = Field(None, description="Link externo a la carta o menú del local")
+    promotions_link: str | None = Field(None, description="Link externo a las promociones del local")
     mp_alias: str | None = Field(None, max_length=100, description="Alias de Mercado Pago")
 
     @model_validator(mode="after")
@@ -72,4 +76,3 @@ class StoreConfigUpdate(BaseModel):
         if self.panel_bg == "color" and not self.panel_bg_color:
             raise ValueError("Para usar un color de fondo en el panel hay que elegir el color.")
         return self
-

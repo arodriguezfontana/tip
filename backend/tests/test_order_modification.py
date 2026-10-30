@@ -1,4 +1,4 @@
-"""US-37: el cliente cambia el medio de pago o suma productos a un pedido que acaba de registrar."""
+"""el cliente cambia el medio de pago o suma productos a un pedido que acaba de registrar."""
 
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
@@ -386,3 +386,29 @@ def test_el_chat_agrega_al_pedido_y_responde_sin_otra_llamada_al_modelo(db_sessi
     assert llm.llamadas == 1
     assert "te queda una diferencia de $2,500.00" in respuesta
     assert db_session.query(Order).count() == 1
+
+
+def test_agregar_pizza_mitad_y_mitad_a_pedido_existente(db_session, products):
+    from app.models.menu import Product
+
+    napo = Product(name="Pizza Napolitana", price=9500.0, category_id=products["muzza"].category_id)
+    db_session.add(napo)
+    db_session.commit()
+
+    order = _pedido(db_session, products)
+    assert order.total_amount == Decimal("11000.00")  # muzza (8500) + coca (2500)
+
+    # Agregamos una grande mitad muzzarella, mitad napolitana (precio 9500)
+    respuesta = _agregar("una grande mitad muzzarella, mitad napolitana")
+
+    assert "Sumé a tu pedido" in respuesta
+    assert "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]" in respuesta
+    assert "$9,500.00" in respuesta
+
+    db_session.refresh(order)
+    # Total anterior (11000) + pizza mitad y mitad (9500) = 20500
+    assert order.total_amount == Decimal("20500.00")
+    nuevo_item = [i for i in order.items if i.added_later][0]
+    assert nuevo_item.display_name == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert nuevo_item.unit_price == Decimal("9500.00")
+    assert nuevo_item.secondary_product_id == napo.id

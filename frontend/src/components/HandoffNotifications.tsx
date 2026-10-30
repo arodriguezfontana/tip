@@ -5,6 +5,7 @@ import { useHandoffs } from '@/hooks/useHandoffs';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { playHandoffAlertSound } from '@/utils/alertSound';
 import { handoffAvatarColor, handoffDetails, handoffName } from '@/utils/handoff';
+import { BellIcon } from '@/components/Icons';
 
 function formatTime(iso: string): string {
   return new Date(iso).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' });
@@ -57,8 +58,9 @@ export function HandoffNotifications({ onVisibleChange }: HandoffNotificationsPr
             role="alert"
             className="rounded-2xl border border-amber-300 bg-amber-50 px-4 py-3 text-amber-900 shadow-lg"
           >
-            <p className="text-sm font-bold">
-              🔔 {handoffName(handoff)} quiere hablar con una persona
+            <p className="text-sm font-bold flex items-center gap-1.5">
+              <BellIcon className="w-4 h-4 shrink-0 text-amber-700" />
+              <span>{handoffName(handoff)} quiere hablar con una persona</span>
             </p>
             {handoffDetails(handoff) && <p className="mt-0.5 text-xs font-semibold">{handoffDetails(handoff)}</p>}
             {handoff.reason && <p className="mt-1 text-xs opacity-80">{handoff.reason}</p>}

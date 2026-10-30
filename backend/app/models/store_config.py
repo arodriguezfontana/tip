@@ -24,6 +24,9 @@ class StoreConfig(Base):
     panel_bg_image = Column(Text, nullable=True)
     # Color (#rrggbb) que se usa como fondo del panel cuando panel_bg es "color".
     panel_bg_color = Column(String(7), nullable=True)
+    # Links externos independientes para el menú y las promociones
+    menu_link = Column(Text, nullable=True)
+    promotions_link = Column(Text, nullable=True)
     mp_alias = Column(String(100), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
@@ -32,4 +35,3 @@ class StoreConfig(Base):
         onupdate=func.now(),
         nullable=False,
     )
-

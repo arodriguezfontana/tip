@@ -206,7 +206,7 @@ describe('OrderDetailModal', () => {
 
     expect(screen.queryByRole('button', { name: 'Cancelar pedido' })).not.toBeInTheDocument();
   });
-  describe('Separación de productos por sector en el detalle (US-34)', () => {
+  describe('Separación de productos por sector en el detalle', () => {
     it('agrupa los productos por sector de preparación arriba y abajo sin etiquetas individuales', async () => {
       service.fetchOrderDetail.mockResolvedValueOnce(
         makeOrderDetail({
@@ -236,6 +236,123 @@ describe('OrderDetailModal', () => {
       expect(within(dialog).getByText('1 ítem')).toBeInTheDocument();
       expect(within(dialog).getByText('2 ítems')).toBeInTheDocument();
       expect(within(dialog).getByText('3 ítems')).toBeInTheDocument();
+    });
+  });
+
+  describe('Pizzas mitad y mitad', () => {
+    it('muestra el ítem de pizza mitad y mitad de forma clara y unificada en la comanda', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              product_id: 10,
+              product_name: 'Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]',
+              quantity: 1,
+              unit_price: 9500,
+              subtotal: 9500,
+              sector: 'pizzeria',
+            },
+          ],
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]')).toBeInTheDocument();
+      const rows = await within(dialog).findAllByRole('row');
+      expect(rows.map((row) => plain(row.textContent))).toContain(
+        '1Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]$ 9.500,00'
+      );
+    });
+  });
+
+  describe('Modificaciones en comanda (US-40)', () => {
+    it('resalta las modificaciones en mayúsculas o negritas debajo del ítem principal', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              product_id: 1,
+              product_name: 'Hamburguesa Completa',
+              quantity: 1,
+              unit_price: 11000,
+              subtotal: 11000,
+              sector: 'cocina',
+              modifications: [
+                { type: 'negative', name: 'cebolla', tag: '[SIN CEBOLLA]' },
+                { type: 'positive', name: 'queso', tag: '[EXTRA QUESO]', price: 1000 },
+              ],
+            },
+          ],
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Hamburguesa Completa')).toBeInTheDocument();
+      expect(within(dialog).getByText('[SIN CEBOLLA]')).toBeInTheDocument();
+      expect(within(dialog).getByText('[EXTRA QUESO]')).toBeInTheDocument();
+      expect(within(dialog).getByText('[SIN CEBOLLA]')).toHaveClass('font-bold');
+      expect(within(dialog).getByText('[EXTRA QUESO]')).toHaveClass('font-bold');
+    });
+  });
+
+  describe('Promociones en comanda y sectores (US-42)', () => {
+    it('muestra cada producto de la promo en su sector con "Precio de promo" y una sección Promos abajo con su precio', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              id: 101,
+              promotion_id: 1,
+              is_promotion: true,
+              product_name: 'Combo Pizzeros',
+              quantity: 1,
+              unit_price: 15000,
+              subtotal: 15000,
+              sector: 'pizzeria',
+              promotion_description: '2 Cervezas y 1 Muzza',
+              promotion_products: [
+                {
+                  product_id: 10,
+                  product_name: 'Pizza Muzzarella',
+                  quantity: 1,
+                  sector: 'pizzeria',
+                },
+                {
+                  product_id: 20,
+                  product_name: 'Cerveza',
+                  quantity: 2,
+                  sector: 'barra',
+                },
+              ],
+            },
+          ],
+          subtotal: 15000,
+          total_amount: 15000,
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Pizzería')).toBeInTheDocument();
+      expect(within(dialog).getByText('Barra')).toBeInTheDocument();
+      expect(within(dialog).getAllByText('Pizza Muzzarella').length).toBeGreaterThanOrEqual(1);
+      expect(within(dialog).getAllByText('Cerveza').length).toBeGreaterThanOrEqual(1);
+
+      const promoPrices = within(dialog).getAllByText('Precio de promo');
+      expect(promoPrices.length).toBe(2);
+
+      expect(within(dialog).getByText('Promos')).toBeInTheDocument();
+      expect(within(dialog).getByText('Combo Pizzeros')).toBeInTheDocument();
+      expect(within(dialog).getByText('2 Cervezas y 1 Muzza')).toBeInTheDocument();
+      expect(within(dialog).getAllByText('$ 15.000,00').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

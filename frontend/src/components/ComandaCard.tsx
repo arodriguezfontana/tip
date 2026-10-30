@@ -1,12 +1,13 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderStatus, PaymentMethod, SectorFilter } from '@/types/order';
+import type { AdminOrder, OrderStatus, SectorFilter } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
+import { BellIcon, DeliveryIcon, PaymentMethodIcon } from '@/components/Icons';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -18,13 +19,6 @@ const DELAY_BADGE_CLASS: Record<DelayLevel, string> = {
   'on-time': 'bg-green-100 text-green-700',
   warning: 'bg-amber-100 text-amber-800',
   late: 'bg-red-100 text-red-700',
-};
-
-const PAYMENT_METHOD_ICON: Record<PaymentMethod, string> = {
-  efectivo: '💵',
-  mercadopago: '💳',
-  transferencia: '🏦',
-  tarjeta: '💳',
 };
 
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
@@ -139,7 +133,10 @@ export function ComandaCard({
             onClick={stopPropagation}
             className="flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
           >
-            <span>🔔 Pedido actualizado: el cliente agregó productos</span>
+            <span className="inline-flex items-center gap-1.5">
+              <BellIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              Pedido actualizado: el cliente agregó productos
+            </span>
             {onAcknowledgeUpdate && (
               <button
                 type="button"
@@ -183,7 +180,7 @@ export function ComandaCard({
                 : 'text-blue-700 bg-white border border-dashed border-blue-300 hover:bg-blue-50'
             } ${pending ? 'opacity-60' : ''}`}
           >
-            <span aria-hidden="true">🛵</span>
+            <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
             {order.delivery_driver_name ? (
               <>
                 <span>Repartidor:</span>
@@ -227,7 +224,8 @@ export function ComandaCard({
         ) : (
           order.delivery_driver_name && (
             <p className="self-start text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
-              <span>🛵 Repartidor:</span>
+              <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Repartidor:</span>
               <span className="font-bold">{order.delivery_driver_name}</span>
             </p>
           )
@@ -262,12 +260,10 @@ export function ComandaCard({
               </span>
             </>
           )}
-          <span className={`bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1 ${hasPartialPayment ? 'hidden' : ''}`}>
+          <span className={`bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1.5 ${hasPartialPayment ? 'hidden' : ''}`}>
             {order.payment_method ? (
               <>
-                <span aria-hidden="true" className="@max-[205px]:hidden">
-                  {PAYMENT_METHOD_ICON[order.payment_method]}
-                </span>
+                <PaymentMethodIcon method={order.payment_method} className="w-3.5 h-3.5 shrink-0 @max-[205px]:hidden" />
                 {PAYMENT_METHOD_LABEL[order.payment_method]}
               </>
             ) : (

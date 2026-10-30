@@ -18,6 +18,7 @@ import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
+import { SectorIcon, UtensilsIcon } from '@/components/Icons';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -161,7 +162,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
           return o.sectors.map((s) => s.toLowerCase()).includes(sec);
         }
         if (o.items && o.items.length > 0) {
-          return o.items.some((i) => (i.sector?.toLowerCase() || 'cocina') === sec);
+          return o.items.some((i) => {
+            if ((i.sector?.toLowerCase() || 'cocina') === sec) return true;
+            if (i.promotion_products && i.promotion_products.length > 0) {
+              return i.promotion_products.some((p) => (p.sector?.toLowerCase() || 'cocina') === sec);
+            }
+            return false;
+          });
         }
         return false;
       }).length;
@@ -187,7 +194,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
             return order.sectors.map((s) => s.toLowerCase()).includes(selectedSector);
           }
           if (order.items && order.items.length > 0) {
-            return order.items.some((item) => (item.sector?.toLowerCase() || 'cocina') === selectedSector);
+            return order.items.some((item) => {
+              if ((item.sector?.toLowerCase() || 'cocina') === selectedSector) return true;
+              if (item.promotion_products && item.promotion_products.length > 0) {
+                return item.promotion_products.some((p) => (p.sector?.toLowerCase() || 'cocina') === selectedSector);
+              }
+              return false;
+            });
           }
           return false;
         });
@@ -463,7 +476,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                 : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/80'
             }`}
           >
-            <span>🍽️</span>
+            <UtensilsIcon className="w-3.5 h-3.5 shrink-0" />
             <span>Todos</span>
             <span
               className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
@@ -491,7 +504,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                     : 'bg-gray-50 text-gray-700 hover:bg-gray-100 border border-gray-200/80'
                 }`}
               >
-                <span>{meta.icon}</span>
+                <SectorIcon sector={secKey} className="w-3.5 h-3.5 shrink-0" />
                 <span>{meta.label}</span>
                 <span
                   className={`px-1.5 py-0.2 rounded-full text-[10px] font-extrabold ${
@@ -508,8 +521,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         {selectedSector !== 'todos' && (
           <div className="hidden sm:flex items-center gap-2 text-xs text-gray-500 shrink-0">
             <span>Filtrado por:</span>
-            <span className="font-semibold text-gray-800 flex items-center gap-1">
-              <span>{SECTOR_CONFIG[selectedSector].icon}</span>
+            <span className="font-semibold text-gray-800 flex items-center gap-1.5">
+              <SectorIcon sector={selectedSector} className="w-3.5 h-3.5 shrink-0" />
               <span>{SECTOR_CONFIG[selectedSector].label}</span>
             </span>
             <button

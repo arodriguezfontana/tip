@@ -191,7 +191,7 @@ describe('ComandasBoard', () => {
       vi.unstubAllEnvs();
     }
   });
-  describe('Separación de comandas por sector (US-34)', () => {
+  describe('Separación de comandas por sector', () => {
     const SECTOR_ORDERS = [
       makeOrder({
         id: 11,

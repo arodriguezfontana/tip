@@ -7,6 +7,7 @@ import { createCategory, deleteCategory, fetchAdminProducts, fetchCategories, up
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
 import { SECTOR_CONFIG } from '@/types/order';
 import type { PreparationSector } from '@/types/order';
+import { SectorIcon } from '@/components/Icons';
 import { getErrorMessage } from '@/utils/errors';
 
 /** El formulario abierto: categoría a editar, o null para crear una nueva. */
@@ -111,11 +112,11 @@ export function CategoriasView() {
                       {category.sector && SECTOR_CONFIG[category.sector as PreparationSector] && (
                         <div className="mt-0.5">
                           <span
-                            className={`inline-flex items-center gap-1 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
                               SECTOR_CONFIG[category.sector as PreparationSector].badgeClass
                             }`}
                           >
-                            <span>{SECTOR_CONFIG[category.sector as PreparationSector].icon}</span>
+                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0" />
                             <span>{SECTOR_CONFIG[category.sector as PreparationSector].label}</span>
                           </span>
                         </div>

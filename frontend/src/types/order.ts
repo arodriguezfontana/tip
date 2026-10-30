@@ -1,3 +1,5 @@
+import type { Promotion } from './promotion';
+
 export interface ProductCategory {
   id: number;
   name: string;
@@ -19,7 +21,11 @@ export const MAX_QUANTITY_PER_ITEM = 20;
 
 export interface CartItem {
   product: Product;
+  promotion?: Promotion;
   quantity: number;
+  secondary_product?: Product;
+  custom_name?: string;
+  unit_price?: number;
 }
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
@@ -50,8 +56,11 @@ export interface CheckoutFormData {
 }
 
 export interface WebOrderItemPayload {
-  product_id: number;
+  product_id?: number;
+  promotion_id?: number;
   quantity: number;
+  secondary_product_id?: number;
+  custom_name?: string;
 }
 
 export interface WebOrderPayload {
@@ -86,29 +95,47 @@ export const SECTOR_CONFIG: Record<PreparationSector, SectorMeta> = {
   pizzeria: {
     key: 'pizzeria',
     label: 'Pizzería',
-    icon: '🍕',
+    icon: 'pizzeria',
     badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200',
     activeTabClass: 'bg-amber-600 text-white shadow-xs',
   },
   cocina: {
     key: 'cocina',
     label: 'Cocina',
-    icon: '🍳',
+    icon: 'cocina',
     badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
     activeTabClass: 'bg-emerald-600 text-white shadow-xs',
   },
   barra: {
     key: 'barra',
     label: 'Barra',
-    icon: '🍺',
+    icon: 'barra',
     badgeClass: 'bg-sky-100 text-sky-800 border border-sky-200',
     activeTabClass: 'bg-sky-600 text-white shadow-xs',
   },
 };
 
+export interface OrderItemModification {
+  type: 'positive' | 'negative';
+  action?: 'add' | 'remove';
+  name: string;
+  tag?: string;
+  price?: number;
+  ingredient_id?: number | null;
+}
+
+export interface PromotionProductDetail {
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  sector: PreparationSector | string;
+}
+
 export interface WebOrderItem {
   id?: number;
-  product_id: number;
+  product_id?: number | null;
+  promotion_id?: number | null;
+  is_promotion?: boolean;
   product_name: string;
   quantity: number;
   unit_price: number;
@@ -117,6 +144,9 @@ export interface WebOrderItem {
   is_prepared?: boolean;
   /** Lo agregó el cliente después de registrar el pedido. */
   added_later?: boolean;
+  modifications?: OrderItemModification[];
+  promotion_products?: PromotionProductDetail[];
+  promotion_description?: string | null;
 }
 
 export interface WebOrderCreated {

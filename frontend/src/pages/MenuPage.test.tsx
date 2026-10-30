@@ -439,4 +439,25 @@ describe('MenuPage', () => {
 
     expect(await screen.findByRole('alert')).toHaveTextContent('El local está cerrado en este momento');
   });
+
+  it('permite abrir el modal de pizza mitad y mitad y agregarla al carrito', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+
+    const btnMitad = screen.getByRole('button', { name: /armar mitad y mitad/i });
+    expect(btnMitad).toBeInTheDocument();
+
+    await user.click(btnMitad);
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByText('Armar pizza mitad y mitad')).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Agregar al carrito' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    const carrito = cart();
+    expect(within(carrito).getByText('Pizza Grande [1/2 Muzzarella | 1/2 Fugazzeta]')).toBeInTheDocument();
+    expect(within(carrito).getAllByText(/9\.500/).length).toBeGreaterThanOrEqual(1);
+  });
 });
