@@ -300,4 +300,59 @@ describe('OrderDetailModal', () => {
       expect(within(dialog).getByText('[EXTRA QUESO]')).toHaveClass('font-bold');
     });
   });
+
+  describe('Promociones en comanda y sectores (US-42)', () => {
+    it('muestra cada producto de la promo en su sector con "Precio de promo" y una sección Promos abajo con su precio', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              id: 101,
+              promotion_id: 1,
+              is_promotion: true,
+              product_name: 'Combo Pizzeros',
+              quantity: 1,
+              unit_price: 15000,
+              subtotal: 15000,
+              sector: 'pizzeria',
+              promotion_description: '2 Cervezas y 1 Muzza',
+              promotion_products: [
+                {
+                  product_id: 10,
+                  product_name: 'Pizza Muzzarella',
+                  quantity: 1,
+                  sector: 'pizzeria',
+                },
+                {
+                  product_id: 20,
+                  product_name: 'Cerveza',
+                  quantity: 2,
+                  sector: 'barra',
+                },
+              ],
+            },
+          ],
+          subtotal: 15000,
+          total_amount: 15000,
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      expect(await within(dialog).findByText('Pizzería')).toBeInTheDocument();
+      expect(within(dialog).getByText('Barra')).toBeInTheDocument();
+      expect(within(dialog).getAllByText('Pizza Muzzarella').length).toBeGreaterThanOrEqual(1);
+      expect(within(dialog).getAllByText('Cerveza').length).toBeGreaterThanOrEqual(1);
+
+      const promoPrices = within(dialog).getAllByText('Precio de promo');
+      expect(promoPrices.length).toBe(2);
+
+      expect(within(dialog).getByText('Promos')).toBeInTheDocument();
+      expect(within(dialog).getByText('Combo Pizzeros')).toBeInTheDocument();
+      expect(within(dialog).getByText('2 Cervezas y 1 Muzza')).toBeInTheDocument();
+      expect(within(dialog).getAllByText('$ 15.000,00').length).toBeGreaterThanOrEqual(1);
+    });
+  });
 });

@@ -115,18 +115,18 @@ def test_el_bot_envia_la_version_nueva_apenas_se_reemplaza(client, db_session):
 
 
 def test_cambiar_el_orden_de_las_imagenes(client):
-    for contenido in (PNG, PNG + b"2", PNG + b"3"):
+    for contenido in (PNG, PNG + b"2"):
         _subir(client, contenido)
-    a, b, c = (i["id"] for i in _imagenes(client))
+    a, b = (i["id"] for i in _imagenes(client))
 
-    respuesta = client.put(f"{URL}/order", json={"ids": [c, a, b]})
+    respuesta = client.put(f"{URL}/order", json={"ids": [b, a]})
 
     assert respuesta.status_code == 200
-    assert [i["id"] for i in respuesta.json()["images"]] == [c, a, b]
-    assert [i["id"] for i in _imagenes(client)] == [c, a, b]
+    assert [i["id"] for i in respuesta.json()["images"]] == [b, a]
+    assert [i["id"] for i in _imagenes(client)] == [b, a]
     # Las que se suban después van al final.
-    _subir(client, PNG + b"4")
-    assert [i["id"] for i in _imagenes(client)][:3] == [c, a, b]
+    _subir(client, PNG + b"3")
+    assert [i["id"] for i in _imagenes(client)][:2] == [b, a]
 
 
 @pytest.mark.parametrize("ids", [[], [1], [1, 1], [999, 1000]])

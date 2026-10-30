@@ -20,7 +20,7 @@ from app.core.money import MoneyColumn, to_money
 from app.db.base_class import Base
 from app.models.menu import Product, ProductImage
 
-MAX_PROMOTION_IMAGES = 10
+MAX_PROMOTION_IMAGES = 3
 
 
 class PromotionProduct(Base):

@@ -166,6 +166,13 @@ class CounterOrderCreate(_OrderCreate):
         )
 
 
+class PromotionProductDetail(BaseModel):
+    product_id: int
+    product_name: str
+    quantity: int
+    sector: str = "cocina"
+
+
 class WebOrderItemResponse(BaseModel):
     id: int | None = None
     product_id: int | None = None
@@ -180,9 +187,23 @@ class WebOrderItemResponse(BaseModel):
     added_later: bool = False
     secondary_product_id: int | None = None
     modifications: list[dict] = Field(default_factory=list)
+    promotion_products: list[PromotionProductDetail] = Field(default_factory=list)
+    promotion_description: str | None = None
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
+        promo_products = []
+        if item.promotion and item.promotion.items:
+            for it in item.promotion.items:
+                if it.product:
+                    promo_products.append(
+                        PromotionProductDetail(
+                            product_id=it.product_id,
+                            product_name=it.product.name,
+                            quantity=it.quantity * item.quantity,
+                            sector=it.product.effective_sector,
+                        )
+                    )
         return cls(
             id=item.id,
             product_id=item.product_id,
@@ -197,6 +218,8 @@ class WebOrderItemResponse(BaseModel):
             added_later=bool(item.added_later),
             secondary_product_id=item.secondary_product_id,
             modifications=item.modifications or [],
+            promotion_products=promo_products,
+            promotion_description=item.promotion.description if item.promotion else None,
         )
 
 

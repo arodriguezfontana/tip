@@ -124,10 +124,18 @@ export interface OrderItemModification {
   ingredient_id?: number | null;
 }
 
+export interface PromotionProductDetail {
+  product_id: number;
+  product_name: string;
+  quantity: number;
+  sector: PreparationSector | string;
+}
+
 export interface WebOrderItem {
   id?: number;
   product_id?: number | null;
   promotion_id?: number | null;
+  is_promotion?: boolean;
   product_name: string;
   quantity: number;
   unit_price: number;
@@ -137,6 +145,8 @@ export interface WebOrderItem {
   /** Lo agregó el cliente después de registrar el pedido. */
   added_later?: boolean;
   modifications?: OrderItemModification[];
+  promotion_products?: PromotionProductDetail[];
+  promotion_description?: string | null;
 }
 
 export interface WebOrderCreated {

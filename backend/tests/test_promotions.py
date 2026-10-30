@@ -220,8 +220,14 @@ def test_enviar_menu_en_imagen_cuatro_casos(db_session, canal_falso_promos):
 
 
 def test_orden_con_promocion_y_comanda(db_session, products):
+    from app.schemas.order_schemas import WebOrderItemResponse
+
     p1 = products["muzza"]
     p2 = products["coca"]
+    p1.sector = "pizzeria"
+    p2.sector = "barra"
+    db_session.commit()
+
     items = [
         PromotionItemPayload(product_id=p1.id, quantity=2),
         PromotionItemPayload(product_id=p2.id, quantity=1),
@@ -262,6 +268,21 @@ def test_orden_con_promocion_y_comanda(db_session, products):
     assert item.comanda_display.startswith("PROMO: Combo Familiar (")
     assert "2x Pizza Muzzarella" in item.comanda_display
     assert "1x Coca-Cola" in item.comanda_display
+
+    # Verificar sectores distribuidos en la orden
+    assert "pizzeria" in order.sectors
+    assert "barra" in order.sectors
+
+    # Verificar serialización en WebOrderItemResponse
+    resp = WebOrderItemResponse.from_model(item)
+    assert resp.is_promotion is True
+    assert len(resp.promotion_products) == 2
+    assert resp.promotion_products[0].product_name == "Pizza Muzzarella"
+    assert resp.promotion_products[0].quantity == 2
+    assert resp.promotion_products[0].sector == "pizzeria"
+    assert resp.promotion_products[1].product_name == "Coca-Cola 500ml"
+    assert resp.promotion_products[1].quantity == 1
+    assert resp.promotion_products[1].sector == "barra"
 
 
 def test_promotion_image_upload_get_and_delete(client, db_session, products):

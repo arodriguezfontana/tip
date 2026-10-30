@@ -545,10 +545,10 @@ class Order(Base):
         seen = set()
         res = []
         for item in self.items:
-            s = item.sector
-            if s not in seen:
-                seen.add(s)
-                res.append(s)
+            for s in item.all_sectors:
+                if s not in seen:
+                    seen.add(s)
+                    res.append(s)
         return res
 
 
@@ -601,6 +601,18 @@ class OrderItem(Base):
     @property
     def subtotal(self) -> Decimal:
         return self.unit_price * self.quantity
+
+    @property
+    def all_sectors(self) -> list[str]:
+        if self.promotion and self.promotion.items:
+            sectors = []
+            for it in self.promotion.items:
+                if it.product:
+                    sec = it.product.effective_sector
+                    if sec not in sectors:
+                        sectors.append(sec)
+            return sectors if sectors else ["cocina"]
+        return [self.sector]
 
     @property
     def sector(self) -> str:

@@ -62,6 +62,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+interface SectorRowItem {
+  id: string | number;
+  quantity: number;
+  product_name: string;
+  is_promo: boolean;
+  promo_name?: string;
+  added_later?: boolean;
+  modifications?: WebOrderItem['modifications'];
+  is_promo_price: boolean;
+  price_display: string;
+}
+
 interface OrderDetailModalProps {
   /** Datos del tablero: se muestran al instante mientras se carga el detalle completo. */
   order: AdminOrder;
@@ -176,19 +188,75 @@ export function OrderDetailModal({
     setReloadKey((key) => key + 1);
   };
 
-  // Agrupación de productos por sector de preparación
+  // Agrupación de productos por sector de preparación y recopilación de promociones
   const detailItems = detail?.items;
-  const itemsBySector = useMemo(() => {
-    if (!detailItems) return [];
-    const map = new Map<string, WebOrderItem[]>();
+  const { itemsBySector, promoItems } = useMemo(() => {
+    if (!detailItems) return { itemsBySector: [], promoItems: [] };
+    const sectorMap = new Map<string, SectorRowItem[]>();
+    const promos: WebOrderItem[] = [];
+
     for (const item of detailItems) {
-      const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
-      if (!map.has(sec)) {
-        map.set(sec, []);
+      const isPromo = Boolean(item.promotion_id || item.is_promotion);
+
+      if (isPromo) {
+        promos.push(item);
+        if (item.promotion_products && item.promotion_products.length > 0) {
+          for (const p of item.promotion_products) {
+            const sec = (p.sector?.toLowerCase() as PreparationSector) || 'cocina';
+            if (!sectorMap.has(sec)) {
+              sectorMap.set(sec, []);
+            }
+            sectorMap.get(sec)!.push({
+              id: `promo-${item.id ?? item.promotion_id}-${p.product_id}`,
+              quantity: p.quantity,
+              product_name: p.product_name,
+              is_promo: true,
+              promo_name: item.product_name,
+              added_later: item.added_later,
+              modifications: [],
+              is_promo_price: true,
+              price_display: 'Precio de promo',
+            });
+          }
+        } else {
+          const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+          if (!sectorMap.has(sec)) {
+            sectorMap.set(sec, []);
+          }
+          sectorMap.get(sec)!.push({
+            id: item.id ?? `promo-${item.promotion_id}`,
+            quantity: item.quantity,
+            product_name: item.product_name,
+            is_promo: true,
+            promo_name: item.product_name,
+            added_later: item.added_later,
+            modifications: item.modifications,
+            is_promo_price: true,
+            price_display: 'Precio de promo',
+          });
+        }
+      } else {
+        const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+        if (!sectorMap.has(sec)) {
+          sectorMap.set(sec, []);
+        }
+        sectorMap.get(sec)!.push({
+          id: item.id ?? item.product_id ?? Math.random(),
+          quantity: item.quantity,
+          product_name: item.product_name,
+          is_promo: false,
+          added_later: item.added_later,
+          modifications: item.modifications,
+          is_promo_price: false,
+          price_display: formatCurrency(item.subtotal),
+        });
       }
-      map.get(sec)!.push(item);
     }
-    return Array.from(map.entries());
+
+    return {
+      itemsBySector: Array.from(sectorMap.entries()),
+      promoItems: promos,
+    };
   }, [detailItems]);
 
   // Los datos generales salen del tablero (se actualizan con el sondeo); el detalle aporta productos y pago.
@@ -352,12 +420,12 @@ export function OrderDetailModal({
                         </div>
                         <table className="w-full text-xs">
                           <tbody className="divide-y divide-gray-100">
-                            {items.map((item, idx) => (
-                              <tr key={item.id ?? (item.promotion_id ? `promo-${item.promotion_id}` : item.product_id ?? idx)} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
+                            {items.map((item) => (
+                              <tr key={item.id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
                                 <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
                                 <td className="py-1.5 pr-2 text-gray-900 font-medium">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    {item.promotion_id && (
+                                    {item.is_promo && (
                                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
                                         Promo
                                       </span>
@@ -387,7 +455,13 @@ export function OrderDetailModal({
                                   )}
                                 </td>
                                 <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">
-                                  {formatCurrency(item.subtotal)}
+                                  {item.is_promo_price ? (
+                                    <span className="text-amber-800 font-medium italic text-xs">
+                                      {item.price_display}
+                                    </span>
+                                  ) : (
+                                    item.price_display
+                                  )}
                                 </td>
                               </tr>
                             ))}
@@ -396,6 +470,77 @@ export function OrderDetailModal({
                       </div>
                     );
                   })}
+
+                  {promoItems.length > 0 && (
+                    <div className="rounded-xl border-2 border-amber-200/90 overflow-hidden bg-gradient-to-b from-amber-50/40 to-white shadow-2xs">
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-amber-100/70 border-b border-amber-200 text-xs font-bold text-amber-900">
+                        <span className="flex items-center gap-1.5">
+                          <span>Promos</span>
+                        </span>
+                        <span className="text-[11px] font-medium text-amber-700">
+                          {promoItems.reduce((acc, p) => acc + p.quantity, 0)}{' '}
+                          {promoItems.reduce((acc, p) => acc + p.quantity, 0) === 1 ? 'promo' : 'promos'}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-amber-100">
+                        {promoItems.map((promo, idx) => (
+                          <div
+                            key={promo.id ?? promo.promotion_id ?? idx}
+                            className={`p-3 space-y-1.5 ${promo.added_later ? 'bg-amber-50/70' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-xs text-gray-900">
+                                    {promo.quantity > 1 ? `${promo.quantity}x ` : ''}
+                                    {promo.product_name}
+                                  </span>
+                                  {promo.added_later && (
+                                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </div>
+                                {promo.promotion_description && (
+                                  <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
+                                    {promo.promotion_description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-sm font-black text-gray-900">
+                                  {formatCurrency(promo.subtotal)}
+                                </span>
+                                {promo.quantity > 1 && (
+                                  <div className="text-[10px] text-gray-500 font-medium">
+                                    {formatCurrency(promo.unit_price)} c/u
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {promo.promotion_products && promo.promotion_products.length > 0 && (
+                              <div className="pt-0.5">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                                  Incluye:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {promo.promotion_products.map((p, pIdx) => (
+                                    <span
+                                      key={pIdx}
+                                      className="bg-white border border-amber-200/80 text-gray-800 text-[11px] px-2 py-0.5 rounded-md font-medium shadow-2xs"
+                                    >
+                                      <span className="font-bold text-amber-700">{p.quantity}x</span>{' '}
+                                      {p.product_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
                 </div>
               )
             )}

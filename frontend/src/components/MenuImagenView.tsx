@@ -261,7 +261,7 @@ export function MenuImagenView() {
   };
 
   const currentImages = activeTab === 'menu' ? (menu?.images ?? []) : (promoImages?.images ?? []);
-  const maxImages = activeTab === 'menu' ? (menu?.max_images ?? 10) : (promoImages?.max_images ?? 10);
+  const maxImages = activeTab === 'menu' ? (menu?.max_images ?? 3) : (promoImages?.max_images ?? 3);
   const isFull = currentImages.length >= maxImages;
   const currentLink = activeTab === 'menu' ? menuLink : promoLink;
   const savedLink = activeTab === 'menu' ? savedMenuLink : savedPromoLink;

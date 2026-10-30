@@ -162,7 +162,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
           return o.sectors.map((s) => s.toLowerCase()).includes(sec);
         }
         if (o.items && o.items.length > 0) {
-          return o.items.some((i) => (i.sector?.toLowerCase() || 'cocina') === sec);
+          return o.items.some((i) => {
+            if ((i.sector?.toLowerCase() || 'cocina') === sec) return true;
+            if (i.promotion_products && i.promotion_products.length > 0) {
+              return i.promotion_products.some((p) => (p.sector?.toLowerCase() || 'cocina') === sec);
+            }
+            return false;
+          });
         }
         return false;
       }).length;
@@ -188,7 +194,13 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
             return order.sectors.map((s) => s.toLowerCase()).includes(selectedSector);
           }
           if (order.items && order.items.length > 0) {
-            return order.items.some((item) => (item.sector?.toLowerCase() || 'cocina') === selectedSector);
+            return order.items.some((item) => {
+              if ((item.sector?.toLowerCase() || 'cocina') === selectedSector) return true;
+              if (item.promotion_products && item.promotion_products.length > 0) {
+                return item.promotion_products.some((p) => (p.sector?.toLowerCase() || 'cocina') === selectedSector);
+              }
+              return false;
+            });
           }
           return false;
         });
