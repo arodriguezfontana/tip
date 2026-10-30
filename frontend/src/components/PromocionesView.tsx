@@ -31,56 +31,52 @@ export function PromocionesView() {
   const [togglingId, setTogglingId] = useState<number | null>(null);
   const toast = useToast();
 
-  const loadData = async () => {
-    setLoading(true);
-    setLoadError(null);
-    try {
-      const [promosData, prodsData] = await Promise.all([
-        fetchPromotions(),
-        fetchAdminProducts(),
-      ]);
-      setPromotions(promosData);
-      setProducts(prodsData);
-    } catch {
-      setLoadError('No se pudieron cargar las promociones.');
-    } finally {
-      setLoading(false);
-    }
-  };
-
   useEffect(() => {
-    loadData();
+    let cancelled = false;
+    Promise.all([fetchPromotions(), fetchAdminProducts()])
+      .then(([promosData, prodsData]) => {
+        if (!cancelled) {
+          setPromotions(promosData);
+          setProducts(prodsData);
+          setLoading(false);
+        }
+      })
+      .catch(() => {
+        if (!cancelled) {
+          setLoadError('No se pudieron cargar las promociones.');
+          setLoading(false);
+        }
+      });
+    return () => {
+      cancelled = true;
+    };
   }, []);
 
   const handleSavePromotion = async (payload: PromotionPayload, image: ImageChange) => {
     const editing = modalPromotion?.promo;
-    try {
-      let saved: Promotion;
-      if (editing) {
-        saved = await updatePromotion(editing.id, payload);
-        toast.show(`Se actualizó la promoción "${saved.name}".`);
-      } else {
-        saved = await createPromotion(payload);
-        toast.show(`Se creó la promoción "${saved.name}".`);
-      }
-
-      if (image.type === 'upload') {
-        saved = await uploadPromotionImage(saved.id, image.file);
-      } else if (image.type === 'remove' && editing?.image_url) {
-        saved = await deletePromotionImage(saved.id);
-      }
-
-      setPromotions((prev) => {
-        const exists = prev.some((p) => p.id === saved.id);
-        if (exists) {
-          return prev.map((p) => (p.id === saved.id ? saved : p));
-        }
-        return [saved, ...prev];
-      });
-      setModalPromotion(null);
-    } catch (err) {
-      throw err; // Form modal catches and shows inline
+    let saved: Promotion;
+    if (editing) {
+      saved = await updatePromotion(editing.id, payload);
+      toast.show(`Se actualizó la promoción "${saved.name}".`);
+    } else {
+      saved = await createPromotion(payload);
+      toast.show(`Se creó la promoción "${saved.name}".`);
     }
+
+    if (image.type === 'upload') {
+      saved = await uploadPromotionImage(saved.id, image.file);
+    } else if (image.type === 'remove' && editing?.image_url) {
+      saved = await deletePromotionImage(saved.id);
+    }
+
+    setPromotions((prev) => {
+      const exists = prev.some((p) => p.id === saved.id);
+      if (exists) {
+        return prev.map((p) => (p.id === saved.id ? saved : p));
+      }
+      return [saved, ...prev];
+    });
+    setModalPromotion(null);
   };
 
   const handleToggleActive = async (promo: Promotion) => {

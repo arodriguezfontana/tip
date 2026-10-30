@@ -195,7 +195,7 @@ export function OrderDetailModal({
     const sectorMap = new Map<string, SectorRowItem[]>();
     const promos: WebOrderItem[] = [];
 
-    for (const item of detailItems) {
+    for (const [itemIdx, item] of detailItems.entries()) {
       const isPromo = Boolean(item.promotion_id || item.is_promotion);
 
       if (isPromo) {
@@ -241,7 +241,7 @@ export function OrderDetailModal({
           sectorMap.set(sec, []);
         }
         sectorMap.get(sec)!.push({
-          id: item.id ?? item.product_id ?? Math.random(),
+          id: item.id ?? item.product_id ?? `item-${itemIdx}`,
           quantity: item.quantity,
           product_name: item.product_name,
           is_promo: false,

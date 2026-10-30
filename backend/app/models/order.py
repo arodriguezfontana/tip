@@ -29,8 +29,7 @@ from app.core.phone import normalize_phone
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
-    from app.models.menu import Product
-    from app.models.promotion import Promotion
+    pass
 
 
 class _StrEnum(str, Enum):

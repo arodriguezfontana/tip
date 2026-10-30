@@ -13,7 +13,6 @@ from sqlalchemy.orm import Session
 from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
-from app.models.menu import Product
 from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus, PaymentMethod
 from app.models.user import User
 from app.repositories import delivery_driver_repository, order_repository, product_repository, promotion_repository

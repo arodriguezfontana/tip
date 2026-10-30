@@ -24,6 +24,7 @@ from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
 from app.models.order import MAX_QUANTITY_PER_ITEM, PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError, PaymentMethod
+from app.repositories import promotion_repository
 from app.schemas.common import PHONE_PATTERN
 from app.services.business_hours_service import (
     DIAS_SEMANA,
@@ -35,7 +36,6 @@ from app.services.business_hours_service import (
     proxima_apertura,
     proxima_fecha_abierta_a_la_hora,
 )
-from app.repositories import promotion_repository
 from app.services.catalog_service import find_available_products_by_name
 from app.services.mercadopago_service import create_payment_preference
 from app.services.modifier_nlp import (

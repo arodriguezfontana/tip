@@ -9,8 +9,8 @@ from app.models.user import User
 from app.schemas.promotion_schemas import (
     PromotionCreate,
     PromotionResponse,
-    PromotionUpdate,
     PromotionsLinkUpdate,
+    PromotionUpdate,
 )
 from app.services import promotion_service
 from app.services.store_config_service import get_or_create_store_config

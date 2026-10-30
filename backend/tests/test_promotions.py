@@ -4,8 +4,9 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models.order import DeliveryMethod, Order, OrderSource, OrderStatus, PaymentMethod
-from app.models.promotion import Promotion, PromotionImage, PromotionProduct
+from app.core.errors import NotFoundError
+from app.models.order import DeliveryMethod, PaymentMethod
+from app.models.promotion import PromotionImage
 from app.models.store_config import StoreConfig
 from app.schemas.order_schemas import WebOrderCreate, WebOrderItemCreate
 from app.schemas.promotion_schemas import PromotionItemPayload
@@ -19,7 +20,6 @@ from app.services.tools.menu_image_tools import (
 from app.services.tools.promotion_tools import (
     MENSAJE_PROMOS_ENVIADO,
     enviar_promociones,
-    obtener_promociones_actuales,
 )
 from tests.conftest import TestingSessionLocal
 
@@ -102,7 +102,7 @@ def test_crud_promotion(db_session, products):
 
     # 4. Eliminar
     promotion_service.delete_promotion(db_session, promo.id)
-    with pytest.raises(Exception):
+    with pytest.raises(NotFoundError):
         promotion_service.get_required_promotion(db_session, promo.id)
 
 
