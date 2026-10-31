@@ -5,6 +5,7 @@ y negativos ("sin", "quitale", "no le pongas", "sacale").
 Calcula precios asociados a modificadores positivos y prepara el formateo de comandas [SIN ...] [EXTRA ...].
 """
 
+import difflib
 import re
 import unicodedata
 from typing import TYPE_CHECKING
@@ -179,6 +180,10 @@ def vincular_modificadores_con_db(db: "Session", mods: list[dict]) -> list[dict]
                 if name_norm in k or k in name_norm:
                     matched_ing = ing
                     break
+        if not matched_ing:
+            close_matches = difflib.get_close_matches(name_norm, list(ing_map.keys()), n=1, cutoff=0.75)
+            if close_matches:
+                matched_ing = ing_map[close_matches[0]]
 
         if matched_ing:
             m["ingredient_id"] = matched_ing.id

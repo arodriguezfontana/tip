@@ -122,6 +122,24 @@ def test_extraer_modificadores_con_varios_triggers():
     assert mods[2]["name"] == "oregano"
 
 
+def test_extraer_multiples_modificadores_combinados():
+    texto = "sin queso, con cebolla, con panceta, sin peperoni"
+    base, mods = extraer_modificadores_de_texto(texto)
+    assert len(mods) == 4
+    assert mods[0]["type"] == "negative"
+    assert mods[0]["name"] == "queso"
+    assert mods[0]["tag"] == "[SIN QUESO]"
+    assert mods[1]["type"] == "positive"
+    assert mods[1]["name"] == "cebolla"
+    assert mods[1]["tag"] == "[EXTRA CEBOLLA]"
+    assert mods[2]["type"] == "positive"
+    assert mods[2]["name"] == "panceta"
+    assert mods[2]["tag"] == "[EXTRA PANCETA]"
+    assert mods[3]["type"] == "negative"
+    assert mods[3]["name"] == "peperoni"
+    assert mods[3]["tag"] == "[SIN PEPERONI]"
+
+
 def test_extraer_modificadores_formato_corchetes():
     texto = "Hamburguesa Completa [SIN CEBOLLA] [EXTRA PANCETA]"
     base, mods = extraer_modificadores_de_texto(texto)

@@ -121,6 +121,21 @@ export async function goToSection(page: Page, section: string) {
   await expect(menu).toHaveAttribute('aria-hidden', 'true');
 }
 
+export async function ensureOpenCashShift(request: APIRequestContext) {
+  const token = await adminToken(request);
+  const currentRes = await request.get(`${API_URL}/cash-shifts/current`, {
+    headers: { Authorization: `Bearer ${token}` },
+  });
+  if (currentRes.ok()) {
+    const data = await currentRes.json();
+    if (data.is_open) return;
+  }
+  await request.post(`${API_URL}/cash-shifts/open`, {
+    data: { initial_amount: 10000, notes: 'Apertura de caja para test e2e' },
+    headers: { Authorization: `Bearer ${token}` },
+  });
+}
+
 /** Texto con los espacios no separables de Intl normalizados. */
 export function money(amount: number): RegExp {
   const formatted = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
