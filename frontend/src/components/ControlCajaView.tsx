@@ -18,7 +18,9 @@ import type {
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
 import { CashIcon, ClockIcon } from '@/components/Icons';
+import { PanelNote } from '@/components/ui/PanelNote';
 
+const POLL_INTERVAL_MS = 10000;
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
 function formatDateTime(iso?: string | null): string {
@@ -143,6 +145,20 @@ export function ControlCajaView() {
     };
   }, []);
 
+  // Los pedidos cobrados entran a la caja desde otras pantallas: se refresca sin mostrar "Cargando", que
+  // borraría lo que se esté escribiendo. Si falla, se mantiene el último dato hasta el próximo intento.
+  useEffect(() => {
+    const intervalId = setInterval(() => {
+      fetchCurrentCashShift()
+        .then((res) => {
+          setIsOpen(res.is_open);
+          setCurrentShift(res.shift);
+        })
+        .catch(() => {});
+    }, POLL_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, []);
+
   const handleOpenShift = async (e: React.FormEvent) => {
     e.preventDefault();
     const amount = parseFloat(openInitialAmount);
@@ -254,17 +270,13 @@ export function ControlCajaView() {
     diffClose === null ? null : diffClose > 0.005 ? 'sobrante' : diffClose < -0.005 ? 'faltante' : 'exacta';
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center p-12">
-        <div className="text-gray-500 font-medium">Cargando control de caja...</div>
-      </div>
-    );
+    return <PanelNote>Cargando control de caja...</PanelNote>;
   }
 
   return (
     <div className="space-y-6 max-w-6xl mx-auto pb-12">
       {/* Encabezado */}
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 border-b border-gray-200 pb-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Control de caja</h1>
           <p className="text-sm text-gray-500 mt-0.5">
@@ -376,8 +388,8 @@ export function ControlCajaView() {
 
           {/* Historial rápido de turnos pasados */}
           <div className="mt-8">
-            <h2 className="text-base font-bold text-gray-900 mb-3">Historial de turnos anteriores</h2>
             <ShiftsHistoryTable
+              title="Historial de turnos anteriores"
               items={historyItems}
               loading={loadingHistory}
               onViewDetail={handleViewDetail}
@@ -486,7 +498,7 @@ export function ControlCajaView() {
           </div>
 
           {/* Pestañas de Navegación de Caja Abierta */}
-          <div className="flex border-b border-gray-200 gap-2">
+          <div className="flex bg-white rounded-2xl shadow-xs border border-gray-100 px-2 gap-2">
             <button
               type="button"
               onClick={() => setActiveTab('movimientos')}
@@ -793,15 +805,13 @@ export function ControlCajaView() {
 
           {/* Tab 3: Historial */}
           {activeTab === 'historial' && (
-            <div className="space-y-4">
-              <h2 className="text-base font-bold text-gray-900">Historial de turnos de caja</h2>
-              <ShiftsHistoryTable
-                items={historyItems}
-                loading={loadingHistory}
-                onViewDetail={handleViewDetail}
-                loadingDetailId={loadingDetailId}
-              />
-            </div>
+            <ShiftsHistoryTable
+              title="Historial de turnos de caja"
+              items={historyItems}
+              loading={loadingHistory}
+              onViewDetail={handleViewDetail}
+              loadingDetailId={loadingDetailId}
+            />
           )}
         </div>
       )}
@@ -981,30 +991,41 @@ export function ControlCajaView() {
 }
 
 function ShiftsHistoryTable({
+  title,
   items,
   loading,
   onViewDetail,
   loadingDetailId,
 }: {
+  title: string;
   items: CashShift[];
   loading: boolean;
   onViewDetail: (id: number) => void;
   loadingDetailId: number | null;
 }) {
+  const heading = <h2 className="text-base font-bold text-gray-900 px-5 py-4">{title}</h2>;
+
   if (loading) {
-    return <div className="text-xs text-gray-500 py-6 text-center">Cargando historial de turnos...</div>;
+    return (
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        {heading}
+        <p className="text-xs text-gray-500 pb-6 text-center">Cargando historial de turnos...</p>
+      </div>
+    );
   }
 
   if (items.length === 0) {
     return (
-      <div className="bg-white rounded-2xl border border-gray-200 p-8 text-center text-sm text-gray-400">
-        No hay turnos de caja registrados aún.
+      <div className="bg-white rounded-2xl border border-gray-200 shadow-sm">
+        {heading}
+        <p className="pb-8 px-4 text-center text-sm text-gray-400">No hay turnos de caja registrados aún.</p>
       </div>
     );
   }
 
   return (
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
+      {heading}
       <div className="overflow-x-auto">
         <table className="w-full text-left text-xs">
           <thead>

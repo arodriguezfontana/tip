@@ -37,13 +37,11 @@ from app.services.business_hours_service import (
     proxima_fecha_abierta_a_la_hora,
 )
 from app.services.catalog_service import find_available_products_by_name
-from app.services.mercadopago_service import create_payment_preference
 from app.services.modifier_nlp import (
     extraer_modificadores_de_texto,
     vincular_modificadores_con_db,
 )
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
-from app.services.store_config_service import get_or_create_store_config
 
 logger = logging.getLogger(__name__)
 
@@ -792,7 +790,7 @@ def confirmar_y_guardar_pedido(
         )
         # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
         try:
-            order = create_bot_order(
+            create_bot_order(
                 db,
                 pedido,
                 channel=canal,
@@ -805,31 +803,16 @@ def confirmar_y_guardar_pedido(
 
         horario_texto = f" {describir_horario_programado(scheduled_dt, ahora_local())}" if scheduled_dt else ""
 
-        if metodo_pago == PaymentMethod.MERCADOPAGO.value:
-            store_config = get_or_create_store_config(db)
-            pref = create_payment_preference(order, store_name=store_config.store_name)
-            order.mp_preference_id = pref.get("preference_id")
-            db.commit()
-
-            link_pago_texto = (
-                f"\n\n💳 Link de pago de MercadoPago por el total exacto de ${order.total_amount:,.2f}:\n"
-                f"{pref['init_point']}\n"
-                "(Ingresá al link para abonar tu pedido de forma digital)"
-            )
-            if store_config.mp_alias:
-                link_pago_texto += f"\nAlias de cobro: {store_config.mp_alias}"
-
-            return (
-                f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
-                f"Método de pago: MercadoPago.{link_pago_texto}\n\n"
-                "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
-                "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
-                "¡Muchas gracias por elegirnos!"
-            )
+        # El link de MercadoPago se manda recién cuando el local acepta el pedido (ver start_chat_payment).
+        detalle_pago = (
+            "MercadoPago (te pasamos el link de pago cuando el local acepte tu pedido)"
+            if metodo_pago == PaymentMethod.MERCADOPAGO.value
+            else "Efectivo (abonás al recibir o retirar tu pedido)"
+        )
 
         return (
             f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
-            "Método de pago: Efectivo (abonás al recibir o retirar tu pedido).\n\n"
+            f"Método de pago: {detalle_pago}.\n\n"
             "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
             "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
             "¡Muchas gracias por elegirnos!"

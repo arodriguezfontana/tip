@@ -39,6 +39,9 @@ MENSAJE_SIN_PEDIDO = (
 )
 
 
+AVISO_LINK_AL_ACEPTAR = "Te pasamos el link de pago cuando el local acepte tu pedido."
+
+
 def _plata(monto: Decimal) -> str:
     return f"${monto:,.2f}"
 
@@ -114,6 +117,8 @@ def agregar_items_al_pedido(
             )
 
         if order.payment_method == PaymentMethod.MERCADOPAGO.value:
+            if order.status == OrderStatus.PENDING.value:
+                return encabezado + f"Nuevo total: {_plata(order.total_amount)}. {AVISO_LINK_AL_ACEPTAR}"
             # El link anterior era por el total viejo: se genera uno nuevo por el total actualizado.
             link = _link_de_pago(db, order, diferencia=False)
             return encabezado + (
@@ -165,6 +170,8 @@ def cambiar_metodo_de_pago(
         monto = order.amount_pending if parcial else Decimal(order.total_amount)
         que_se_paga = "la diferencia" if parcial else "el pedido"
         if metodo == PaymentMethod.MERCADOPAGO.value:
+            if order.status == OrderStatus.PENDING.value:
+                return f"Listo ✅ Pagás {que_se_paga} ({_plata(monto)}) por MercadoPago. {AVISO_LINK_AL_ACEPTAR}"
             link = _link_de_pago(db, order, diferencia=parcial)
             return (
                 f"Listo ✅ Te paso el link de MercadoPago por {que_se_paga} ({_plata(monto)}):\n{link}\n"
