@@ -4,6 +4,7 @@ import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { lookupClientByPhone } from '@/services/clientService';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { createCounterOrder } from '@/services/orderService';
+import { fetchCurrentCashShift } from '@/services/cashShiftService';
 import type { Client } from '@/types/client';
 import { COUNTER_PAYMENT_METHODS, MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
@@ -48,6 +49,7 @@ export function TomarPedidoView() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [isPaid, setIsPaid] = useState(false);
   const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [isShiftOpen, setIsShiftOpen] = useState<boolean | null>(null);
 
   // Búsqueda del cliente por teléfono
   const [clientLookup, setClientLookup] = useState<ClientLookup>({ status: 'idle' });
@@ -58,6 +60,20 @@ export function TomarPedidoView() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchCurrentCashShift()
+      .then((status) => {
+        if (active) setIsShiftOpen(status.is_open);
+      })
+      .catch(() => {
+        if (active) setIsShiftOpen(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Busca al cliente por teléfono y autocompleta nombre y dirección. Nunca bloquea la carga:
   // si la búsqueda falla o tarda, el usuario sigue completando los campos a mano.
@@ -199,6 +215,11 @@ export function TomarPedidoView() {
     setLastOrderId(null);
     if (Object.keys(nextErrors).length > 0) return;
 
+    if (isShiftOpen === false) {
+      setSubmitError('No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const order = await createCounterOrder({
@@ -229,6 +250,15 @@ export function TomarPedidoView() {
           <span>
             Pedido <strong>#{lastOrderId}</strong> registrado correctamente. Ya podés tomar el siguiente.
           </span>
+        </div>
+      )}
+
+      {isShiftOpen === false && (
+        <div role="alert" className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Caja cerrada:</span>
+            <span>Debés realizar la apertura de la caja antes de poder registrar o facturar pedidos presenciales.</span>
+          </div>
         </div>
       )}
 
@@ -579,7 +609,8 @@ export function TomarPedidoView() {
             </button>
             <button
               type="submit"
-              disabled={submitting}
+              disabled={submitting || isShiftOpen === false}
+              title={isShiftOpen === false ? 'Debés abrir la caja para confirmar pedidos' : undefined}
               className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? 'Registrando...' : 'Confirmar pedido'}

@@ -5,6 +5,7 @@ y negativos ("sin", "quitale", "no le pongas", "sacale").
 Calcula precios asociados a modificadores positivos y prepara el formateo de comandas [SIN ...] [EXTRA ...].
 """
 
+import difflib
 import re
 import unicodedata
 from typing import TYPE_CHECKING
@@ -39,6 +40,7 @@ def limpiar_nombre_ingrediente(ing: str) -> str:
     """Limpia artículos y puntuación de un ingrediente o extra."""
     s = ing.strip()
     s = re.sub(r'^(?:el|la|los|las|un|una|unos|unas|de|del)\s+', '', s, flags=re.IGNORECASE)
+    s = re.sub(r'(?:\s+por\s+favor|\s+gracias|\s+plis|\s+porfa)$', '', s, flags=re.IGNORECASE)
     s = s.strip(' ,;.|[]()')
     return s.strip()
 
@@ -141,6 +143,8 @@ def extraer_modificadores_de_texto(texto: str, db: "Session | None" = None) -> t
         contenido = texto_limpio[start:end].strip()
         contenido = re.sub(r'^(?:y|pero|,|\s)+', '', contenido, flags=re.IGNORECASE)
         contenido = re.sub(r'(?:y|pero|,|\s)+$', '', contenido, flags=re.IGNORECASE)
+        # Cortar en fin de oración o delimitador de frase fuerte (. ; ! ? \n)
+        contenido = re.split(r'[\.\;\!\?\n\r]+', contenido)[0].strip()
 
         sub_ingredientes = re.split(r'\s*(?:,| y )\s*', contenido)
         for sub_ing in sub_ingredientes:
@@ -176,9 +180,15 @@ def vincular_modificadores_con_db(db: "Session", mods: list[dict]) -> list[dict]
                 if name_norm in k or k in name_norm:
                     matched_ing = ing
                     break
+        if not matched_ing:
+            close_matches = difflib.get_close_matches(name_norm, list(ing_map.keys()), n=1, cutoff=0.75)
+            if close_matches:
+                matched_ing = ing_map[close_matches[0]]
 
         if matched_ing:
             m["ingredient_id"] = matched_ing.id
+            name_clean = matched_ing.name
+            m["name"] = matched_ing.name.lower()
 
         m_type = m.get("type") or m.get("action")
         if m_type in ("negative", "remove"):

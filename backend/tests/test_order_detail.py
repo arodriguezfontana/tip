@@ -19,7 +19,7 @@ def _counter_payload(products, **overrides):
     return payload
 
 
-def test_detalle_incluye_productos_cliente_entrega_y_facturacion(client, products):
+def test_detalle_incluye_productos_cliente_entrega_y_facturacion(client, products, open_shift):
     created = client.post(
         COUNTER_URL, json=_counter_payload(products, payment_method="transferencia", is_paid=True)
     ).json()

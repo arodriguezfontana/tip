@@ -9,6 +9,7 @@ from sqlalchemy.orm import Session
 from app.api import (
     auth_router,
     business_hours_router,
+    cash_shift_router,
     category_router,
     chat_router,
     client_router,
@@ -78,6 +79,7 @@ def health_check(db: Session = Depends(get_db)):
 
 api_router.include_router(auth_router.router, prefix="/auth", tags=["Auth"])
 api_router.include_router(business_hours_router.router, prefix="/business-hours", tags=["Business hours"])
+api_router.include_router(cash_shift_router.router, prefix="/cash-shifts", tags=["Cash shifts"])
 api_router.include_router(category_router.router, prefix="/categories", tags=["Categories"])
 api_router.include_router(chat_router.router, prefix="/chat", tags=["Chatbot"])
 api_router.include_router(client_router.router, prefix="/clients", tags=["Clients"])

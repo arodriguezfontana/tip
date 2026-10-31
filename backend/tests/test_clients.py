@@ -1,5 +1,6 @@
 from unittest.mock import patch
 
+import pytest
 from sqlalchemy.exc import SQLAlchemyError
 
 from app.models.client import Client
@@ -7,6 +8,11 @@ from app.models.order import Order
 
 COUNTER_URL = "/api/v1/orders/counter"
 LOOKUP_URL = "/api/v1/clients/lookup"
+
+
+@pytest.fixture(autouse=True)
+def _auto_open_shift(open_shift):
+    pass
 
 
 def _payload(product, **overrides):

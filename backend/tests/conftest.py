@@ -22,7 +22,8 @@ for _key, _value in _TEST_ENV.items():
 
 import pytest  # noqa: E402
 from fastapi.testclient import TestClient  # noqa: E402
-from sqlalchemy import create_engine  # noqa: E402
+from sqlalchemy import create_engine, event  # noqa: E402
+from sqlalchemy.engine import Engine  # noqa: E402
 from sqlalchemy.orm import sessionmaker  # noqa: E402
 from sqlalchemy.pool import StaticPool  # noqa: E402
 
@@ -31,6 +32,7 @@ from app.core.security import create_access_token, hash_password  # noqa: E402
 from app.db.base import Base  # noqa: E402
 from app.db.session import get_db  # noqa: E402
 from app.main import app  # noqa: E402
+from app.models.cash_shift import CashShift  # noqa: E402
 from app.models.menu import Category, Product  # noqa: E402
 from app.models.user import User  # noqa: E402
 
@@ -46,6 +48,20 @@ else:
         connect_args={"check_same_thread": False},
         poolclass=StaticPool,
     )
+
+
+@event.listens_for(Engine, "connect")
+def _set_sqlite_pragma(dbapi_connection, connection_record):
+    if not TEST_DATABASE_URL:
+        cursor = dbapi_connection.cursor()
+        try:
+            cursor.execute("PRAGMA foreign_keys=ON")
+        except Exception:
+            pass
+        finally:
+            cursor.close()
+
+
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
@@ -61,15 +77,33 @@ def db_session():
 
 
 @pytest.fixture()
+def open_shift(db_session):
+    """Abre un turno de caja para permitir pedidos de mostrador y cobros."""
+    shift = CashShift(initial_amount=10000.0, status="abierta")
+    db_session.add(shift)
+    db_session.commit()
+    return shift
+
+
+@pytest.fixture()
 def client(db_session):
     """Cliente con un administrador ya autenticado (sin token): para probar el panel."""
-    fake_user = User(id=1, email="empleado@test.com", role="ADMIN", is_active=True)
+    admin_user = db_session.query(User).filter(User.email == "empleado@test.com").first()
+    if not admin_user:
+        admin_user = User(
+            email="empleado@test.com",
+            hashed_password=hash_password("clave1234"),
+            role="ADMIN",
+            is_active=True,
+        )
+        db_session.add(admin_user)
+        db_session.commit()
 
     def override_get_db():
         yield db_session
 
     def override_get_current_user():
-        return fake_user
+        return admin_user
 
     app.dependency_overrides[get_db] = override_get_db
     app.dependency_overrides[get_current_user] = override_get_current_user

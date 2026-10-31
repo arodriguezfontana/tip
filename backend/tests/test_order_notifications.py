@@ -5,6 +5,11 @@ import pytest
 from app.models.order import Order
 
 
+@pytest.fixture(autouse=True)
+def _auto_open_shift(open_shift):
+    pass
+
+
 def _create_order(db_session, status="Pendiente", delivery_method="domicilio", channel="telegram", chat_id="12345"):
     order = Order(
         customer_name="Juan Perez",

@@ -186,6 +186,7 @@ class Order(Base):
     delivery_driver_id = Column(
         Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True
     )
+    cash_shift_id = Column(Integer, ForeignKey("cash_shifts.id", ondelete="SET NULL"), nullable=True, index=True)
     source = Column(String(20), nullable=False, default=OrderSource.BOT.value, server_default=OrderSource.BOT.value)
     customer_phone = Column(String(30), nullable=True)
     notes = Column(Text, nullable=True)
@@ -197,6 +198,7 @@ class Order(Base):
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery_driver = relationship("DeliveryDriver", back_populates="orders")
+    cash_shift = relationship("CashShift", back_populates="orders", foreign_keys=[cash_shift_id])
 
     @validates("customer_phone")
     def _normalize_phone(self, _key: str, phone: str | None) -> str | None:
@@ -369,11 +371,18 @@ class Order(Base):
     # --- Modificación por el cliente ----------------------------------------------------------------
 
     @property
+    def is_shift_closed(self) -> bool:
+        """Indica si el turno de caja al que pertenece este pedido ya fue cerrado (sellado)."""
+        return bool(self.cash_shift and not self.cash_shift.is_open)
+
+    @property
     def is_modifiable(self) -> bool:
         """Todavía no salió ni terminó: el cliente puede cambiar el pago o (en la ventana) sumar productos."""
         return OrderStatus(self.status) in _MODIFIABLE_STATUSES
 
     def _require_modifiable(self) -> None:
+        if self.is_shift_closed:
+            raise BusinessRuleError("El turno de caja de este pedido ya está cerrado.")
         if not self.is_modifiable:
             raise OrderNotModifiableError("El pedido ya no admite cambios.")
 
@@ -517,6 +526,9 @@ class Order(Base):
         Al confirmar un pedido para ahora se registra la demora estimada: la indicada o, si no se indica,
         la demora actual del local. Los pedidos programados se entregan en su horario y no llevan demora.
         """
+        if self.is_shift_closed:
+            raise BusinessRuleError("El turno de caja de este pedido ya está cerrado.")
+
         new_status = OrderStatus(new_status)
         if not self.can_transition_to(new_status):
             raise InvalidTransitionError(self.status, new_status.value)
