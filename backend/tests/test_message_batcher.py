@@ -194,3 +194,16 @@ def test_avisa_si_llegaron_mensajes_mientras_se_respondia_el_grupo_anterior():
     asyncio.run(escenario())
 
     assert estado == {"esperando_durante": True, "esperando_al_final": False}
+
+
+def test_un_mensaje_puede_traer_su_propia_espera_mas_corta():
+    """Un audio ya esperó lo que tardó en transcribirse: se responde sin la espera completa."""
+    agrupador, procesar = _agrupador(espera=1.0)
+
+    async def escenario():
+        agrupador.recibir("1", "Quiero una muzza", espera_segundos=ESPERA)
+        await asyncio.sleep(ESPERA * 3)
+
+    asyncio.run(escenario())
+
+    procesar.assert_awaited_once_with("1", "Quiero una muzza")

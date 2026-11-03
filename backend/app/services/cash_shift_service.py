@@ -35,13 +35,12 @@ def calculate_shift_summary(shift: CashShift) -> CashShiftSummaryBreakdown:
 
     billable_orders = [o for o in shift.orders if o.is_billable]
 
-    for order in billable_orders:
-        amt = to_money(order.amount_paid) if not order.is_paid else to_money(order.total_amount)
+    for method, amt in (payment for order in billable_orders for payment in order.collected_payments):
         if amt <= 0:
             continue
 
-        method = (order.balance_payment_method or order.payment_method or "").lower()
-        if method == PaymentMethod.CASH.value or order.is_cash_payment:
+        method = (method or "").lower()
+        if method == PaymentMethod.CASH.value:
             cash_sales += amt
         elif method == PaymentMethod.MERCADOPAGO.value:
             mercadopago_sales += amt

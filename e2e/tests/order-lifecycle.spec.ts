@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clearBoard, column, createWebOrder, goToSection, loginAsAdmin, money, orderCard, unique } from './helpers';
+import { clearBoard, column, createWebOrder, ensureOpenCashShift, goToSection, loginAsAdmin, money, orderCard, unique } from './helpers';
 
 test.describe('Ciclo de vida de un pedido en el panel', () => {
   test.beforeEach(async ({ request }) => {
@@ -41,7 +41,12 @@ test.describe('Ciclo de vida de un pedido en el panel', () => {
     const enCamino = orderCard(column(page, 'En Camino'), order.id);
     await expect(enCamino).toBeVisible();
 
+    // El pedido sigue sin abonar: al finalizarlo el panel pide confirmar el cobro, que entra al turno de caja abierto.
+    await ensureOpenCashShift(request);
     await enCamino.getByRole('button', { name: 'Finalizar' }).click();
+    const cobro = page.getByRole('dialog', { name: /El pedido aún no está pago/ });
+    await cobro.getByRole('button', { name: 'Marcar como pago y finalizar' }).click();
+    await expect(cobro).toBeHidden();
     await expect(page.getByRole('button', { name: `Ver detalle del pedido #${order.id}`, exact: true })).toBeHidden();
 
     // Queda en el historial como finalizado.

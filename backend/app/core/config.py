@@ -51,8 +51,14 @@ class Settings(BaseSettings):
 
     # Los mensajes que un cliente manda seguidos al bot se esperan este tiempo y se responden juntos, de una vez.
     # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
-    BOT_BATCH_WINDOW_SECONDS: float = 2.0
-    BOT_BATCH_MAX_WAIT_SECONDS: float = 6.0
+    BOT_BATCH_WINDOW_SECONDS: float = 5.0
+    BOT_BATCH_MAX_WAIT_SECONDS: float = 15.0
+
+    # Modelos de Gemini del bot (chat y transcripción de mensajes de voz, con la misma GOOGLE_API_KEY), todos del
+    # plan gratuito. Si el principal no responde a tiempo o falla, se prueban los de respaldo en orden (separados
+    # por coma; vacío: sin respaldo). Cada modelo tiene su propia cuota gratuita. Ver gemini_models.py.
+    BOT_LLM_MODEL: str = "gemini-3.5-flash-lite"
+    BOT_LLM_FALLBACK_MODELS: str = "gemini-flash-lite-latest,gemini-3.1-flash-lite"
 
     # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
     RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"

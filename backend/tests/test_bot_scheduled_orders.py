@@ -128,6 +128,7 @@ def test_resumen_final_muestra_productos_y_datos_de_entrega(db_session, muzza):
             "shipping_address": "Belgrano 95",
             "hora_programada": "21:00",
             "observaciones": "Sin cebolla",
+            "metodo_pago": "efectivo",
         }))
 
     resumen = respuesta["mensaje_para_usuario"]

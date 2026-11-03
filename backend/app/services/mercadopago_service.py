@@ -10,6 +10,7 @@ from sqlalchemy.orm import Session
 
 from app.core.config import settings
 from app.models.order import Order, OrderStatus, PaymentMethod
+from app.models.store_config import StoreConfig
 
 logger = logging.getLogger(__name__)
 
@@ -145,6 +146,30 @@ def start_web_payment(db: Session, order: Order, store_name: str) -> str:
     order.mp_preference_id = pref.get("preference_id")
     db.commit()
     return pref["init_point"]
+
+
+def start_chat_payment(db: Session, order: Order, store_config: StoreConfig) -> str | None:
+    """Crea el cobro de un pedido del chat ya aceptado y devuelve las instrucciones de pago para el cliente.
+
+    Devuelve None si no hay nada que cobrar por MercadoPago o si el pedido no vino por un chat.
+    """
+    if not order.channel or not order.chat_id or not order.awaits_mercadopago_payment:
+        return None
+
+    balance = order.has_partial_payment
+    pref = create_payment_preference(order, store_name=store_config.store_name, balance=balance)
+    order.mp_preference_id = pref.get("preference_id")
+    db.commit()
+
+    que_se_paga = "la diferencia" if balance else "el total exacto"
+    instrucciones = (
+        f"💳 Link de pago de MercadoPago por {que_se_paga} de ${order.amount_pending:,.2f}:\n"
+        f"{pref['init_point']}\n"
+        "(Ingresá al link para abonar tu pedido de forma digital)"
+    )
+    if store_config.mp_alias:
+        instrucciones += f"\nAlias de cobro: {store_config.mp_alias}"
+    return instrucciones
 
 
 def fetch_payment_details(payment_id: str) -> dict[str, Any] | None:

@@ -1,6 +1,7 @@
 import hashlib
 import hmac
 import logging
+from dataclasses import dataclass
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -40,8 +41,18 @@ def verificar_webhook(
     return PlainTextResponse(hub_challenge or "")
 
 
-def _mensajes_de_texto(data: dict):
-    """(teléfono, id del mensaje, texto, nombre del perfil) de cada mensaje de texto recibido en la notificación."""
+@dataclass(frozen=True)
+class _MensajeRecibido:
+    telefono: str
+    message_id: str | None
+    nombre: str | None
+    # Cada mensaje trae texto o, si es un mensaje de voz, el id del audio en Meta.
+    texto: str | None = None
+    audio_id: str | None = None
+
+
+def _mensajes_recibidos(data: dict):
+    """Mensajes de texto y de voz recibidos en la notificación (lo demás, como imágenes o ubicaciones, se ignora)."""
     for entrada in data.get("entry") or []:
         for cambio in entrada.get("changes") or []:
             valor = cambio.get("value") or {}
@@ -50,9 +61,17 @@ def _mensajes_de_texto(data: dict):
                 for contacto in valor.get("contacts") or []
             }
             for mensaje in valor.get("messages") or []:
+                telefono = mensaje.get("from")
+                if not telefono:
+                    continue
+                datos = {"telefono": telefono, "message_id": mensaje.get("id"), "nombre": nombres.get(telefono)}
                 texto = (mensaje.get("text") or {}).get("body")
-                if mensaje.get("type") == "text" and texto and mensaje.get("from"):
-                    yield mensaje["from"], mensaje.get("id"), texto, nombres.get(mensaje["from"])
+                # Las notas de voz y los audios adjuntos llegan como "audio" (.ogg o .mp4).
+                audio_id = (mensaje.get("audio") or {}).get("id")
+                if mensaje.get("type") == "text" and texto:
+                    yield _MensajeRecibido(**datos, texto=texto)
+                elif mensaje.get("type") == "audio" and audio_id:
+                    yield _MensajeRecibido(**datos, audio_id=audio_id)
 
 
 @router.post("/webhook")
@@ -68,12 +87,16 @@ async def recibir_mensaje(request: Request, x_hub_signature_256: str | None = He
         return {"status": "ok"}
 
     canal = obtener_canal(Channel.WHATSAPP)
-    for telefono, message_id, texto, nombre in _mensajes_de_texto(data):
-        if isinstance(canal, WhatsAppChannel) and message_id:
-            canal.recordar_mensaje_recibido(telefono, message_id)
+    for mensaje in _mensajes_recibidos(data):
+        if isinstance(canal, WhatsAppChannel) and mensaje.message_id:
+            canal.recordar_mensaje_recibido(mensaje.telefono, mensaje.message_id)
         # En WhatsApp el chat es el teléfono del cliente.
-        bot_service.registrar_perfil(Channel.WHATSAPP, telefono, nombre, telefono=telefono)
-        bot_service.recibir_mensaje(Channel.WHATSAPP, telefono, texto)
+        bot_service.registrar_perfil(Channel.WHATSAPP, mensaje.telefono, mensaje.nombre, telefono=mensaje.telefono)
+        if mensaje.texto:
+            bot_service.recibir_mensaje(Channel.WHATSAPP, mensaje.telefono, mensaje.texto)
+        elif mensaje.audio_id:
+            # Se transcribe en segundo plano: Meta espera la confirmación enseguida.
+            bot_service.recibir_audio(Channel.WHATSAPP, mensaje.telefono, mensaje.audio_id)
 
     # Meta reintenta lo que no se confirma con 200 (también llegan avisos de entrega/lectura, que se ignoran).
     return {"status": "ok"}

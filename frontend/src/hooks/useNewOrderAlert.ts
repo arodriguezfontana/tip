@@ -2,6 +2,7 @@ import { useEffect, useRef, useState, useSyncExternalStore } from 'react';
 import {
   getAlertAudioState,
   playAlertSound,
+  playModifiedOrderSound,
   subscribeAlertAudioState,
   unlockAudio,
 } from '@/utils/alertSound';
@@ -28,16 +29,45 @@ function saveEnabledPreference(enabled: boolean) {
 }
 
 /**
- * Reproduce una alerta sonora (por defecto la de pedidos) mientras haya pedidos pendientes de aceptar/rechazar:
- * suena apenas entra un pedido nuevo y se repite cada ALERT_REPEAT_MS hasta que no quede ninguno.
+ * Suena mientras la lista tenga algún id: apenas aparece uno, cada ALERT_REPEAT_MS hasta que se vacía, y al
+ * instante cuando se suma uno nuevo aunque ya hubiera otros.
  */
-export function useNewOrderAlert(pendingOrderIds: number[], playSound: () => boolean = playAlertSound) {
+function useRepeatingAlert(ids: number[], enabled: boolean, playSound: () => boolean) {
+  const key = [...ids].sort((a, b) => a - b).join(',');
+  const hasIds = key !== '';
+  const knownIdsRef = useRef<Set<string> | null>(null);
+
+  useEffect(() => {
+    if (!enabled || !hasIds) return;
+    playSound();
+    const intervalId = setInterval(playSound, ALERT_REPEAT_MS);
+    return () => clearInterval(intervalId);
+  }, [enabled, hasIds, playSound]);
+
+  useEffect(() => {
+    const current = new Set(key ? key.split(',') : []);
+    const previous = knownIdsRef.current;
+    knownIdsRef.current = current;
+    if (!enabled || !previous || previous.size === 0) return;
+    if ([...current].some((id) => !previous.has(id))) playSound();
+  }, [key, enabled, playSound]);
+}
+
+/**
+ * Reproduce una alerta sonora (por defecto la de pedidos) mientras haya pedidos pendientes de aceptar/rechazar,
+ * y otra distinta mientras haya pedidos confirmados que el cliente modificó y cocina todavía no vio.
+ * Las dos se silencian juntas.
+ */
+export function useNewOrderAlert(
+  pendingOrderIds: number[],
+  playSound: () => boolean = playAlertSound,
+  modifiedOrderIds: number[] = []
+) {
   const [enabled, setEnabled] = useState(readEnabledPreference);
   const audioState = useSyncExternalStore(subscribeAlertAudioState, getAlertAudioState);
 
-  const pendingKey = [...pendingOrderIds].sort((a, b) => a - b).join(',');
-  const hasPending = pendingKey !== '';
-  const knownIdsRef = useRef<Set<string> | null>(null);
+  useRepeatingAlert(pendingOrderIds, enabled, playSound);
+  useRepeatingAlert(modifiedOrderIds, enabled, playModifiedOrderSound);
 
   // Silenciar (o activar) en una pestaña aplica también a las otras que tengan el panel abierto.
   useEffect(() => {
@@ -47,24 +77,6 @@ export function useNewOrderAlert(pendingOrderIds: number[], playSound: () => boo
     window.addEventListener('storage', handleStorage);
     return () => window.removeEventListener('storage', handleStorage);
   }, []);
-
-  // Repetición: arranca (sonando de inmediato) cuando aparecen pendientes y corta cuando no queda ninguno.
-  useEffect(() => {
-    if (!enabled || !hasPending) return;
-    playSound();
-    const intervalId = setInterval(playSound, ALERT_REPEAT_MS);
-    return () => clearInterval(intervalId);
-  }, [enabled, hasPending, playSound]);
-
-  // Pedido nuevo mientras ya había otros pendientes: suena al instante, sin esperar la próxima repetición.
-  useEffect(() => {
-    const ids = new Set(pendingKey ? pendingKey.split(',') : []);
-    const previous = knownIdsRef.current;
-    knownIdsRef.current = ids;
-    if (!enabled || !previous || previous.size === 0) return;
-    const hasNewOrder = [...ids].some((id) => !previous.has(id));
-    if (hasNewOrder) playSound();
-  }, [pendingKey, enabled, playSound]);
 
   const toggleEnabled = () => {
     const next = !enabled;

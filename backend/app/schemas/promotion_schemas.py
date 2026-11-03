@@ -100,7 +100,7 @@ class PromotionImagesResponse(BaseModel):
                     id=image.id,
                     position=image.position,
                     size_bytes=image.size_bytes,
-                    image_url=f"/api/promotion-images/{image.id}/file?v={image.version}",
+                    image_url=f"/promotion-image/{image.id}/file?v={image.version}",
                     updated_at=image.updated_at,
                 )
                 for image in images
