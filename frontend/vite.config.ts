@@ -14,6 +14,10 @@ export default defineConfig({
       '@': path.resolve(import.meta.dirname, './src'),
     },
   },
+  // Railway sirve el front bajo un dominio *.up.railway.app; sin esto `vite preview` lo rechaza.
+  preview: {
+    allowedHosts: true,
+  },
   test: {
     environment: 'jsdom',
     setupFiles: ['./src/test/setup.ts'],
