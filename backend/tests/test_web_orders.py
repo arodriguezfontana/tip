@@ -2,7 +2,9 @@ from unittest.mock import patch
 
 import pytest
 
+from app.models.menu import Ingredient, Product, ProductIngredient
 from app.models.order import Order, OrderItem
+from app.repositories import ingredient_repository
 
 WEB_ORDERS_URL = "/api/v1/orders/web"
 
@@ -38,7 +40,7 @@ def test_crea_pedido_web_aceptado_automaticamente(public_client, db_session, pro
     assert order.source == "web"
     assert order.status == "Confirmado"
     assert order.estimated_minutes == 15
-    assert order.customer_phone == "+54 11 5555-1234"
+    assert order.customer_phone == "1155551234"
     assert order.notes == "Tocar timbre 2B"
     assert order.shipping_address == "Calle Falsa 123"
     assert {(i.product_id, i.quantity, i.unit_price) for i in order.items} == {
@@ -227,3 +229,152 @@ def test_pedido_web_rechaza_medios_de_pago_no_ofrecidos(public_client, products,
     )
 
     assert response.status_code == 422
+
+
+def test_pedido_web_pizza_mitad_y_mitad_cobra_gusto_mas_caro(public_client, client, db_session, products):
+    napo = Product(
+        name="Pizza Napolitana",
+        price=9500.0,
+        category_id=products["muzza"].category_id,
+        dietary_restrictions=[],
+    )
+    db_session.add(napo)
+    db_session.commit()
+
+    items = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 2,
+            "secondary_product_id": napo.id,
+        }
+    ]
+
+    response = public_client.post(WEB_ORDERS_URL, json=_payload(items))
+    assert response.status_code == 201
+    body = response.json()
+    assert body["total_amount"] == 2 * 9500.0
+    assert body["items"][0]["product_name"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+    assert body["items"][0]["secondary_product_id"] == napo.id
+
+    order = db_session.query(Order).filter(Order.id == body["id"]).one()
+    assert len(order.items) == 1
+    item = order.items[0]
+    assert item.product_id == products["muzza"].id
+    assert item.secondary_product_id == napo.id
+    assert item.unit_price == 9500.0
+    assert item.display_name == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+
+    # Verificación en la comanda / detalle de gestión
+    comanda = client.get(f"/api/v1/orders/{order.id}")
+    assert comanda.status_code == 200
+    assert comanda.json()["items"][0]["product_name"] == "Pizza Grande [1/2 Muzzarella | 1/2 Napolitana]"
+
+
+def test_pedido_web_pizza_mitad_y_mitad_valida_disponibilidad_ambos_gustos(public_client, db_session, products):
+    # Gusto secundario agotado
+    items = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 1,
+            "secondary_product_id": products["agotada"].id,
+        }
+    ]
+    response = public_client.post(WEB_ORDERS_URL, json=_payload(items))
+    assert response.status_code == 400
+    assert "Pizza Agotada" in response.json()["detail"]
+
+    # Gusto secundario inexistente
+    items_inexistente = [
+        {
+            "product_id": products["muzza"].id,
+            "quantity": 1,
+            "secondary_product_id": 99999,
+        }
+    ]
+    response2 = public_client.post(WEB_ORDERS_URL, json=_payload(items_inexistente))
+    assert response2.status_code == 400
+    assert "no existen" in response2.json()["detail"]
+
+
+def test_pedido_web_con_exclusiones_en_observaciones(public_client, client, db_session, products):
+    # Crear ingrediente Cebolla y asociarlo a la pizza
+    cebolla = Ingredient(name="Cebolla", unit="gramos", extra_price=0)
+    tomate = Ingredient(name="Tomate", unit="gramos", extra_price=0)
+    db_session.add_all([cebolla, tomate])
+    db_session.flush()
+    db_session.add(ProductIngredient(product_id=products["muzza"].id, ingredient_id=cebolla.id, quantity=50))
+    db_session.add(ProductIngredient(product_id=products["muzza"].id, ingredient_id=tomate.id, quantity=60))
+    db_session.commit()
+
+    items = [{"product_id": products["muzza"].id, "quantity": 1}]
+    payload = _payload(items, notes="Sin cebolla, timbre 2B")
+
+    response = public_client.post(WEB_ORDERS_URL, json=payload)
+    assert response.status_code == 201
+
+    order = db_session.query(Order).filter(Order.id == response.json()["id"]).one()
+    # Las observaciones originales se preservan completas
+    assert order.notes == "Sin cebolla, timbre 2B"
+    # El ítem contiene la modificación de exclusión
+    assert len(order.items) == 1
+    item = order.items[0]
+    assert len(item.modifications) == 1
+    assert item.modifications[0]["type"] == "negative"
+    assert item.modifications[0]["tag"] == "[SIN CEBOLLA]"
+    assert item.modifications[0]["ingredient_id"] == cebolla.id
+
+    # La comanda / detalle expone la modificación
+    comanda = client.get(f"/api/v1/orders/{order.id}")
+    assert comanda.status_code == 200
+    item_comanda = comanda.json()["items"][0]
+    assert len(item_comanda["modifications"]) == 1
+    assert item_comanda["modifications"][0]["tag"] == "[SIN CEBOLLA]"
+
+    # Al finalizar el pedido, el inventario no descuenta la cebolla excluida
+    order.status = "Finalizado"
+    db_session.commit()
+
+    consumo = ingredient_repository.consumption(db_session, None, None, None)
+    consumo_dict = {name: total for _, name, _, total in consumo}
+    assert consumo_dict.get("Cebolla", 0) == 0.0
+    assert consumo_dict.get("Tomate", 0) == 60.0
+
+
+def test_pedido_web_con_extras_en_observaciones_suma_precio(public_client, db_session, products):
+    # Crear ingrediente Queso con costo extra
+    queso = Ingredient(name="Queso", unit="gramos", extra_price=1000)
+    db_session.add(queso)
+    db_session.flush()
+    db_session.add(ProductIngredient(product_id=products["muzza"].id, ingredient_id=queso.id, quantity=100))
+    db_session.commit()
+
+    items = [{"product_id": products["muzza"].id, "quantity": 2}]
+    payload = _payload(items, notes="Con extra queso por favor")
+
+    response = public_client.post(WEB_ORDERS_URL, json=payload)
+    assert response.status_code == 201
+    body = response.json()
+
+    # Base 8500 + 1000 de extra queso = 9500 c/u -> x2 = 19000
+    assert body["total_amount"] == 19000.0
+
+    order = db_session.query(Order).filter(Order.id == body["id"]).one()
+    assert order.total_amount == 19000.0
+    assert order.items[0].unit_price == 9500.0
+    assert len(order.items[0].modifications) == 1
+    assert order.items[0].modifications[0]["type"] == "positive"
+    assert order.items[0].modifications[0]["tag"] == "[EXTRA QUESO]"
+
+
+def test_pedido_web_observaciones_sin_modificadores_no_agrega_tags(public_client, db_session, products):
+    items = [{"product_id": products["muzza"].id, "quantity": 1}]
+    payload = _payload(items, notes="Dejar en recepcion de PB, depto 4")
+
+    response = public_client.post(WEB_ORDERS_URL, json=payload)
+    assert response.status_code == 201
+
+    order = db_session.query(Order).filter(Order.id == response.json()["id"]).one()
+    assert order.notes == "Dejar en recepcion de PB, depto 4"
+    assert len(order.items[0].modifications) == 0
+
+

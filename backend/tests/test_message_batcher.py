@@ -172,3 +172,25 @@ def test_no_deja_estado_acumulado_cuando_termina():
 
     assert agrupador._chats == {}
     assert agrupador._tareas == set()
+
+
+def test_avisa_si_llegaron_mensajes_mientras_se_respondia_el_grupo_anterior():
+    estado = {}
+
+    async def procesar(chat_id, texto):
+        if texto == "Hola":
+            agrupador.recibir("1", "Quiero una muzza")  # llega mientras se responde el primero
+            estado["esperando_durante"] = agrupador.hay_mensajes_esperando("1")
+        else:
+            estado["esperando_al_final"] = agrupador.hay_mensajes_esperando("1")
+
+    agrupador, _ = _agrupador(procesar=procesar)
+
+    async def escenario():
+        assert not agrupador.hay_mensajes_esperando("1")
+        agrupador.recibir("1", "Hola")
+        await asyncio.sleep(ESPERA * 4)
+
+    asyncio.run(escenario())
+
+    assert estado == {"esperando_durante": True, "esperando_al_final": False}

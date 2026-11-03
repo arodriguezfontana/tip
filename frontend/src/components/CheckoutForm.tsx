@@ -73,7 +73,13 @@ export function CheckoutForm({
         delivery_method: deliveryMethod,
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
-        items: items.map((item) => ({ product_id: item.product.id, quantity: item.quantity })),
+        items: items.map((item) => ({
+          product_id: item.promotion ? undefined : item.product?.id,
+          promotion_id: item.promotion ? item.promotion.id : undefined,
+          quantity: item.quantity,
+          secondary_product_id: item.secondary_product?.id,
+          custom_name: item.custom_name,
+        })),
         payment_method: paymentMethod,
       });
       onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes, paymentMethod });
@@ -232,8 +238,12 @@ export function CheckoutForm({
               value={notes}
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
+              placeholder="Ej: Sin cebolla, con extra queso, timbre 2B…"
               className="w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
             />
+            <p className="text-xs text-gray-500 mt-1">
+              Podés indicar exclusiones y extras en lenguaje natural (ej. &ldquo;Sin cebolla&rdquo;, &ldquo;Con extra queso&rdquo;).
+            </p>
           </div>
 
           <div>

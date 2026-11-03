@@ -153,20 +153,22 @@ def _category_with_products(db: Session, category_id: int) -> Category:
     return category
 
 
-def create_category(db: Session, name: str, product_ids: list[int]) -> Category:
+def create_category(db: Session, name: str, product_ids: list[int], sector: str = "cocina") -> Category:
     _check_unique_category_name(db, name)
-    category = Category(name=name)
+    category = Category(name=name, sector=sector)
     with transaction(db):
         category_repository.add(db, category)
         category.replace_products(_products_by_ids(db, product_ids))
     return _category_with_products(db, category.id)
 
 
-def update_category(db: Session, category_id: int, name: str, product_ids: list[int]) -> Category:
+def update_category(db: Session, category_id: int, name: str, product_ids: list[int], sector: str | None = None) -> Category:
     category = _get_category(db, category_id)
     _check_unique_category_name(db, name, exclude_id=category_id)
     with transaction(db):
         category.name = name
+        if sector is not None:
+            category.sector = sector
         category.replace_products(_products_by_ids(db, product_ids))
     return _category_with_products(db, category_id)
 

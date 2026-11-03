@@ -1,11 +1,13 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderStatus, PaymentMethod } from '@/types/order';
+import type { AdminOrder, OrderStatus, SectorFilter } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
+import type { DeliveryDriver } from '@/types/deliveryDriver';
+import { BellIcon, DeliveryIcon, PaymentMethodIcon } from '@/components/Icons';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -19,19 +21,10 @@ const DELAY_BADGE_CLASS: Record<DelayLevel, string> = {
   late: 'bg-red-100 text-red-700',
 };
 
-const PAYMENT_METHOD_ICON: Record<PaymentMethod, string> = {
-  efectivo: '💵',
-  mercadopago: '💳',
-  transferencia: '🏦',
-  tarjeta: '💳',
-};
-
 const DELIVERY_METHOD_LABEL: Record<AdminOrder['delivery_method'], string> = {
   domicilio: 'A domicilio',
   retiro: 'Retiro en local',
 };
-
-import type { DeliveryDriver } from '@/types/deliveryDriver';
 
 interface ComandaCardProps {
   order: AdminOrder;
@@ -40,10 +33,18 @@ interface ComandaCardProps {
   onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
   /** Marca el pedido como abonado. */
   onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Cocina vio los productos que el cliente agregó al pedido. */
+  onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
   /** Lista de repartidores activos disponibles para asignar. */
   activeDrivers?: DeliveryDriver[];
   /** Abre la ventana con el detalle completo del pedido. */
   onOpenDetail?: (order: AdminOrder) => void;
+  /** Sector activo seleccionado en el tablero: 'todos', 'pizzeria', 'cocina', 'barra'. */
+  selectedSector?: SectorFilter;
+  /** Callback opcional de ítem (para compatibilidad). */
+  onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+  /** Callback opcional de sector (para compatibilidad). */
+  onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
 }
 
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
@@ -54,14 +55,19 @@ export function ComandaCard({
   onStatusChange,
   onAssignDriver,
   onMarkPaid,
+  onAcknowledgeUpdate,
   activeDrivers = [],
   onOpenDetail,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
+  const hasKitchenUpdate = Boolean(order.kitchen_update_pending);
+  // Pago mixto: ya se cobró una parte y el resto (la diferencia) se cobra aparte, ej. en efectivo al repartidor.
+  const hasPartialPayment = !order.is_paid && (order.paid_amount ?? 0) > 0;
   // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
   const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
 
@@ -88,7 +94,7 @@ export function ComandaCard({
   return (
     <div
       onClick={onOpenDetail ? () => onOpenDetail(order) : undefined}
-      className={`@container bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
+      className={`@container bg-white rounded-2xl border p-4 transition-all shadow-xs hover:shadow-md ${onOpenDetail ? 'cursor-pointer' : ''} ${hasKitchenUpdate ? 'border-amber-400 ring-2 ring-amber-300 bg-amber-50/30' : isOverdue ? 'border-red-300 bg-red-50/20' : 'border-gray-100'}`}
     >
       <div className="flex flex-col gap-3">
         <div className="flex items-center justify-between border-b border-gray-50 pb-2">
@@ -121,9 +127,43 @@ export function ComandaCard({
           </span>
         </div>
 
+        {hasKitchenUpdate && (
+          <div
+            role="alert"
+            onClick={stopPropagation}
+            className="flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
+          >
+            <span className="inline-flex items-center gap-1.5">
+              <BellIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
+              Pedido actualizado: el cliente agregó productos
+            </span>
+            {onAcknowledgeUpdate && (
+              <button
+                type="button"
+                disabled={acknowledging}
+                onClick={async () => {
+                  setAcknowledging(true);
+                  try {
+                    await onAcknowledgeUpdate(order.id);
+                  } finally {
+                    setAcknowledging(false);
+                  }
+                }}
+                className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-2.5 py-1 transition"
+              >
+                Visto
+              </button>
+            )}
+          </div>
+        )}
+
         <div className="text-sm space-y-1">
           <p className="font-medium text-gray-900">{order.customer_name}</p>
-          <p className="text-xs text-gray-500">{DELIVERY_METHOD_LABEL[order.delivery_method]}</p>
+          <p className="text-xs text-gray-500 break-words">
+            {order.delivery_method === 'domicilio' && order.shipping_address?.trim()
+              ? order.shipping_address
+              : DELIVERY_METHOD_LABEL[order.delivery_method]}
+          </p>
           <p className="text-xs text-gray-500">Tel: {order.customer_phone || '—'}</p>
           <p className={`text-xs break-words ${order.notes ? 'text-gray-600 italic' : 'text-gray-400'}`}>
             {order.notes ? `“${order.notes}”` : 'Sin observaciones'}
@@ -140,7 +180,7 @@ export function ComandaCard({
                 : 'text-blue-700 bg-white border border-dashed border-blue-300 hover:bg-blue-50'
             } ${pending ? 'opacity-60' : ''}`}
           >
-            <span aria-hidden="true">🛵</span>
+            <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
             {order.delivery_driver_name ? (
               <>
                 <span>Repartidor:</span>
@@ -184,7 +224,8 @@ export function ComandaCard({
         ) : (
           order.delivery_driver_name && (
             <p className="self-start text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
-              <span>🛵 Repartidor:</span>
+              <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
+              <span>Repartidor:</span>
               <span className="font-bold">{order.delivery_driver_name}</span>
             </p>
           )
@@ -208,12 +249,21 @@ export function ComandaCard({
 
         {/* Medio de pago y si ya está abonado; si está pendiente, un clic lo marca como abonado. */}
         <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          <span className="bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1">
+          {hasPartialPayment && (
+            <>
+              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+                Pagado {order.payment_method ? PAYMENT_METHOD_LABEL[order.payment_method] : ''}: {formatCurrency(order.paid_amount ?? 0)}
+              </span>
+              <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+                Cobrar {order.balance_payment_method ? PAYMENT_METHOD_LABEL[order.balance_payment_method] : 'diferencia'}:{' '}
+                {formatCurrency(order.pending_amount ?? 0)}
+              </span>
+            </>
+          )}
+          <span className={`bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1.5 ${hasPartialPayment ? 'hidden' : ''}`}>
             {order.payment_method ? (
               <>
-                <span aria-hidden="true" className="@max-[205px]:hidden">
-                  {PAYMENT_METHOD_ICON[order.payment_method]}
-                </span>
+                <PaymentMethodIcon method={order.payment_method} className="w-3.5 h-3.5 shrink-0 @max-[205px]:hidden" />
                 {PAYMENT_METHOD_LABEL[order.payment_method]}
               </>
             ) : (
@@ -225,7 +275,7 @@ export function ComandaCard({
             <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
               Abonado
             </span>
-          ) : onMarkPaid ? (
+          ) : hasPartialPayment ? null : onMarkPaid ? (
             <button
               type="button"
               disabled={markingPaid}
@@ -294,9 +344,9 @@ export function ComandaCard({
               type="button"
               disabled={pending}
               onClick={() => handleClick(order.delivery_method === 'retiro' ? 'Listo para Retirar' : 'En Camino')}
-              className="w-full bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
+              className="w-full py-2 rounded-xl text-xs font-bold transition shadow-xs flex items-center justify-center gap-1.5 bg-blue-600 hover:bg-blue-700 disabled:opacity-50 text-white"
             >
-              {order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}
+              <span>{order.delivery_method === 'retiro' ? 'Marcar Listo para Retirar' : 'Marcar En Camino'}</span>
             </button>
           </div>
         )}

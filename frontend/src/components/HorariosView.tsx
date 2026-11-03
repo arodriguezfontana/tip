@@ -5,6 +5,7 @@ import { fetchBusinessHours, updateBusinessHours } from '@/services/businessHour
 import type { BusinessHoursRange, BusinessHoursStatus } from '@/types/businessHours';
 import { DAY_NAMES, groupRangesByDay } from '@/utils/businessHours';
 import { getErrorMessage } from '@/utils/errors';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 interface EditableRange {
   opens_at: string;
@@ -133,10 +134,10 @@ export function HorariosView() {
 
       {loadError && <div className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{loadError}</div>}
 
-      {!draft && !loadError && <p className="text-sm text-gray-500 text-center py-16">Cargando horarios...</p>}
+      {!draft && !loadError && <PanelNote>Cargando horarios...</PanelNote>}
 
       {draft && (
-        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs divide-y divide-gray-100 lg:flex-1 lg:min-h-0 lg:overflow-y-auto">
+        <div className="bg-white rounded-2xl border border-gray-100 shadow-xs divide-y divide-gray-100 lg:flex-1 lg:min-h-48 lg:overflow-y-auto">
           {DAY_NAMES.map((name, day) => (
             <section key={day} aria-label={name} className="px-5 py-4 flex flex-col sm:flex-row sm:items-start gap-3">
               <h2 className="w-28 shrink-0 text-sm font-semibold text-gray-900 sm:pt-2">{name}</h2>

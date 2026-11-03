@@ -2,15 +2,20 @@ import { useEffect, useRef, useState } from 'react';
 import backgroundBistro from '@/assets/background_bistro.jpg';
 import backgroundKitchen from '@/assets/background_kitchen.jpg';
 import backgroundTrattoria from '@/assets/background_trattoria.jpg';
+import { PanelBgPicker } from '@/components/PanelBgPicker';
 import { fetchStoreConfig, updateStoreConfig } from '@/services/storeConfigService';
 import {
+  PRESET_THEME_KEYS,
   THEME_OPTIONS,
+  getThemeOption,
   type LoginBgOption,
+  type PanelBgOption,
   type StoreConfig,
   type ThemeColor,
 } from '@/types/storeConfig';
 import { resizeImageToDataUrl } from '@/utils/images';
 import { applyThemeColor } from '@/utils/theme';
+import { CreditCardIcon, LocationPinIcon, PhoneIcon } from '@/components/Icons';
 
 const LOGIN_BG_CHOICES: {
   id: Exclude<LoginBgOption, 'custom'>;
@@ -50,9 +55,13 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
   const [themeColor, setThemeColor] = useState<ThemeColor>('black');
   const [loginBg, setLoginBg] = useState<LoginBgOption>('bistro');
   const [loginBgImage, setLoginBgImage] = useState<string | null>(null);
+  const [panelBg, setPanelBg] = useState<PanelBgOption>('none');
+  const [panelBgImage, setPanelBgImage] = useState<string | null>(null);
+  const [panelBgColor, setPanelBgColor] = useState<string | null>(null);
   const [mpAlias, setMpAlias] = useState('');
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const colorInputRef = useRef<HTMLInputElement>(null);
   const bgFileInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -68,6 +77,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         setThemeColor(data.theme_color || 'black');
         setLoginBg(data.login_bg || 'bistro');
         setLoginBgImage(data.login_bg_image || null);
+        setPanelBg(data.panel_bg || 'none');
+        setPanelBgImage(data.panel_bg_image || null);
+        setPanelBgColor(data.panel_bg_color || null);
         setMpAlias(data.mp_alias || '');
         applyThemeColor(data.theme_color || 'black');
       })
@@ -165,6 +177,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         theme_color: themeColor,
         login_bg: loginBg,
         login_bg_image: loginBgImage,
+        panel_bg: panelBg,
+        panel_bg_image: panelBgImage,
+        panel_bg_color: panelBgColor,
         mp_alias: mpAlias.trim() || null,
       });
 
@@ -175,6 +190,9 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
       setThemeColor(updated.theme_color || 'black');
       setLoginBg(updated.login_bg || 'bistro');
       setLoginBgImage(updated.login_bg_image || null);
+      setPanelBg(updated.panel_bg || 'none');
+      setPanelBgImage(updated.panel_bg_image || null);
+      setPanelBgColor(updated.panel_bg_color || null);
       setMpAlias(updated.mp_alias || '');
       applyThemeColor(updated.theme_color || 'black');
       setFeedback({
@@ -190,7 +208,8 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
     }
   };
 
-  const currentTheme = THEME_OPTIONS[themeColor] || THEME_OPTIONS.black;
+  const currentTheme = getThemeOption(themeColor);
+  const isCustomColor = !(PRESET_THEME_KEYS as readonly string[]).includes(themeColor);
 
   if (loading) {
     return (
@@ -202,11 +221,11 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
 
   return (
     <div className="max-w-4xl mx-auto space-y-6 pb-16">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
+      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión y los datos de contacto del local.
+            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión, el fondo del panel y los datos de contacto del local.
           </p>
         </div>
       </div>
@@ -282,24 +301,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
               />
             </div>
-
-            <div className="md:col-span-2">
-              <label htmlFor="mp-alias" className="block text-xs font-bold uppercase tracking-wider text-gray-600 mb-1">
-                Alias de MercadoPago
-              </label>
-              <input
-                id="mp-alias"
-                type="text"
-                value={mpAlias}
-                onChange={(e) => setMpAlias(e.target.value)}
-                maxLength={100}
-                placeholder="Ej. restoit.mp"
-                className="w-full px-4 py-2.5 rounded-xl border border-gray-300 text-sm focus:outline-none focus:ring-2 focus:ring-black"
-              />
-              <p className="text-[11px] text-gray-400 mt-1">
-                Alias de tu cuenta de MercadoPago al cual los clientes abonarán o transferirán en los pedidos del chatbot.
-              </p>
-            </div>
           </div>
         </section>
 
@@ -357,20 +358,23 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
           <div>
             <h2 className="text-base font-bold text-gray-900">Color Principal de la Web</h2>
             <p className="text-xs text-gray-500 mt-1">
-              Elegí uno de los 5 estilos preseleccionados para personalizar la barra superior y los acentos de la web pública.
+              Elegí uno de los estilos preseleccionados o personalizá el color con la paleta para la barra superior y los acentos de la web pública.
             </p>
           </div>
 
           <div className="grid grid-cols-2 sm:grid-cols-5 gap-3 pt-2">
-            {(Object.keys(THEME_OPTIONS) as ThemeColor[]).map((key) => {
+            {PRESET_THEME_KEYS.map((key) => {
               const option = THEME_OPTIONS[key];
               const isSelected = themeColor === key;
               return (
                 <button
                   key={key}
                   type="button"
-                  onClick={() => setThemeColor(key)}
-                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition ${
+                  onClick={() => {
+                    setThemeColor(key);
+                    applyThemeColor(key);
+                  }}
+                  className={`flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition cursor-pointer ${
                     isSelected
                       ? 'border-black bg-gray-50 shadow-sm'
                       : 'border-transparent hover:border-gray-200 bg-white'
@@ -392,6 +396,62 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                 </button>
               );
             })}
+
+            {/* Botón arcoíris para elegir el color que se desee */}
+            <div className="relative">
+              <input
+                ref={colorInputRef}
+                id="custom-color-picker"
+                type="color"
+                aria-label="Elegir color personalizado"
+                value={themeColor.startsWith('#') ? themeColor : '#9333ea'}
+                onChange={(e) => {
+                  const newColor = e.target.value;
+                  setThemeColor(newColor);
+                  applyThemeColor(newColor);
+                }}
+                className="sr-only"
+              />
+              <button
+                type="button"
+                onClick={() => colorInputRef.current?.click()}
+                className={`w-full flex flex-col items-center gap-2 p-3 rounded-2xl border-2 transition cursor-pointer ${
+                  isCustomColor
+                    ? 'border-black bg-gray-50 shadow-sm'
+                    : 'border-transparent hover:border-gray-200 bg-white'
+                }`}
+                aria-pressed={isCustomColor}
+                aria-label="Color personalizado"
+                title="Elegir el color que desees"
+              >
+                <span
+                  className="w-10 h-10 rounded-full shadow-inner border border-white/40 flex items-center justify-center text-white relative overflow-hidden"
+                  style={{
+                    background: isCustomColor
+                      ? themeColor
+                      : 'conic-gradient(from 180deg at 50% 50%, #FF0000 0deg, #FFA500 51deg, #FFFF00 102deg, #008000 153deg, #0000FF 204deg, #4B0082 255deg, #EE82EE 306deg, #FF0000 360deg)',
+                  }}
+                >
+                  {isCustomColor ? (
+                    <div className="flex items-center justify-center relative w-full h-full">
+                      <svg className="w-5 h-5 drop-shadow" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2.5" d="M5 13l4 4L19 7" />
+                      </svg>
+                      <span className="absolute -bottom-1 -right-1 text-xs drop-shadow" title="Arcoíris">
+                        
+                      </span>
+                    </div>
+                  ) : (
+                    <span className="text-base select-none drop-shadow-sm" role="img" aria-label="arcoíris">
+                      
+                    </span>
+                  )}
+                </span>
+                <span className="text-xs font-bold text-gray-800 text-center">
+                  {isCustomColor ? 'Personalizado' : 'Personalizar'}
+                </span>
+              </button>
+            </div>
           </div>
         </section>
 
@@ -424,7 +484,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📍
+                      <LocationPinIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Dirección</span>
@@ -438,7 +498,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      📞
+                      <PhoneIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Teléfonos</span>
@@ -452,7 +512,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
                       className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
                       style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
                     >
-                      💳
+                      <CreditCardIcon className="w-4 h-4" />
                     </span>
                     <div className="min-w-0">
                       <span className="block text-[10px] font-medium uppercase text-gray-500">Alias MercadoPago</span>
@@ -591,6 +651,27 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
               </div>
             </div>
           </div>
+        </section>
+
+        {/* 6. Fondo del panel de administración */}
+        <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
+          <div>
+            <h2 className="text-base font-bold text-gray-900">Fondo del Panel de Administración</h2>
+            <p className="text-xs text-gray-500 mt-1">
+              Si el fondo blanco te cansa la vista, elegí un color liso, una imagen o subí una
+              propia. Las imágenes se desenfocan y se oscurecen para que todo se siga leyendo bien. Por defecto el fondo es liso.
+            </p>
+          </div>
+          <PanelBgPicker
+            value={panelBg}
+            image={panelBgImage}
+            color={panelBgColor}
+            accentColor={currentTheme.hex}
+            onChange={setPanelBg}
+            onImageChange={setPanelBgImage}
+            onColorChange={setPanelBgColor}
+            onError={(message) => setFeedback(message ? { type: 'error', message } : null)}
+          />
         </section>
 
         {/* Botón de guardar */}

@@ -8,7 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.models.order import Order
 from app.services import chat_memory
-from app.services.chat_service import ChatService
+from app.services.chat_service import MENSAJE_PEDIDO_YA_REGISTRADO, ChatService
 from tests.conftest import TestingSessionLocal
 
 SESSION = "12345"
@@ -205,3 +205,25 @@ def test_el_menu_actual_va_en_las_instrucciones_y_no_como_herramienta(bot, muzza
     assert "MENÚ ACTUAL:" in instrucciones
     assert "Pizza Muzzarella ($8,500.00) [Pizzas]" in instrucciones
     assert "consultar_productos" not in servicio.herramientas_por_nombre
+
+
+def test_un_mensaje_posterior_al_registro_no_duplica_el_pedido(bot, muzza, db_session):
+    servicio, llm = bot
+    _armar_y_confirmar_pedido(servicio, llm)
+    datos = {"items": [{"product_id": muzza.id, "quantity": 1}], "cliente": "Paula", "telefono": "11 4444-5555"}
+
+    # El cliente sigue escribiendo y el modelo vuelve a intentar registrar el mismo pedido.
+    llm.respuestas = [_tool_call("confirmar_y_guardar_pedido", {"datos_pedido_json": json.dumps(datos)}, "c3")]
+    respuesta = _conversar(servicio, "Mp")
+
+    assert db_session.query(Order).count() == 1
+    assert respuesta == MENSAJE_PEDIDO_YA_REGISTRADO
+
+
+def test_despues_de_registrar_se_puede_armar_y_registrar_otro_pedido(bot, muzza, db_session):
+    servicio, llm = bot
+    _armar_y_confirmar_pedido(servicio, llm)
+
+    _armar_y_confirmar_pedido(servicio, llm)
+
+    assert db_session.query(Order).count() == 2

@@ -1,11 +1,12 @@
-import { useEffect, useRef, useState } from 'react';
+import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { createPortal } from 'react-dom';
 import { fetchOrderDetail } from '@/services/orderService';
-import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { AdminOrder, OrderDetail, OrderStatus } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/types/order';
+import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector, WebOrderItem } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
+import { BellIcon, SectorIcon } from '@/components/Icons';
 
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
@@ -23,6 +24,11 @@ const SOURCE_LABEL: Record<AdminOrder['source'], string> = {
   web: 'Web',
   bot: 'Bot',
   mostrador: 'Mostrador',
+};
+
+const CHANNEL_LABEL: Record<NonNullable<AdminOrder['channel']>, string> = {
+  telegram: 'Telegram',
+  whatsapp: 'WhatsApp',
 };
 
 function formatTime(iso: string): string {
@@ -56,6 +62,18 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+interface SectorRowItem {
+  id: string | number;
+  quantity: number;
+  product_name: string;
+  is_promo: boolean;
+  promo_name?: string;
+  added_later?: boolean;
+  modifications?: WebOrderItem['modifications'];
+  is_promo_price: boolean;
+  price_display: string;
+}
+
 interface OrderDetailModalProps {
   /** Datos del tablero: se muestran al instante mientras se carga el detalle completo. */
   order: AdminOrder;
@@ -63,6 +81,8 @@ interface OrderDetailModalProps {
   simulated?: boolean;
   /** Marca el pedido como abonado. */
   onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+  /** Cocina vio los productos que el cliente agregó al pedido. */
+  onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
   /** Cancela el pedido (si se indica, el modal ofrece el botón mientras el pedido siga en curso). */
   onCancel?: (orderId: number) => Promise<void>;
   onClose: () => void;
@@ -72,6 +92,7 @@ export function OrderDetailModal({
   order,
   simulated = false,
   onMarkPaid,
+  onAcknowledgeUpdate,
   onCancel,
   onClose,
 }: OrderDetailModalProps) {
@@ -80,6 +101,7 @@ export function OrderDetailModal({
   const [error, setError] = useState<string | null>(null);
   const [reloadKey, setReloadKey] = useState(0);
   const [markingPaid, setMarkingPaid] = useState(false);
+  const [acknowledging, setAcknowledging] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
@@ -93,6 +115,17 @@ export function OrderDetailModal({
       setDetail((prev) => (prev ? { ...prev, is_paid: true } : prev));
     } finally {
       setMarkingPaid(false);
+    }
+  };
+
+  const handleAcknowledge = async () => {
+    if (!onAcknowledgeUpdate) return;
+    setAcknowledging(true);
+    try {
+      await onAcknowledgeUpdate(order.id);
+      setDetail((prev) => (prev ? { ...prev, kitchen_update_pending: false } : prev));
+    } finally {
+      setAcknowledging(false);
     }
   };
 
@@ -155,6 +188,77 @@ export function OrderDetailModal({
     setReloadKey((key) => key + 1);
   };
 
+  // Agrupación de productos por sector de preparación y recopilación de promociones
+  const detailItems = detail?.items;
+  const { itemsBySector, promoItems } = useMemo(() => {
+    if (!detailItems) return { itemsBySector: [], promoItems: [] };
+    const sectorMap = new Map<string, SectorRowItem[]>();
+    const promos: WebOrderItem[] = [];
+
+    for (const [itemIdx, item] of detailItems.entries()) {
+      const isPromo = Boolean(item.promotion_id || item.is_promotion);
+
+      if (isPromo) {
+        promos.push(item);
+        if (item.promotion_products && item.promotion_products.length > 0) {
+          for (const p of item.promotion_products) {
+            const sec = (p.sector?.toLowerCase() as PreparationSector) || 'cocina';
+            if (!sectorMap.has(sec)) {
+              sectorMap.set(sec, []);
+            }
+            sectorMap.get(sec)!.push({
+              id: `promo-${item.id ?? item.promotion_id}-${p.product_id}`,
+              quantity: p.quantity,
+              product_name: p.product_name,
+              is_promo: true,
+              promo_name: item.product_name,
+              added_later: item.added_later,
+              modifications: [],
+              is_promo_price: true,
+              price_display: 'Precio de promo',
+            });
+          }
+        } else {
+          const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+          if (!sectorMap.has(sec)) {
+            sectorMap.set(sec, []);
+          }
+          sectorMap.get(sec)!.push({
+            id: item.id ?? `promo-${item.promotion_id}`,
+            quantity: item.quantity,
+            product_name: item.product_name,
+            is_promo: true,
+            promo_name: item.product_name,
+            added_later: item.added_later,
+            modifications: item.modifications,
+            is_promo_price: true,
+            price_display: 'Precio de promo',
+          });
+        }
+      } else {
+        const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+        if (!sectorMap.has(sec)) {
+          sectorMap.set(sec, []);
+        }
+        sectorMap.get(sec)!.push({
+          id: item.id ?? item.product_id ?? `item-${itemIdx}`,
+          quantity: item.quantity,
+          product_name: item.product_name,
+          is_promo: false,
+          added_later: item.added_later,
+          modifications: item.modifications,
+          is_promo_price: false,
+          price_display: formatCurrency(item.subtotal),
+        });
+      }
+    }
+
+    return {
+      itemsBySector: Array.from(sectorMap.entries()),
+      promoItems: promos,
+    };
+  }, [detailItems]);
+
   // Los datos generales salen del tablero (se actualizan con el sondeo); el detalle aporta productos y pago.
   const current = order;
   const isDelivery = current.delivery_method === 'domicilio';
@@ -185,6 +289,7 @@ export function OrderDetailModal({
               </span>
               <span className="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md bg-gray-100 text-gray-600">
                 {SOURCE_LABEL[current.source] ?? current.source}
+                {current.channel ? ` · ${CHANNEL_LABEL[current.channel] ?? current.channel}` : ''}
               </span>
             </div>
             <p className="text-sm text-gray-500">
@@ -271,28 +376,172 @@ export function OrderDetailModal({
               </div>
             ) : (
               detail && (
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-                      <th className="text-left font-semibold py-2 pr-2">Cant.</th>
-                      <th className="text-left font-semibold py-2 pr-2">Producto</th>
-                      <th className="text-right font-semibold py-2 pr-2">P. unit.</th>
-                      <th className="text-right font-semibold py-2">Subtotal</th>
-                    </tr>
-                  </thead>
-                  <tbody className="divide-y divide-gray-100">
-                    {detail.items.map((item) => (
-                      <tr key={item.product_id}>
-                        <td className="py-2 pr-2 font-semibold">{item.quantity}</td>
-                        <td className="py-2 pr-2 text-gray-900">{item.product_name}</td>
-                        <td className="py-2 pr-2 text-right text-gray-600 whitespace-nowrap">
-                          {formatCurrency(item.unit_price)}
-                        </td>
-                        <td className="py-2 text-right font-semibold whitespace-nowrap">{formatCurrency(item.subtotal)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                <div className="space-y-2.5">
+                  {current.kitchen_update_pending && (
+                    <div
+                      role="alert"
+                      className="flex items-center justify-between gap-3 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900"
+                    >
+                      <span className="inline-flex items-center gap-1.5">
+                        <BellIcon className="w-4 h-4 text-amber-700 shrink-0" />
+                        El cliente agregó productos a este pedido (marcados como “Nuevo”).
+                      </span>
+                      {onAcknowledgeUpdate && (
+                        <button
+                          type="button"
+                          onClick={handleAcknowledge}
+                          disabled={acknowledging}
+                          className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-2.5 py-1 transition"
+                        >
+                          Visto
+                        </button>
+                      )}
+                    </div>
+                  )}
+                  {itemsBySector.map(([sector, items]) => {
+                    const meta = SECTOR_CONFIG[sector as PreparationSector] ?? {
+                      key: sector as PreparationSector,
+                      label: sector.charAt(0).toUpperCase() + sector.slice(1),
+                      icon: sector,
+                      badgeClass: 'bg-gray-100 text-gray-800 border border-gray-200',
+                      activeTabClass: '',
+                    };
+
+                    return (
+                      <div key={sector} className="rounded-xl border border-gray-200/80 overflow-hidden bg-white">
+                        <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/90 border-b border-gray-100 text-xs font-bold text-gray-800">
+                          <span className="flex items-center gap-1.5">
+                            <SectorIcon sector={sector} className="w-3.5 h-3.5 shrink-0" />
+                            <span>{meta.label}</span>
+                          </span>
+                          <span className="text-[11px] font-medium text-gray-500">
+                            {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'ítem' : 'ítems'}
+                          </span>
+                        </div>
+                        <table className="w-full text-xs">
+                          <tbody className="divide-y divide-gray-100">
+                            {items.map((item) => (
+                              <tr key={item.id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
+                                <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
+                                <td className="py-1.5 pr-2 text-gray-900 font-medium">
+                                  <div className="flex items-center gap-1.5 flex-wrap">
+                                    {item.is_promo && (
+                                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
+                                        Promo
+                                      </span>
+                                    )}
+                                    <span>{item.product_name}</span>
+                                    {item.added_later && (
+                                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                                        Nuevo
+                                      </span>
+                                    )}
+                                  </div>
+                                  {item.modifications && item.modifications.length > 0 && (
+                                    <div className="text-[11px] font-bold uppercase mt-0.5 flex flex-wrap gap-1.5">
+                                      {item.modifications.map((mod, idx) => (
+                                        <span
+                                          key={idx}
+                                          className={`font-bold px-1.5 py-0.5 rounded ${
+                                            mod.type === 'negative'
+                                              ? 'bg-rose-100 text-rose-800'
+                                              : 'bg-emerald-100 text-emerald-800'
+                                          }`}
+                                        >
+                                          {mod.tag || (mod.type === 'negative' ? `[SIN ${mod.name.toUpperCase()}]` : `[EXTRA ${mod.name.toUpperCase()}]`)}
+                                        </span>
+                                      ))}
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">
+                                  {item.is_promo_price ? (
+                                    <span className="text-amber-800 font-medium italic text-xs">
+                                      {item.price_display}
+                                    </span>
+                                  ) : (
+                                    item.price_display
+                                  )}
+                                </td>
+                              </tr>
+                            ))}
+                          </tbody>
+                        </table>
+                      </div>
+                    );
+                  })}
+
+                  {promoItems.length > 0 && (
+                    <div className="rounded-xl border-2 border-amber-200/90 overflow-hidden bg-gradient-to-b from-amber-50/40 to-white shadow-2xs">
+                      <div className="flex items-center justify-between px-3 py-1.5 bg-amber-100/70 border-b border-amber-200 text-xs font-bold text-amber-900">
+                        <span className="flex items-center gap-1.5">
+                          <span>Promos</span>
+                        </span>
+                        <span className="text-[11px] font-medium text-amber-700">
+                          {promoItems.reduce((acc, p) => acc + p.quantity, 0)}{' '}
+                          {promoItems.reduce((acc, p) => acc + p.quantity, 0) === 1 ? 'promo' : 'promos'}
+                        </span>
+                      </div>
+                      <div className="divide-y divide-amber-100">
+                        {promoItems.map((promo, idx) => (
+                          <div
+                            key={promo.id ?? promo.promotion_id ?? idx}
+                            className={`p-3 space-y-1.5 ${promo.added_later ? 'bg-amber-50/70' : ''}`}
+                          >
+                            <div className="flex items-start justify-between gap-3">
+                              <div>
+                                <div className="flex items-center gap-2 flex-wrap">
+                                  <span className="font-bold text-xs text-gray-900">
+                                    {promo.quantity > 1 ? `${promo.quantity}x ` : ''}
+                                    {promo.product_name}
+                                  </span>
+                                  {promo.added_later && (
+                                    <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
+                                      Nuevo
+                                    </span>
+                                  )}
+                                </div>
+                                {promo.promotion_description && (
+                                  <p className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">
+                                    {promo.promotion_description}
+                                  </p>
+                                )}
+                              </div>
+                              <div className="text-right shrink-0">
+                                <span className="text-sm font-black text-gray-900">
+                                  {formatCurrency(promo.subtotal)}
+                                </span>
+                                {promo.quantity > 1 && (
+                                  <div className="text-[10px] text-gray-500 font-medium">
+                                    {formatCurrency(promo.unit_price)} c/u
+                                  </div>
+                                )}
+                              </div>
+                            </div>
+                            {promo.promotion_products && promo.promotion_products.length > 0 && (
+                              <div className="pt-0.5">
+                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
+                                  Incluye:
+                                </span>
+                                <div className="flex flex-wrap gap-1.5">
+                                  {promo.promotion_products.map((p, pIdx) => (
+                                    <span
+                                      key={pIdx}
+                                      className="bg-white border border-amber-200/80 text-gray-800 text-[11px] px-2 py-0.5 rounded-md font-medium shadow-2xs"
+                                    >
+                                      <span className="font-bold text-amber-700">{p.quantity}x</span>{' '}
+                                      {p.product_name}
+                                    </span>
+                                  ))}
+                                </div>
+                              </div>
+                            )}
+                          </div>
+                        ))}
+                      </div>
+                    </div>
+                  )}
+                </div>
               )
             )}
 
@@ -315,6 +564,19 @@ export function OrderDetailModal({
                   <Row label="Método de pago">
                     {detail.payment_method ? PAYMENT_METHOD_LABEL[detail.payment_method] : 'No informado'}
                   </Row>
+                  {!detail.is_paid && (detail.paid_amount ?? 0) > 0 && (
+                    <>
+                      <Row label="Pagado">{formatCurrency(detail.paid_amount ?? 0)}</Row>
+                      <Row label="Falta cobrar">
+                        <span className="font-bold text-amber-800">
+                          {formatCurrency(detail.pending_amount ?? 0)}
+                          {detail.balance_payment_method
+                            ? ` (${PAYMENT_METHOD_LABEL[detail.balance_payment_method]})`
+                            : ' (a definir)'}
+                        </span>
+                      </Row>
+                    </>
+                  )}
                   <Row label="Estado del pago">
                     <div className="flex items-center justify-end gap-2">
                       <span
@@ -322,7 +584,13 @@ export function OrderDetailModal({
                           detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
                         }`}
                       >
-                        {detail.is_paid ? (detail.payment_method === 'mercadopago' ? 'Abonado' : 'Pagado') : 'Pendiente de pago'}
+                        {detail.is_paid
+                          ? detail.payment_method === 'mercadopago'
+                            ? 'Abonado'
+                            : 'Pagado'
+                          : (detail.paid_amount ?? 0) > 0
+                            ? 'Pago parcial'
+                            : 'Pendiente de pago'}
                       </span>
                       {!detail.is_paid && onMarkPaid && (
                         <button

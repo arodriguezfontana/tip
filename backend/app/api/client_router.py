@@ -23,7 +23,7 @@ def lookup_client(
 
 @router.get("", response_model=ClientPaginatedResponse)
 def list_clients(
-    search: str | None = Query(None, description="Filtra por nombre o número de teléfono."),
+    search: str | None = Query(None, description="Filtra por nombre, número de teléfono o dirección."),
     page: int = Query(1, ge=1, description="Número de página."),
     per_page: int = Query(20, ge=1, le=100, description="Cantidad de registros por página."),
     db: Session = Depends(get_db),

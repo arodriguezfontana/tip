@@ -32,6 +32,11 @@ export const COCA = makeProduct({
 });
 
 export function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
+  const items = overrides.items ?? [];
+  const itemsPreparedCount = overrides.items_prepared_count ?? items.filter((i) => i.is_prepared).length;
+  const isAllPrepared = overrides.is_all_prepared ?? (items.length > 0 && itemsPreparedCount === items.length);
+  const sectors = overrides.sectors ?? Array.from(new Set(items.map((i) => i.sector).filter(Boolean))) as AdminOrder['sectors'];
+
   return {
     id: 101,
     customer_name: 'Paula Gómez',
@@ -45,9 +50,13 @@ export function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
     estimated_minutes: null,
     scheduled_for: null,
     created_at: new Date().toISOString(),
-    item_count: 1,
+    item_count: items.length || 1,
     delivery_driver_id: null,
     delivery_driver_name: null,
+    items,
+    items_prepared_count: itemsPreparedCount,
+    is_all_prepared: isAllPrepared,
+    sectors,
     ...overrides,
   };
 }

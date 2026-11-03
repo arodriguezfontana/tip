@@ -3,7 +3,7 @@ import { describe, expect, it } from 'vitest';
 import { CartProvider } from '@/context/CartContext';
 import { useCart } from '@/hooks/useCart';
 import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
-import { COCA, MUZZA } from '@/test/utils';
+import { COCA, FUGAZZETA, MUZZA } from '@/test/utils';
 
 function renderCart() {
   return renderHook(() => useCart(), { wrapper: CartProvider });
@@ -65,6 +65,44 @@ describe('CartContext', () => {
     expect(result.current.items.map((i) => i.product.id)).toEqual([COCA.id]);
 
     act(() => result.current.clearCart());
+    expect(result.current.items).toEqual([]);
+  });
+
+  it('agrega pizza mitad y mitad calculando el precio del gusto más caro', () => {
+    const { result } = renderCart();
+
+    act(() => {
+      // MUZZA ($8500), FUGAZZETA ($9500) -> unit_price debe ser 9500
+      result.current.addItem(MUZZA, 1, FUGAZZETA);
+    });
+
+    expect(result.current.items).toHaveLength(1);
+    const item = result.current.items[0];
+    expect(item.product.id).toBe(MUZZA.id);
+    expect(item.secondary_product?.id).toBe(FUGAZZETA.id);
+    expect(item.custom_name).toBe('Pizza Grande [1/2 Muzzarella | 1/2 Fugazzeta]');
+    expect(item.unit_price).toBe(9500);
+    expect(result.current.total).toBe(9500);
+
+    // Sumar otra unidad de la misma combinación
+    act(() => {
+      result.current.addItem(MUZZA, 2, FUGAZZETA);
+    });
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].quantity).toBe(3);
+    expect(result.current.total).toBe(3 * 9500);
+
+    // Actualizar cantidad
+    act(() => {
+      result.current.updateQuantity(MUZZA.id, 1, FUGAZZETA.id);
+    });
+    expect(result.current.items[0].quantity).toBe(1);
+    expect(result.current.total).toBe(9500);
+
+    // Quitar del carrito
+    act(() => {
+      result.current.removeItem(MUZZA.id, FUGAZZETA.id);
+    });
     expect(result.current.items).toEqual([]);
   });
 

@@ -18,6 +18,8 @@ class OrderResponse(BaseModel):
     status: str
     delivery_method: str
     source: str
+    # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
+    channel: str | None = None
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
@@ -28,9 +30,19 @@ class OrderResponse(BaseModel):
     delivery_driver_name: str | None = None
     payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
+    # Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda.
+    paid_amount: float = 0
+    pending_amount: float = 0
+    balance_payment_method: PaymentMethod | None = None  # type: ignore[assignment]
+    # Se agregaron productos y cocina todavía no lo vio.
+    kitchen_update_pending: bool = False
+    items: list["WebOrderItemResponse"] = Field(default_factory=list)
+    items_prepared_count: int = 0
+    is_all_prepared: bool = False
+    sectors: list[str] = Field(default_factory=list)
 
     @model_validator(mode="after")
-    def _web_payment_methods(self) -> "CounterOrderCreate":
+    def _web_payment_methods(self) -> "OrderResponse":
         # En el mostrador el personal puede registrar cualquier medio de pago (o ninguno).
         return self
 
@@ -44,6 +56,7 @@ class OrderResponse(BaseModel):
             status=order.status,
             delivery_method=order.delivery_method,
             source=order.source,
+            channel=order.channel,
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,
@@ -54,6 +67,14 @@ class OrderResponse(BaseModel):
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
             payment_method=order.payment_method,
             is_paid=bool(order.is_paid),
+            paid_amount=order.amount_paid,
+            pending_amount=order.amount_pending,
+            balance_payment_method=order.balance_payment_method,
+            kitchen_update_pending=bool(order.kitchen_update_pending),
+            items=[WebOrderItemResponse.from_model(item) for item in order.items] if order.items else [],
+            items_prepared_count=order.items_prepared_count,
+            is_all_prepared=order.is_all_prepared,
+            sectors=order.sectors,
         )
 
 
@@ -64,8 +85,18 @@ class OrderStatusUpdate(BaseModel):
 
 
 class WebOrderItemCreate(BaseModel):
-    product_id: int = Field(..., gt=0)
+    product_id: int | None = Field(None, gt=0)
+    promotion_id: int | None = Field(None, gt=0)
     quantity: int = Field(..., ge=1)
+    secondary_product_id: int | None = Field(None, gt=0)
+    custom_name: str | None = None
+    modifications: list[dict] = Field(default_factory=list)
+
+    @model_validator(mode="after")
+    def _validate_item_source(self) -> "WebOrderItemCreate":
+        if self.product_id is None and self.promotion_id is None:
+            raise ValueError("Cada ítem debe indicar un producto o una promoción.")
+        return self
 
 
 class _OrderCreate(BaseModel):
@@ -93,7 +124,17 @@ class _OrderCreate(BaseModel):
             delivery_method=self.delivery_method,
             shipping_address=self.shipping_address,
             notes=self.notes,
-            items=[(item.product_id, item.quantity) for item in self.items],
+            items=[
+                (
+                    item.product_id,
+                    item.quantity,
+                    item.secondary_product_id,
+                    item.custom_name,
+                    item.modifications,
+                    item.promotion_id,
+                )
+                for item in self.items
+            ],
         )
 
 
@@ -125,21 +166,60 @@ class CounterOrderCreate(_OrderCreate):
         )
 
 
-class WebOrderItemResponse(BaseModel):
+class PromotionProductDetail(BaseModel):
     product_id: int
+    product_name: str
+    quantity: int
+    sector: str = "cocina"
+
+
+class WebOrderItemResponse(BaseModel):
+    id: int | None = None
+    product_id: int | None = None
+    promotion_id: int | None = None
+    is_promotion: bool = False
     product_name: str
     quantity: int
     unit_price: float
     subtotal: float
+    sector: str = "cocina"
+    is_prepared: bool = False
+    added_later: bool = False
+    secondary_product_id: int | None = None
+    modifications: list[dict] = Field(default_factory=list)
+    promotion_products: list[PromotionProductDetail] = Field(default_factory=list)
+    promotion_description: str | None = None
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
+        promo_products = []
+        if item.promotion and item.promotion.items:
+            for it in item.promotion.items:
+                if it.product:
+                    promo_products.append(
+                        PromotionProductDetail(
+                            product_id=it.product_id,
+                            product_name=it.product.name,
+                            quantity=it.quantity * item.quantity,
+                            sector=it.product.effective_sector,
+                        )
+                    )
         return cls(
+            id=item.id,
             product_id=item.product_id,
-            product_name=item.product.name,
+            promotion_id=item.promotion_id,
+            is_promotion=item.promotion_id is not None,
+            product_name=item.display_name,
             quantity=item.quantity,
             unit_price=item.unit_price,
             subtotal=item.subtotal,
+            sector=item.sector,
+            is_prepared=bool(item.is_prepared),
+            added_later=bool(item.added_later),
+            secondary_product_id=item.secondary_product_id,
+            modifications=item.modifications or [],
+            promotion_products=promo_products,
+            promotion_description=item.promotion.description if item.promotion else None,
         )
 
 
@@ -181,7 +261,6 @@ class WebOrderCreatedResponse(BaseModel):
 class OrderDetailResponse(OrderResponse):
     """Detalle completo de un pedido para el panel: productos, entrega y facturación."""
 
-    items: list[WebOrderItemResponse]
     subtotal: float
     shipping_cost: float
 
@@ -189,7 +268,6 @@ class OrderDetailResponse(OrderResponse):
     def from_model(cls, order: Order) -> "OrderDetailResponse":
         return cls(
             **OrderResponse.from_model(order).model_dump(),
-            items=[WebOrderItemResponse.from_model(item) for item in order.items],
             subtotal=order.subtotal,
             shipping_cost=order.shipping_cost or 0,
         )
@@ -199,3 +277,15 @@ class OrderPaymentUpdate(BaseModel):
     """Payload para actualizar manualmente el estado de cobro de un pedido."""
 
     is_paid: bool = True
+
+
+class OrderItemPreparedUpdate(BaseModel):
+    """Payload para marcar un ítem individual como preparado."""
+
+    is_prepared: bool = True
+
+
+class OrderSectorPreparedUpdate(BaseModel):
+    """Payload para marcar todos los ítems de un sector como preparados."""
+
+    is_prepared: bool = True

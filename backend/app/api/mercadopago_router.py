@@ -8,13 +8,13 @@ from pydantic import BaseModel, Field
 from sqlalchemy.orm import Session
 
 from app.db.session import get_db
+from app.services.channels import enviar_mensaje
 from app.services.mercadopago_service import (
     confirm_payment,
     frontend_menu_url,
     payment_received_message,
     process_payment_notification,
 )
-from app.services.telegram_service import send_telegram_message
 
 logger = logging.getLogger(__name__)
 
@@ -30,7 +30,7 @@ async def mercadopago_webhook(
     """Webhook para notificaciones de pago de MercadoPago.
 
     Cuando se recibe un pago aprobado, actualiza el estado de pago del pedido a 'Abonado'
-    (is_paid = True) y notifica al cliente si el pedido se originó vía Telegram.
+    (is_paid = True) y notifica al cliente si el pedido se originó en un chat (Telegram o WhatsApp).
     """
     payload = {}
     with contextlib.suppress(Exception):
@@ -39,12 +39,12 @@ async def mercadopago_webhook(
     query_params = dict(request.query_params)
     order = process_payment_notification(db, payload=payload, query_params=query_params)
 
-    if order and order.telegram_chat_id:
+    if order and order.channel and order.chat_id:
         mensaje = payment_received_message(order)
         try:
-            background_tasks.add_task(send_telegram_message, int(order.telegram_chat_id), mensaje)
+            background_tasks.add_task(enviar_mensaje, order.channel, order.chat_id, mensaje)
         except Exception as e:
-            logger.warning("No se pudo programar el aviso de pago a Telegram para chat_id=%s: %s", order.telegram_chat_id, e)
+            logger.warning("No se pudo programar el aviso de pago a %s para chat_id=%s: %s", order.channel, order.chat_id, e)
 
     return {"status": "ok"}
 

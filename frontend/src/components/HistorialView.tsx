@@ -9,6 +9,7 @@ import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 
 import type { ThemeColor } from '@/types/storeConfig';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 function statusBadgeClasses(status: string): string {
   const normalized = status.trim().toLowerCase();
@@ -87,11 +88,11 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading ? (
-        <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
+        <PanelNote>Cargando...</PanelNote>
       ) : orders.length === 0 ? (
-        <p className="text-sm text-gray-500 text-center py-8">No hay pedidos en el rango seleccionado.</p>
+        <PanelNote>No hay pedidos en el rango seleccionado.</PanelNote>
       ) : (
-        <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+        <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-48">
           <div className="overflow-auto lg:min-h-0">
             <table className="w-full text-sm">
               <thead className="sticky top-0">

@@ -2,6 +2,7 @@ import type { ReactNode } from 'react';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CheckoutFormData, WebOrderCreated } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
+import { CheckIcon } from '@/components/Icons';
 
 export function OrderSuccess({
   order,
@@ -32,7 +33,7 @@ export function OrderSuccess({
         </div>
       ) : (
         <div className="rounded-xl bg-green-50 text-green-800 px-4 py-3 text-sm mb-6 flex items-center gap-2">
-          <span className="text-lg">✓</span>
+          <CheckIcon className="w-5 h-5 text-green-700 shrink-0" />
           <span>¡Recibimos tu pedido y ya lo estamos preparando!</span>
         </div>
       )}

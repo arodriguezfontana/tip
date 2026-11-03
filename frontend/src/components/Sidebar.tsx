@@ -1,8 +1,9 @@
 import { useState } from 'react';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 export type ViewKey =
   | 'tomar-pedido'
+  | 'caja'
   | 'comandas'
   | 'historial'
   | 'estadisticas'
@@ -10,7 +11,9 @@ export type ViewKey =
   | 'clientes'
   | 'repartidores'
   | 'productos'
+  | 'promociones'
   | 'ingredientes'
+  | 'menu-imagen'
   | 'horarios'
   | 'configuracion-web';
 
@@ -21,6 +24,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'comandas', label: 'Comandas' },
       { key: 'tomar-pedido', label: 'Tomar pedido' },
+      { key: 'caja', label: 'Control de caja' },
       { key: 'historial', label: 'Historial' },
       { key: 'clientes', label: 'Clientes' },
       { key: 'repartidores', label: 'Repartidores' },
@@ -30,6 +34,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     title: 'Catálogo',
     items: [
       { key: 'productos', label: 'Productos y categorías' },
+      { key: 'promociones', label: 'Promociones' },
       { key: 'ingredientes', label: 'Ingredientes' },
     ],
   },
@@ -44,6 +49,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     title: 'Configuración',
     items: [
       { key: 'horarios', label: 'Horarios' },
+      { key: 'menu-imagen', label: 'Menú y promociones' },
       { key: 'configuracion-web', label: 'Configuración' },
     ],
   },
@@ -79,7 +85,7 @@ function saveCollapsedGroups(titles: string[]) {
 
 export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: SidebarProps) {
   const [collapsed, setCollapsed] = useState<string[]>(loadCollapsedGroups);
-  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
+  const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
 
   const toggleGroup = (title: string) => {
     const next = collapsed.includes(title) ? collapsed.filter((t) => t !== title) : [...collapsed, title];
@@ -90,7 +96,7 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
   return (
     <>
       <div
-        className={`fixed inset-0 bg-black/40 z-40 transition-opacity ${
+        className={`fixed inset-0 bg-black/40 z-40 transition-opacity lg:hidden ${
           open ? 'opacity-100 pointer-events-auto' : 'opacity-0 pointer-events-none'
         }`}
         onClick={onClose}

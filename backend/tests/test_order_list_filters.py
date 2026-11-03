@@ -100,7 +100,7 @@ def test_list_orders_includes_dashboard_fields(client, db_session, products):
     assert body["item_count"] == 2
     assert body["source"] == "mostrador"
     assert body["delivery_method"] == "retiro"
-    assert body["customer_phone"] == "11 4444-5555"
+    assert body["customer_phone"] == "1144445555"
     assert body["notes"] == "Sin cebolla"
     assert body["estimated_minutes"] == 20
     assert body["scheduled_for"] is None

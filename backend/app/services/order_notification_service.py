@@ -1,4 +1,4 @@
-"""Notificaciones proactivas al cliente por Telegram ante cambios de estado del pedido."""
+"""Notificaciones proactivas al cliente (por el canal en que hizo el pedido) ante cambios de estado."""
 
 import logging
 from dataclasses import dataclass
@@ -6,7 +6,7 @@ from datetime import datetime, timezone
 
 from app.core.time import RESTAURANT_TZ
 from app.models.order import Order, OrderStatus
-from app.services.telegram_service import send_telegram_message
+from app.services.channels import enviar_mensaje
 
 logger = logging.getLogger(__name__)
 
@@ -20,7 +20,8 @@ class OrderSnapshot:
     """
 
     id: int
-    telegram_chat_id: str | None
+    channel: str | None
+    chat_id: str | None
     estimated_minutes: int | None
     scheduled_for: datetime | None
     is_paid: bool = False
@@ -29,7 +30,8 @@ class OrderSnapshot:
     def of(cls, order: Order) -> "OrderSnapshot":
         return cls(
             id=order.id,
-            telegram_chat_id=order.telegram_chat_id,
+            channel=order.channel,
+            chat_id=order.chat_id,
             estimated_minutes=order.estimated_minutes,
             scheduled_for=order.scheduled_for,
             is_paid=bool(order.is_paid),
@@ -68,9 +70,9 @@ def build_status_message(order: Order | OrderSnapshot, new_status: str) -> str |
 
 
 async def notify_order_status_change(order: OrderSnapshot, new_status: str) -> None:
-    if not order.telegram_chat_id:
+    if not order.channel or not order.chat_id:
         logger.warning(
-            "Orden #%s no tiene telegram_chat_id, no se puede notificar el cambio a '%s'.",
+            "Orden #%s no tiene canal ni chat, no se puede notificar el cambio a '%s'.",
             order.id,
             new_status,
         )
@@ -80,12 +82,4 @@ async def notify_order_status_change(order: OrderSnapshot, new_status: str) -> N
     if mensaje is None:
         return
 
-    try:
-        chat_id = int(order.telegram_chat_id)
-    except ValueError:
-        logger.error(
-            "telegram_chat_id inválido en la orden #%s: %r", order.id, order.telegram_chat_id
-        )
-        return
-
-    await send_telegram_message(chat_id, mensaje)
+    await enviar_mensaje(order.channel, order.chat_id, mensaje)

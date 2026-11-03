@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event';
 import { describe, expect, it, vi } from 'vitest';
 import { ComandaCard } from '@/components/ComandaCard';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import type { AdminOrder } from '@/types/order';
+import type { AdminOrder, SectorFilter } from '@/types/order';
 import { makeOrder } from '@/test/utils';
 
 function renderCard(
@@ -12,10 +12,16 @@ function renderCard(
     activeDrivers?: DeliveryDriver[];
     onAssignDriver?: (orderId: number, driverId: number | null) => Promise<void>;
     onMarkPaid?: (orderId: number, isPaid: boolean) => Promise<void>;
+    onAcknowledgeUpdate?: (orderId: number) => Promise<void>;
+    selectedSector?: SectorFilter;
+    onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
+    onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
   } = {}
 ) {
   const onStatusChange = vi.fn().mockResolvedValue(undefined);
   const onAssignDriver = extraProps.onAssignDriver ?? vi.fn().mockResolvedValue(undefined);
+  const onItemPreparedChange = extraProps.onItemPreparedChange ?? vi.fn().mockResolvedValue(undefined);
+  const onSectorPrepared = extraProps.onSectorPrepared ?? vi.fn().mockResolvedValue(undefined);
   const onOpenDetail = vi.fn();
   const order = makeOrder(overrides);
   render(
@@ -24,11 +30,23 @@ function renderCard(
       onStatusChange={onStatusChange}
       onAssignDriver={onAssignDriver}
       onMarkPaid={extraProps.onMarkPaid}
+      onAcknowledgeUpdate={extraProps.onAcknowledgeUpdate}
       activeDrivers={extraProps.activeDrivers}
       onOpenDetail={onOpenDetail}
+      selectedSector={extraProps.selectedSector}
+      onItemPreparedChange={onItemPreparedChange}
+      onSectorPrepared={onSectorPrepared}
     />
   );
-  return { order, onStatusChange, onAssignDriver, onOpenDetail, user: userEvent.setup() };
+  return {
+    order,
+    onStatusChange,
+    onAssignDriver,
+    onItemPreparedChange,
+    onSectorPrepared,
+    onOpenDetail,
+    user: userEvent.setup(),
+  };
 }
 
 const minutes = (n: number) => new Date(Date.now() - n * 60000).toISOString();
@@ -44,6 +62,19 @@ describe('ComandaCard', () => {
     expect(screen.getByText('Tel: 11 4444-5555')).toBeInTheDocument();
     expect(screen.getByText('“Sin cebolla”')).toBeInTheDocument();
     expect(screen.getByText(/19\.500,00/)).toBeInTheDocument();
+  });
+
+  it('en un pedido a domicilio muestra la dirección en lugar de "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: 'Belgrano 95, piso 2' });
+
+    expect(screen.getByText('Belgrano 95, piso 2')).toBeInTheDocument();
+    expect(screen.queryByText('A domicilio')).not.toBeInTheDocument();
+  });
+
+  it('si el pedido a domicilio no tiene dirección cargada vuelve a decir "A domicilio"', () => {
+    renderCard({ delivery_method: 'domicilio', shipping_address: '  ' });
+
+    expect(screen.getByText('A domicilio')).toBeInTheDocument();
   });
 
   it('muestra la insignia de Abonado cuando el pedido ya está pagado', () => {
@@ -214,7 +245,7 @@ describe('ComandaCard', () => {
     );
 
     const label = screen.getByText('Asignar repartidor');
-    expect(label.parentElement).toHaveTextContent('🛵');
+    expect(label.parentElement?.querySelector('svg')).toBeInTheDocument();
     // Va en el mismo lugar que el cartel del repartidor: debajo de las observaciones y arriba de la demora.
     const before = (x: Element, y: Element) => Boolean(x.compareDocumentPosition(y) & Node.DOCUMENT_POSITION_FOLLOWING);
     expect(before(screen.getByText('“Sin cebolla”'), label)).toBe(true);
@@ -338,5 +369,73 @@ describe('ComandaCard', () => {
 
     expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /marcar como abonado/i })).not.toBeInTheDocument();
+  });
+  describe('Separación de comandas por sector', () => {
+    const mockItems = [
+      { id: 1, product_id: 10, product_name: 'Pizza Napolitana', quantity: 2, unit_price: 9000, subtotal: 18000, sector: 'pizzeria' },
+      { id: 2, product_id: 20, product_name: 'Milanesa con Papas', quantity: 1, unit_price: 11000, subtotal: 11000, sector: 'cocina' },
+      { id: 3, product_id: 30, product_name: 'Cerveza IPA', quantity: 2, unit_price: 3500, subtotal: 7000, sector: 'barra' },
+    ];
+
+    it('las tarjetas chicas no muestran elementos del pedido ni sectores para mantener legibilidad', () => {
+      renderCard({ items: mockItems });
+
+      // No se muestran nombres de productos
+      expect(screen.queryByText('Pizza Napolitana')).not.toBeInTheDocument();
+      expect(screen.queryByText('Milanesa con Papas')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cerveza IPA')).not.toBeInTheDocument();
+
+      // No se muestran sectores dentro de la tarjeta
+      expect(screen.queryByText('Pizzería')).not.toBeInTheDocument();
+      expect(screen.queryByText('Cocina')).not.toBeInTheDocument();
+      expect(screen.queryByText('Barra')).not.toBeInTheDocument();
+      expect(screen.queryByText('Otros sectores:')).not.toBeInTheDocument();
+
+      // Muestra datos esenciales de la comanda
+      expect(screen.getByText('#101')).toBeInTheDocument();
+      expect(screen.getByText('Paula Gómez')).toBeInTheDocument();
+    });
+  });
+
+  describe('pedido modificado por el cliente', () => {
+    it('muestra el pago mixto: lo pagado por MercadoPago y lo que falta cobrar en efectivo', () => {
+      renderCard({
+        total_amount: 15000,
+        payment_method: 'mercadopago',
+        is_paid: false,
+        paid_amount: 12000,
+        pending_amount: 3000,
+        balance_payment_method: 'efectivo',
+      });
+
+      expect(screen.getByText(/Pagado MercadoPago/)).toHaveTextContent(/12.000,00/);
+      expect(screen.getByText(/Cobrar Efectivo/)).toHaveTextContent(/3.000,00/);
+      expect(screen.queryByText('Pago Pendiente')).not.toBeInTheDocument();
+    });
+
+    it('sin pago parcial sigue mostrando el estado de siempre', () => {
+      renderCard({ payment_method: 'efectivo', is_paid: false });
+
+      expect(screen.getByText('Pago Pendiente')).toBeInTheDocument();
+      expect(screen.queryByText(/Cobrar/)).not.toBeInTheDocument();
+    });
+
+    it('alerta a cocina cuando se agregaron productos y se apaga al marcarla como vista', async () => {
+      const onAcknowledgeUpdate = vi.fn().mockResolvedValue(undefined);
+      const { user, order, onOpenDetail } = renderCard({ kitchen_update_pending: true }, { onAcknowledgeUpdate });
+
+      expect(screen.getByRole('alert')).toHaveTextContent('Pedido actualizado');
+      await user.click(screen.getByRole('button', { name: 'Visto' }));
+
+      expect(onAcknowledgeUpdate).toHaveBeenCalledWith(order.id);
+      // El clic en "Visto" no abre el detalle del pedido.
+      expect(onOpenDetail).not.toHaveBeenCalled();
+    });
+
+    it('sin cambios no hay alerta', () => {
+      renderCard({ kitchen_update_pending: false });
+
+      expect(screen.queryByRole('alert')).not.toBeInTheDocument();
+    });
   });
 });

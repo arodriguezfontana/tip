@@ -1,9 +1,10 @@
 import { expect, test } from '@playwright/test';
-import { clearBoard, column, goToSection, loginAsAdmin, money, orderCard, unique, uniquePhone } from './helpers';
+import { clearBoard, column, ensureOpenCashShift, goToSection, loginAsAdmin, money, orderCard, unique, uniquePhone } from './helpers';
 
 test.describe('Pedido presencial (mostrador)', () => {
   test.beforeEach(async ({ request }) => {
     await clearBoard(request);
+    await ensureOpenCashShift(request);
   });
 
   test('se registra confirmado, aparece en comandas y el cliente queda en la agenda', async ({ page }) => {

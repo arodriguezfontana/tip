@@ -7,6 +7,7 @@ import type { Ingredient } from '@/types/ingredient';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { formatQuantity } from '@/utils/ingredients';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 export function ReporteIngredientesView() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
@@ -46,14 +47,14 @@ export function ReporteIngredientesView() {
 
   return (
     <div className="flex flex-col gap-4 lg:h-full">
-      <div className="shrink-0">
+      <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-1">
         <h1 className="text-lg font-bold text-gray-900">Reporte de ingredientes</h1>
         <p className="text-xs text-gray-500">
           Total de cada insumo usado en los pedidos finalizados del período, según las recetas de los productos.
         </p>
       </div>
 
-      <div className="shrink-0 flex flex-col sm:flex-row sm:items-end gap-4">
+      <div className="shrink-0 flex flex-col sm:flex-row sm:items-stretch gap-4">
         <div className="flex-1">
           <DateRangeFilter
             preset={preset}
@@ -64,7 +65,7 @@ export function ReporteIngredientesView() {
             onCustomToChange={setCustomTo}
           />
         </div>
-        <div>
+        <div className="bg-white p-4 rounded-2xl shadow-xs border border-gray-100">
           <label
             htmlFor="ingredient-filter"
             className="block text-xs font-semibold uppercase tracking-wide text-gray-500 mb-2"
@@ -85,7 +86,7 @@ export function ReporteIngredientesView() {
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
       {loading && !report ? (
-        <p className="text-sm text-gray-500 text-center py-8">Cargando...</p>
+        <PanelNote>Cargando...</PanelNote>
       ) : (
         report && (
           <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
@@ -95,11 +96,9 @@ export function ReporteIngredientesView() {
             </div>
 
             {report.items.length === 0 ? (
-              <p className="text-sm text-gray-500 text-center py-8">
-                No hay consumo de ingredientes en el rango seleccionado.
-              </p>
+              <PanelNote>No hay consumo de ingredientes en el rango seleccionado.</PanelNote>
             ) : (
-              <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-0">
+              <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-48">
                 <div className="overflow-auto lg:min-h-0">
                   <table className="w-full text-sm">
                     <thead className="sticky top-0">

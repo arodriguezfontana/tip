@@ -9,14 +9,14 @@ import {
 import { DeliveryDriverModal } from '@/components/DeliveryDriverModal';
 import { Toast } from '@/components/ui/Toast';
 import type { DeliveryDriver, DeliveryDriverPayload } from '@/types/deliveryDriver';
-import { THEME_OPTIONS, type ThemeColor } from '@/types/storeConfig';
+import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 interface RepartidoresViewProps {
   themeColor?: ThemeColor;
 }
 
 export function RepartidoresView({ themeColor }: RepartidoresViewProps) {
-  const themeHex = themeColor ? THEME_OPTIONS[themeColor]?.hex : undefined;
+  const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DeliveryDriver | null>(null);

@@ -1,3 +1,5 @@
+import type { Promotion } from './promotion';
+
 export interface ProductCategory {
   id: number;
   name: string;
@@ -19,7 +21,11 @@ export const MAX_QUANTITY_PER_ITEM = 20;
 
 export interface CartItem {
   product: Product;
+  promotion?: Promotion;
   quantity: number;
+  secondary_product?: Product;
+  custom_name?: string;
+  unit_price?: number;
 }
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
@@ -50,8 +56,11 @@ export interface CheckoutFormData {
 }
 
 export interface WebOrderItemPayload {
-  product_id: number;
+  product_id?: number;
+  promotion_id?: number;
   quantity: number;
+  secondary_product_id?: number;
+  custom_name?: string;
 }
 
 export interface WebOrderPayload {
@@ -70,12 +79,74 @@ export interface CounterOrderPayload extends Omit<WebOrderPayload, 'payment_meth
   is_paid: boolean;
 }
 
-export interface WebOrderItem {
+export type PreparationSector = 'cocina' | 'pizzeria' | 'barra';
+
+export type SectorFilter = 'todos' | PreparationSector;
+
+export interface SectorMeta {
+  key: PreparationSector;
+  label: string;
+  icon: string;
+  badgeClass: string;
+  activeTabClass: string;
+}
+
+export const SECTOR_CONFIG: Record<PreparationSector, SectorMeta> = {
+  pizzeria: {
+    key: 'pizzeria',
+    label: 'Pizzería',
+    icon: 'pizzeria',
+    badgeClass: 'bg-amber-100 text-amber-800 border border-amber-200',
+    activeTabClass: 'bg-amber-600 text-white shadow-xs',
+  },
+  cocina: {
+    key: 'cocina',
+    label: 'Cocina',
+    icon: 'cocina',
+    badgeClass: 'bg-emerald-100 text-emerald-800 border border-emerald-200',
+    activeTabClass: 'bg-emerald-600 text-white shadow-xs',
+  },
+  barra: {
+    key: 'barra',
+    label: 'Barra',
+    icon: 'barra',
+    badgeClass: 'bg-sky-100 text-sky-800 border border-sky-200',
+    activeTabClass: 'bg-sky-600 text-white shadow-xs',
+  },
+};
+
+export interface OrderItemModification {
+  type: 'positive' | 'negative';
+  action?: 'add' | 'remove';
+  name: string;
+  tag?: string;
+  price?: number;
+  ingredient_id?: number | null;
+}
+
+export interface PromotionProductDetail {
   product_id: number;
+  product_name: string;
+  quantity: number;
+  sector: PreparationSector | string;
+}
+
+export interface WebOrderItem {
+  id?: number;
+  product_id?: number | null;
+  promotion_id?: number | null;
+  is_promotion?: boolean;
   product_name: string;
   quantity: number;
   unit_price: number;
   subtotal: number;
+  sector?: PreparationSector | string;
+  is_prepared?: boolean;
+  /** Lo agregó el cliente después de registrar el pedido. */
+  added_later?: boolean;
+  modifications?: OrderItemModification[];
+  promotion_products?: PromotionProductDetail[];
+  promotion_description?: string | null;
 }
 
 export interface WebOrderCreated {
@@ -122,6 +193,9 @@ export const ACTIVE_ORDER_STATUSES: OrderStatus[] = [
 
 export type OrderSource = 'bot' | 'web' | 'mostrador';
 
+/** Canal de chat de los pedidos del bot. */
+export type OrderChannel = 'telegram' | 'whatsapp';
+
 export interface AdminOrder {
   id: number;
   customer_name: string;
@@ -130,6 +204,7 @@ export interface AdminOrder {
   status: OrderStatus;
   delivery_method: DeliveryMethod;
   source: OrderSource;
+  channel?: OrderChannel | null;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;
@@ -140,6 +215,16 @@ export interface AdminOrder {
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
+  /** Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda. */
+  paid_amount?: number;
+  pending_amount?: number;
+  balance_payment_method?: PaymentMethod | null;
+  /** Se agregaron productos y cocina todavía no lo vio. */
+  kitchen_update_pending?: boolean;
+  items?: WebOrderItem[];
+  items_prepared_count?: number;
+  is_all_prepared?: boolean;
+  sectors?: (PreparationSector | string)[];
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */

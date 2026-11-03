@@ -236,9 +236,12 @@ def run():
         seed_store_config(db)
         db.flush()
 
-        categoria_pizzas, _ = get_or_create(db, Category, name="Pizzas")
-        categoria_bebidas, _ = get_or_create(db, Category, name="Bebidas")
-        categoria_postres, _ = get_or_create(db, Category, name="Postres")
+        categoria_pizzas, _ = get_or_create(db, Category, name="Pizzas", defaults={"sector": "pizzeria"})
+        categoria_pizzas.sector = "pizzeria"
+        categoria_bebidas, _ = get_or_create(db, Category, name="Bebidas", defaults={"sector": "barra"})
+        categoria_bebidas.sector = "barra"
+        categoria_postres, _ = get_or_create(db, Category, name="Postres", defaults={"sector": "cocina"})
+        categoria_postres.sector = "cocina"
         db.flush()
 
         ingredientes = seed_ingredientes(db)

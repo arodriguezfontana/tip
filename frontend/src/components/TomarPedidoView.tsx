@@ -4,6 +4,7 @@ import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { lookupClientByPhone } from '@/services/clientService';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { createCounterOrder } from '@/services/orderService';
+import { fetchCurrentCashShift } from '@/services/cashShiftService';
 import type { Client } from '@/types/client';
 import { COUNTER_PAYMENT_METHODS, MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
@@ -12,6 +13,7 @@ import { groupByCategory } from '@/utils/productGrouping';
 import { PHONE_PATTERN } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
 import { INPUT_FULL_CLASS as INPUT_CLASS } from '@/styles/forms';
+import { CheckIcon } from '@/components/Icons';
 
 const ALL_CATEGORIES = 'all';
 
@@ -47,6 +49,7 @@ export function TomarPedidoView() {
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [isPaid, setIsPaid] = useState(false);
   const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [isShiftOpen, setIsShiftOpen] = useState<boolean | null>(null);
 
   // Búsqueda del cliente por teléfono
   const [clientLookup, setClientLookup] = useState<ClientLookup>({ status: 'idle' });
@@ -57,6 +60,20 @@ export function TomarPedidoView() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    let active = true;
+    fetchCurrentCashShift()
+      .then((status) => {
+        if (active) setIsShiftOpen(status.is_open);
+      })
+      .catch(() => {
+        if (active) setIsShiftOpen(true);
+      });
+    return () => {
+      active = false;
+    };
+  }, []);
 
   // Busca al cliente por teléfono y autocompleta nombre y dirección. Nunca bloquea la carga:
   // si la búsqueda falla o tarda, el usuario sigue completando los campos a mano.
@@ -198,6 +215,11 @@ export function TomarPedidoView() {
     setLastOrderId(null);
     if (Object.keys(nextErrors).length > 0) return;
 
+    if (isShiftOpen === false) {
+      setSubmitError('No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.');
+      return;
+    }
+
     setSubmitting(true);
     try {
       const order = await createCounterOrder({
@@ -224,10 +246,19 @@ export function TomarPedidoView() {
     <form onSubmit={handleConfirm} className="flex flex-col gap-4 lg:h-full" noValidate>
       {lastOrderId !== null && (
         <div role="status" className="rounded-xl bg-green-50 text-green-800 px-4 py-3 text-sm flex items-center gap-2">
-          <span className="text-lg">✓</span>
+          <CheckIcon className="w-5 h-5 text-green-700 shrink-0" />
           <span>
             Pedido <strong>#{lastOrderId}</strong> registrado correctamente. Ya podés tomar el siguiente.
           </span>
+        </div>
+      )}
+
+      {isShiftOpen === false && (
+        <div role="alert" className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 text-sm flex items-center justify-between">
+          <div className="flex items-center gap-2">
+            <span className="font-bold">Caja cerrada:</span>
+            <span>Debés realizar la apertura de la caja antes de poder registrar o facturar pedidos presenciales.</span>
+          </div>
         </div>
       )}
 
@@ -258,7 +289,10 @@ export function TomarPedidoView() {
               <p id="tp-phone-status" aria-live="polite" className="text-xs mt-1 min-h-4">
                 {clientLookup.status === 'searching' && <span className="text-gray-500">Buscando cliente…</span>}
                 {clientLookup.status === 'found' && (
-                  <span className="text-green-700">✓ Cliente registrado: datos completados.</span>
+                  <span className="text-green-700 inline-flex items-center gap-1">
+                    <CheckIcon className="w-3.5 h-3.5 shrink-0" />
+                    Cliente registrado: datos completados.
+                  </span>
                 )}
                 {clientLookup.status === 'new' && (
                   <span className="text-gray-500">Cliente nuevo: se registrará al confirmar.</span>
@@ -348,7 +382,7 @@ export function TomarPedidoView() {
 
       <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
         {/* Catálogo */}
-        <section className="lg:col-span-7 bg-white rounded-2xl shadow-md p-4 flex flex-col gap-4 lg:min-h-0">
+        <section className="lg:col-span-7 bg-white rounded-2xl shadow-md p-4 flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
           <div className="flex flex-wrap items-center justify-between gap-2">
             <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700">Productos</h2>
             <input
@@ -400,7 +434,7 @@ export function TomarPedidoView() {
             <p className="text-sm text-gray-500 text-center py-12">No hay productos que coincidan.</p>
           )}
 
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-0">
+          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
             {visibleGroups.map((group) => (
               <div key={group.category.id}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">{group.category.name}</h3>
@@ -441,7 +475,7 @@ export function TomarPedidoView() {
         </section>
 
         {/* Resumen del pedido */}
-        <section className="lg:col-span-5 bg-white rounded-2xl shadow-md p-4 flex flex-col lg:min-h-0">
+        <section className="lg:col-span-5 bg-white rounded-2xl shadow-md p-4 flex flex-col lg:min-h-0 lg:overflow-y-auto">
           <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-3">Resumen del pedido</h2>
 
           {lines.length === 0 ? (
@@ -449,7 +483,7 @@ export function TomarPedidoView() {
               Hacé click en un producto para agregarlo.
             </p>
           ) : (
-            <div className="overflow-auto -mx-1 lg:flex-1 lg:min-h-0">
+            <div className="overflow-auto -mx-1 lg:flex-1 lg:min-h-28">
               <table className="w-full text-sm">
                 <thead className="sticky top-0 bg-white">
                   <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
@@ -513,8 +547,8 @@ export function TomarPedidoView() {
 
           {errors.items && <p className="text-xs text-red-600 mt-2">{errors.items}</p>}
 
-          <div className="mt-3 pt-3 border-t border-gray-200 flex items-center gap-3">
-            <div className="flex flex-1 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
+          <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-3">
+            <div className="flex flex-1 min-w-48 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
               {COUNTER_PAYMENT_METHODS.map((method) => (
                 <button
                   key={method}
@@ -561,7 +595,7 @@ export function TomarPedidoView() {
             </div>
           )}
 
-          <div className="mt-4 flex gap-2">
+          <div className="mt-4 flex flex-wrap gap-2">
             <button
               type="button"
               onClick={() => {
@@ -569,14 +603,15 @@ export function TomarPedidoView() {
                 setLastOrderId(null);
               }}
               disabled={submitting}
-              className="px-4 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
+              className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
             >
               Limpiar
             </button>
             <button
               type="submit"
-              disabled={submitting}
-              className="flex-1 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
+              disabled={submitting || isShiftOpen === false}
+              title={isShiftOpen === false ? 'Debés abrir la caja para confirmar pedidos' : undefined}
+              className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
             >
               {submitting ? 'Registrando...' : 'Confirmar pedido'}
             </button>

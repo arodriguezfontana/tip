@@ -5,6 +5,9 @@ import { useAsyncData } from '@/hooks/useAsyncData';
 import { useToast } from '@/hooks/useToast';
 import { createCategory, deleteCategory, fetchAdminProducts, fetchCategories, updateCategory } from '@/services/catalogService';
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
+import { SECTOR_CONFIG } from '@/types/order';
+import type { PreparationSector } from '@/types/order';
+import { SectorIcon } from '@/components/Icons';
 import { getErrorMessage } from '@/utils/errors';
 
 /** El formulario abierto: categoría a editar, o null para crear una nueva. */
@@ -86,7 +89,7 @@ export function CategoriasView() {
         </div>
       )}
 
-      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-0">
+      <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-48">
         {loading && categories.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Cargando categorías...</p>
         ) : categories.length === 0 ? (
@@ -106,6 +109,18 @@ export function CategoriasView() {
                   <tr key={category.id} className="hover:bg-gray-50/50 align-top">
                     <td className="py-3 px-5 whitespace-nowrap">
                       <p className="font-semibold text-gray-900">{category.name}</p>
+                      {category.sector && SECTOR_CONFIG[category.sector as PreparationSector] && (
+                        <div className="mt-0.5">
+                          <span
+                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
+                              SECTOR_CONFIG[category.sector as PreparationSector].badgeClass
+                            }`}
+                          >
+                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0" />
+                            <span>{SECTOR_CONFIG[category.sector as PreparationSector].label}</span>
+                          </span>
+                        </div>
+                      )}
                       <p className="text-xs text-gray-500">
                         {category.products.length === 1 ? '1 producto' : `${category.products.length} productos`}
                       </p>

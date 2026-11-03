@@ -1,11 +1,24 @@
 from datetime import datetime
 
-from sqlalchemy import func
+from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, joinedload
 
-from app.models.menu import Product
+from app.models.menu import Category, Product
 from app.models.order import Order, OrderItem, OrderStatus
+from app.models.promotion import Promotion, PromotionProduct
 from app.repositories.common import created_between
+
+
+def _order_item_options():
+    return (
+        joinedload(Order.items).joinedload(OrderItem.product).joinedload(Product.category),
+        joinedload(Order.items)
+        .joinedload(OrderItem.promotion)
+        .joinedload(Promotion.items)
+        .joinedload(PromotionProduct.product)
+        .joinedload(Product.category),
+        joinedload(Order.delivery_driver),
+    )
 
 
 def add(db: Session, order: Order) -> None:
@@ -16,29 +29,68 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
     """Pedido con sus ítems y los productos de cada uno."""
     return (
         db.query(Order)
-        .options(
-            joinedload(Order.items).joinedload(OrderItem.product),
-            joinedload(Order.delivery_driver),
-        )
+        .options(*_order_item_options())
         .filter(Order.id == order_id)
         .first()
     )
 
 
+def latest_for_chat(db: Session, channel: str, chat_id: str) -> Order | None:
+    """Último pedido que hizo el cliente de ese chat (el más reciente, esté en el estado que esté)."""
+    return (
+        db.query(Order)
+        .options(*_order_item_options())
+        .filter(Order.channel == channel, Order.chat_id == chat_id)
+        .order_by(Order.id.desc())
+        .first()
+    )
+
+
 def list_orders(
-    db: Session, date_from: datetime | None, date_to: datetime | None, statuses: list[str] | None
+    db: Session,
+    date_from: datetime | None,
+    date_to: datetime | None,
+    statuses: list[str] | None,
+    sector: str | None = None,
 ) -> list[Order]:
     """Del más reciente al más antiguo."""
     query = created_between(
-        db.query(Order).options(
-            joinedload(Order.items),
-            joinedload(Order.delivery_driver),
-        ),
+        db.query(Order).options(*_order_item_options()),
         date_from,
         date_to,
     )
     if statuses:
         query = query.filter(Order.status.in_(statuses))
+    if sector:
+        sector_clean = sector.strip().lower()
+        query = query.filter(
+            Order.items.any(
+                or_(
+                    OrderItem.product.has(
+                        or_(
+                            func.lower(Product.sector) == sector_clean,
+                            and_(
+                                Product.sector.is_(None),
+                                Product.category.has(func.lower(Category.sector) == sector_clean),
+                            ),
+                        )
+                    ),
+                    OrderItem.promotion.has(
+                        Promotion.items.any(
+                            PromotionProduct.product.has(
+                                or_(
+                                    func.lower(Product.sector) == sector_clean,
+                                    and_(
+                                        Product.sector.is_(None),
+                                        Product.category.has(func.lower(Category.sector) == sector_clean),
+                                    ),
+                                )
+                            )
+                        )
+                    ),
+                )
+            )
+        )
     return query.order_by(Order.created_at.desc()).all()
 
 

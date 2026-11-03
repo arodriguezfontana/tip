@@ -11,6 +11,7 @@ DEFAULT_STORE_CONFIG = {
     "contact_phone": "11 4444-5555",
     "theme_color": "black",
     "login_bg": "bistro",
+    "panel_bg": "none",
     "logo_url": None,
     "mp_alias": None,
 }
@@ -39,6 +40,9 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
         if data.login_bg:
             config.login_bg = data.login_bg
         config.login_bg_image = data.login_bg_image
+        config.panel_bg = data.panel_bg
+        config.panel_bg_image = data.panel_bg_image
+        config.panel_bg_color = data.panel_bg_color
     db.refresh(config)
     return config
 

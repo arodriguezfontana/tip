@@ -3,6 +3,7 @@ import { useStats } from '@/hooks/useStats';
 import { formatCurrency } from '@/utils/currency';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, presetLabel, rangeForPreset } from '@/utils/dateRange';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 const PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
 
@@ -68,7 +69,7 @@ export function StatsSection() {
       )}
 
       {loading ? (
-        <p className="text-sm text-gray-500 text-center py-8">Cargando métricas y estadísticas...</p>
+        <PanelNote>Cargando métricas y estadísticas...</PanelNote>
       ) : error ? (
         <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
       ) : (
@@ -105,7 +106,7 @@ export function StatsSection() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-0">
+          <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-48">
             <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Top Productos más Vendidos</p>
             {topProducts.length === 0 ? (
               <p className="text-sm text-gray-500">No hay productos vendidos registrados en este período.</p>

@@ -77,6 +77,7 @@ class CategoryPayload(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
 
     name: str = Field(..., min_length=1, max_length=100)
+    sector: str = Field("cocina", min_length=1, max_length=50)
     product_ids: list[int] = Field(
         default_factory=list,
         max_length=MAX_CATEGORY_PRODUCTS,
@@ -95,6 +96,7 @@ class CategoryProductResponse(BaseModel):
 class AdminCategoryResponse(BaseModel):
     id: int
     name: str
+    sector: str = "cocina"
     products: list[CategoryProductResponse]
 
     @classmethod
@@ -102,6 +104,7 @@ class AdminCategoryResponse(BaseModel):
         return cls(
             id=category.id,
             name=category.name,
+            sector=category.sector or "cocina",
             products=[
                 CategoryProductResponse.model_validate(product)
                 for product in sorted(category.products, key=lambda p: p.name.lower())

@@ -1,10 +1,10 @@
-from fastapi import APIRouter, Depends, HTTPException, Request
+from fastapi import APIRouter, Depends
 from fastapi import status as http_status
 from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
+from app.api.uploads import image_body
 from app.db.session import get_db
-from app.models.menu import MAX_IMAGE_BYTES, MAX_IMAGE_MB
 from app.models.user import User
 from app.schemas.catalog_schemas import AdminProductResponse, ProductPayload
 from app.schemas.ingredient_schemas import RecipeUpdate
@@ -12,23 +12,6 @@ from app.services import catalog_service
 from app.services.ingredient_service import replace_recipe
 
 router = APIRouter()
-
-IMAGE_TOO_LARGE = f"La imagen no puede pesar más de {MAX_IMAGE_MB} MB."
-
-
-async def _image_body(request: Request) -> bytes:
-    """El archivo de la imagen viaja tal cual en el cuerpo del pedido. Se corta apenas supera el máximo,
-    para no leer completo un archivo enorme."""
-    declared = request.headers.get("content-length", "")
-    if declared.isdigit() and int(declared) > MAX_IMAGE_BYTES:
-        raise HTTPException(status_code=http_status.HTTP_413_CONTENT_TOO_LARGE, detail=IMAGE_TOO_LARGE)
-    content = bytearray()
-    async for chunk in request.stream():
-        content += chunk
-        if len(content) > MAX_IMAGE_BYTES:
-            raise HTTPException(status_code=http_status.HTTP_413_CONTENT_TOO_LARGE, detail=IMAGE_TOO_LARGE)
-    return bytes(content)
-
 
 @router.get("", response_model=list[AdminProductResponse])
 def get_products(
@@ -64,7 +47,7 @@ def put_product_image(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
     # Después de autenticar: no se lee el archivo de quien no puede cargarlo.
-    image: bytes = Depends(_image_body),
+    image: bytes = Depends(image_body),
 ) -> AdminProductResponse:
     """Carga o reemplaza la imagen (JPG o PNG). El cuerpo es el archivo, sin formulario."""
     return AdminProductResponse.from_model(catalog_service.set_product_image(db, product_id, image))

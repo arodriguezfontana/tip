@@ -247,7 +247,7 @@ def test_acepta_pedidos_web_dentro_del_horario(public_client, db_session, muzza,
     assert db_session.query(Order).count() == 1
 
 
-def test_los_pedidos_del_mostrador_no_se_restringen_por_horario(client, muzza, horarios):
+def test_los_pedidos_del_mostrador_no_se_restringen_por_horario(client, muzza, horarios, open_shift):
     with _fijar_ahora(_momento(LUNES, 21)):
         response = client.post("/api/v1/orders/counter", json=_pedido_web(muzza))
 

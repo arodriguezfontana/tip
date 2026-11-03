@@ -5,6 +5,7 @@ import time
 from typing import Any
 
 import httpx
+from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
@@ -20,13 +21,19 @@ RECONCILE_MIN_INTERVAL_SECONDS = 8
 RECONCILE_MAX_ORDERS = 10
 _last_checked: dict[int, float] = {}
 
+# Referencia externa del cobro de la diferencia de un pedido ya abonado al que se le agregaron productos.
+# Va aparte de la del pedido ("<id>") para que el pago original no cuente como el pago de la diferencia.
+BALANCE_REFERENCE_SUFFIX = "-extra"
+
+
+def _reference(order_id: int, balance: bool = False) -> str:
+    return f"{order_id}{BALANCE_REFERENCE_SUFFIX}" if balance else str(order_id)
+
 
 def payment_received_message(order: Order) -> str:
     """Aviso al cliente de que se acreditó su pago por MercadoPago."""
-    return (
-        f"✅ ¡Recibimos tu pago por MercadoPago para el pedido #{order.id}!\n"
-        f"El estado de tu pedido fue actualizado a Abonado. ¡Muchas gracias!"
-    )
+    que = "el pago de la diferencia" if order.balance_payment_method == PaymentMethod.MERCADOPAGO.value else "tu pago"
+    return f"✅ ¡Recibimos {que} por MercadoPago para el pedido #{order.id}! ¡Muchas gracias!"
 
 
 def public_base_url() -> str | None:
@@ -43,9 +50,12 @@ def public_base_url() -> str | None:
 
 
 def create_payment_preference(
-    order: Order, store_name: str = "RestoIT", return_url: str | None = None
+    order: Order, store_name: str = "RestoIT", return_url: str | None = None, balance: bool = False
 ) -> dict[str, str]:
     """Genera una preferencia de pago en MercadoPago por el monto total exacto del pedido.
+
+    Con `balance` el cobro es solo por lo que falta pagar (la diferencia de un pedido al que se le agregaron
+    productos después de abonarlo), no por el total.
 
     Devuelve un diccionario con 'preference_id' y el link de pago ('init_point').
     Si se indica `return_url`, MercadoPago devuelve ahí al cliente al terminar (pague o no), agregando
@@ -53,9 +63,9 @@ def create_payment_preference(
     Si MERCADOPAGO_ACCESS_TOKEN está configurado, consulta la API oficial de MercadoPago.
     Si no está configurado (modo desarrollo o testing), genera un link válido simulado.
     """
-    total = float(order.total_amount)
-    external_ref = str(order.id)
-    pref_title = f"Pedido #{order.id} - {store_name}"
+    total = float(order.amount_pending if balance else order.total_amount)
+    external_ref = _reference(order.id, balance)
+    pref_title = f"{'Diferencia del pedido' if balance else 'Pedido'} #{order.id} - {store_name}"
 
     if settings.MERCADOPAGO_ACCESS_TOKEN:
         url = f"{MERCADOPAGO_API_URL}/checkout/preferences"
@@ -69,7 +79,7 @@ def create_payment_preference(
         payload: dict[str, Any] = {
             "items": [
                 {
-                    "id": str(order.id),
+                    "id": external_ref,
                     "title": pref_title,
                     "quantity": 1,
                     "unit_price": total,
@@ -97,7 +107,7 @@ def create_payment_preference(
                     logger.error("Error de MercadoPago (%s): %s", res.status_code, res.text)
                 res.raise_for_status()
                 data = res.json()
-                pref_id = data.get("id") or f"mp-{order.id}"
+                pref_id = data.get("id") or f"mp-{external_ref}"
                 init_point = data.get("init_point") or data.get("sandbox_init_point")
                 if init_point:
                     return {"preference_id": pref_id, "init_point": init_point}
@@ -105,7 +115,7 @@ def create_payment_preference(
             logger.error("Error al comunicarse con MercadoPago para pedido #%s: %s", order.id, e)
 
     # Modo simulado / fallback para testing o entornos sin credenciales reales
-    simulated_id = f"mp-pref-{order.id}"
+    simulated_id = f"mp-pref-{external_ref}"
     return {
         "preference_id": simulated_id,
         "init_point": f"https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id={simulated_id}",
@@ -194,10 +204,12 @@ def process_payment_notification(
             order_id_raw = order_id_raw or details.get("external_reference")
 
     # Si aún no tenemos order_id pero tenemos payment_id, buscar por coincidencia en la BD
+    # La diferencia de un pedido ya abonado se cobra con su propia referencia ("<id>-extra").
+    is_balance = str(order_id_raw or "").endswith(BALANCE_REFERENCE_SUFFIX)
     order = None
     if order_id_raw:
         try:
-            order_id = int(order_id_raw)
+            order_id = int(str(order_id_raw).removesuffix(BALANCE_REFERENCE_SUFFIX))
             order = db.query(Order).filter(Order.id == order_id).first()
         except (ValueError, TypeError):
             logger.warning("external_reference / order_id no es un entero: %s", order_id_raw)
@@ -232,9 +244,14 @@ def process_payment_notification(
             values[Order.payment_method] = PaymentMethod.MERCADOPAGO.value
         if payment_id:
             values[Order.mp_payment_id] = str(payment_id)
+        # Un pedido con pago parcial ya cobró su primer pago: solo lo salda el pago de la diferencia, y a la
+        # inversa, el aviso (repetido) del primer pago no debe darlo por saldado.
+        partial = Order.paid_amount > 0 if is_balance else Order.paid_amount == 0
+        if is_balance:
+            values.pop(Order.payment_method, None)
         updated = (
             db.query(Order)
-            .filter(Order.id == order.id, Order.is_paid.is_(False))
+            .filter(Order.id == order.id, Order.is_paid.is_(False), partial)
             .update(values, synchronize_session=False)
         )
         db.commit()
@@ -271,15 +288,17 @@ def confirm_payment(db: Session, payment_id: str) -> str | None:
     return details.get("status")
 
 
-def find_approved_payment_id(order_id: int) -> str | None:
-    """Id del pago aprobado de un pedido, buscándolo en MercadoPago por su referencia externa."""
+def find_approved_payment_id(order_id: int, balance: bool = False) -> str | None:
+    """Id del pago aprobado de un pedido (o de la diferencia, con `balance`), buscándolo en MercadoPago por su
+    referencia externa."""
+    reference = _reference(order_id, balance)
     if not settings.MERCADOPAGO_ACCESS_TOKEN:
         return None
     try:
         with httpx.Client(timeout=5.0) as client:
             res = client.get(
                 f"{MERCADOPAGO_API_URL}/v1/payments/search",
-                params={"external_reference": str(order_id), "sort": "date_created", "criteria": "desc"},
+                params={"external_reference": reference, "sort": "date_created", "criteria": "desc"},
                 headers={"Authorization": f"Bearer {settings.MERCADOPAGO_ACCESS_TOKEN.strip()}"},
             )
             res.raise_for_status()
@@ -288,7 +307,7 @@ def find_approved_payment_id(order_id: int) -> str | None:
         logger.warning("No se pudo consultar los pagos del pedido #%s en MercadoPago: %s", order_id, e)
         return None
     for payment in results:
-        if payment.get("status") == "approved" and str(payment.get("external_reference")) == str(order_id):
+        if payment.get("status") == "approved" and str(payment.get("external_reference")) == reference:
             return str(payment["id"])
     return None
 
@@ -306,7 +325,10 @@ def reconcile_pending_payments(db: Session) -> list[Order]:
     pending = (
         db.query(Order)
         .filter(
-            Order.payment_method == PaymentMethod.MERCADOPAGO.value,
+            or_(
+                Order.payment_method == PaymentMethod.MERCADOPAGO.value,
+                Order.balance_payment_method == PaymentMethod.MERCADOPAGO.value,
+            ),
             Order.is_paid.is_(False),
             Order.mp_preference_id.isnot(None),
             Order.status.in_(active),
@@ -318,15 +340,22 @@ def reconcile_pending_payments(db: Session) -> list[Order]:
     now = time.monotonic()
     paid: list[Order] = []
     for order in pending:
+        balance = order.has_partial_payment
+        if balance and order.balance_payment_method != PaymentMethod.MERCADOPAGO.value:
+            continue  # la diferencia se cobra en efectivo: no hay nada que consultarle a MercadoPago
         if now - _last_checked.get(order.id, float("-inf")) < RECONCILE_MIN_INTERVAL_SECONDS:
             continue
         _last_checked[order.id] = now
-        payment_id = find_approved_payment_id(order.id)
+        payment_id = find_approved_payment_id(order.id, balance=balance) if balance else find_approved_payment_id(order.id)
         if payment_id is None:
             continue
         updated = process_payment_notification(
             db,
-            payload={"status": "approved", "external_reference": str(order.id), "data": {"id": payment_id}},
+            payload={
+                "status": "approved",
+                "external_reference": _reference(order.id, balance),
+                "data": {"id": payment_id},
+            },
         )
         if updated is not None:
             paid.append(updated)
