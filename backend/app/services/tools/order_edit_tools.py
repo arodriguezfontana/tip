@@ -42,6 +42,13 @@ MENSAJE_SIN_PEDIDO = (
 AVISO_LINK_AL_ACEPTAR = "Te pasamos el link de pago cuando el local acepte tu pedido."
 
 
+def _mensaje_en_camino(order: Order) -> str:
+    return (
+        f"Tu pedido #{order.id} ya está en camino 🛵, así que no es posible modificarlo. "
+        "Si querés, te tomo un pedido nuevo: contame qué te gustaría pedir."
+    )
+
+
 def _plata(monto: Decimal) -> str:
     return f"${monto:,.2f}"
 
@@ -91,6 +98,8 @@ def agregar_items_al_pedido(
         order = _pedido_del_cliente(db, canal, chat_id)
         if order is None or OrderStatus(order.status) in _ESTADOS_TERMINADOS:
             return MENSAJE_SIN_PEDIDO
+        if order.status == OrderStatus.ON_THE_WAY.value:
+            return _mensaje_en_camino(order)
         if not order.is_modifiable or not order.is_within_modification_window():
             return _mensaje_ventana_cerrada(db)
 
@@ -162,6 +171,8 @@ def cambiar_metodo_de_pago(
         try:
             order_service.change_order_payment_method(db, order, metodo)
         except OrderNotModifiableError:
+            if order.status == OrderStatus.ON_THE_WAY.value:
+                return _mensaje_en_camino(order)
             return "Tu pedido ya salió, así que no puedo cambiar el medio de pago. Cualquier duda, comunicate con el local."
         except PaymentChangeNotAllowedError:
             return f"Tu pedido #{order.id} ya está abonado, no hay nada más por pagar. ✅"

@@ -279,12 +279,41 @@ def test_tool_cambiar_pago_de_un_pedido_ya_abonado(db_session, products):
     assert "ya está abonado" in _cambiar_pago("efectivo")
 
 
-def test_tool_cambiar_pago_con_pedido_en_camino(db_session, products):
+def test_tool_cambiar_pago_con_pedido_en_camino_avisa_y_ofrece_un_pedido_nuevo(db_session, products):
     order = _pedido(db_session, products)
     order.status = "En Camino"
     db_session.commit()
 
+    respuesta = _cambiar_pago("mercadopago")
+
+    assert f"Tu pedido #{order.id} ya está en camino" in respuesta
+    assert "te tomo un pedido nuevo" in respuesta
+    db_session.expire_all()
+    assert db_session.query(Order).one().payment_method == "efectivo"
+
+
+def test_tool_cambiar_pago_con_pedido_listo_para_retirar(db_session, products):
+    order = _pedido(db_session, products)
+    order.status = "Listo para Retirar"
+    db_session.commit()
+
     assert "ya salió" in _cambiar_pago("mercadopago")
+
+
+@pytest.mark.parametrize("minutos", [2, 15])
+def test_tool_agregar_a_un_pedido_en_camino_avisa_y_ofrece_un_pedido_nuevo(db_session, products, minutos):
+    order = _pedido(db_session, products)
+    order.status = "En Camino"
+    _hace_minutos(db_session, order, minutos)
+
+    respuesta = _agregar("1 Coca-Cola")
+
+    assert respuesta == (
+        f"Tu pedido #{order.id} ya está en camino 🛵, así que no es posible modificarlo. "
+        "Si querés, te tomo un pedido nuevo: contame qué te gustaría pedir."
+    )
+    db_session.expire_all()
+    assert len(db_session.query(Order).one().items) == 2
 
 
 def test_tool_metodo_de_pago_que_no_entiende(db_session, products):

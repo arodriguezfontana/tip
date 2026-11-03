@@ -79,8 +79,9 @@ describe('ComandasBoard', () => {
     expect(within(column('Pendientes')).queryByText('Pendiente Ahora')).not.toBeInTheDocument();
   });
 
-  it('finalizar un pedido lo saca del tablero', async () => {
-    service.updateOrderStatus.mockResolvedValue({ ...ORDERS[3], status: 'Finalizado' });
+  it('finalizar un pedido abonado lo saca del tablero', async () => {
+    service.fetchOrders.mockResolvedValue(ORDERS.map((o) => (o.id === 4 ? { ...o, is_paid: true } : o)));
+    service.updateOrderStatus.mockResolvedValue({ ...ORDERS[3], is_paid: true, status: 'Finalizado' });
     render(<ComandasBoard />);
     const user = userEvent.setup();
     await screen.findByText('Viajando');
@@ -88,6 +89,77 @@ describe('ComandasBoard', () => {
     await user.click(within(column('En Camino')).getByRole('button', { name: 'Finalizar' }));
 
     await waitFor(() => expect(screen.queryByText('Viajando')).not.toBeInTheDocument());
+  });
+
+  it('finalizar un pedido sin pagar pide confirmar el cobro y no lo finaliza si se cancela', async () => {
+    render(<ComandasBoard />);
+    const user = userEvent.setup();
+    await screen.findByText('Viajando');
+
+    await user.click(within(column('En Camino')).getByRole('button', { name: 'Finalizar' }));
+
+    const dialog = await screen.findByRole('dialog', { name: 'El pedido aún no está pago' });
+    expect(dialog).toHaveTextContent('Pedido #4');
+    expect(dialog).toHaveTextContent('17.000');
+    await user.click(within(dialog).getByRole('button', { name: 'Cancelar' }));
+
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(service.updateOrderPayment).not.toHaveBeenCalled();
+    expect(service.updateOrderStatus).not.toHaveBeenCalled();
+    expect(screen.getByText('Viajando')).toBeInTheDocument();
+  });
+
+  it('desde el aviso de pedido sin pagar lo marca como pago y lo finaliza', async () => {
+    service.updateOrderPayment.mockResolvedValue({ ...ORDERS[3], is_paid: true });
+    service.updateOrderStatus.mockResolvedValue({ ...ORDERS[3], is_paid: true, status: 'Finalizado' });
+    render(<ComandasBoard />);
+    const user = userEvent.setup();
+    await screen.findByText('Viajando');
+
+    await user.click(within(column('En Camino')).getByRole('button', { name: 'Finalizar' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pago y finalizar' }));
+
+    await waitFor(() => expect(screen.queryByText('Viajando')).not.toBeInTheDocument());
+    expect(service.updateOrderPayment).toHaveBeenCalledWith(4, true);
+    expect(service.updateOrderStatus).toHaveBeenCalledWith(4, 'Finalizado', undefined);
+    expect(service.updateOrderPayment.mock.invocationCallOrder[0]).toBeLessThan(
+      service.updateOrderStatus.mock.invocationCallOrder[0]
+    );
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+  });
+
+  it('si no se puede registrar el cobro no finaliza el pedido', async () => {
+    service.updateOrderPayment.mockRejectedValue(new Error('caja cerrada'));
+    render(<ComandasBoard />);
+    const user = userEvent.setup();
+    await screen.findByText('Viajando');
+
+    await user.click(within(column('En Camino')).getByRole('button', { name: 'Finalizar' }));
+    await user.click(await screen.findByRole('button', { name: 'Marcar como pago y finalizar' }));
+
+    expect(await screen.findByText('No se pudo marcar el pedido como abonado. No se finalizó.')).toBeInTheDocument();
+    expect(service.updateOrderStatus).not.toHaveBeenCalled();
+    expect(screen.getByText('Viajando')).toBeInTheDocument();
+  });
+
+  it('indica junto a Confirmados cuántos pedidos fueron modificados', async () => {
+    service.fetchOrders.mockResolvedValue([
+      ...ORDERS,
+      makeOrder({ id: 6, customer_name: 'Agregó una Coca', status: 'Confirmado', kitchen_update_pending: true }),
+      makeOrder({ id: 7, customer_name: 'Pendiente con agregados', status: 'Pendiente', kitchen_update_pending: true }),
+    ]);
+    render(<ComandasBoard />);
+    await screen.findByText('Agregó una Coca');
+
+    expect(within(column('Confirmados')).getByText('1 modificado')).toBeInTheDocument();
+    expect(within(column('Pendientes')).queryByText(/^\d+ modificados?$/)).not.toBeInTheDocument();
+  });
+
+  it('sin pedidos modificados no muestra el indicador', async () => {
+    render(<ComandasBoard />);
+    await screen.findByText('Ya Confirmado');
+
+    expect(within(column('Confirmados')).queryByText(/modificado/)).not.toBeInTheDocument();
   });
 
   it('muestra el error si el cambio de estado falla y deja el pedido donde estaba', async () => {

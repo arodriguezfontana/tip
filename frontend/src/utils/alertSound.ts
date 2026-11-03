@@ -101,6 +101,14 @@ const HANDOFF_CHIME: Chime = {
   noteGapS: 0.05,
 };
 
+// Tres toques cortos y agudos en la misma nota: se distingue del acorde de pedidos nuevos y del "ding-dong".
+const MODIFIED_ORDER_CHIME: Chime = {
+  notesHz: [1319, 1319, 1319],
+  waveform: 'sine',
+  noteDurationS: 0.09,
+  noteGapS: 0.07,
+};
+
 function playChime({ notesHz, waveform, noteDurationS, noteGapS }: Chime): boolean {
   const ctx = getContext();
   if (!ctx) return false;
@@ -137,6 +145,11 @@ function playChime({ notesHz, waveform, noteDurationS, noteGapS }: Chime): boole
 /** Reproduce la alerta de pedidos. Devuelve false si el navegador todavía no habilitó el audio. */
 export function playAlertSound(): boolean {
   return playChime(ORDER_CHIME);
+}
+
+/** Alerta de un pedido confirmado al que el cliente le agregó productos (suena distinto a la de pedidos nuevos). */
+export function playModifiedOrderSound(): boolean {
+  return playChime(MODIFIED_ORDER_CHIME);
 }
 
 /** Alerta de un cliente que pidió hablar con una persona (suena distinto a la de pedidos). */
