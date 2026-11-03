@@ -668,7 +668,7 @@ def calcular_y_preparar_pedido(
             "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
-        texto_respuesta = "Queremos confirmar tu pedido:\n" + "\n".join(resumen_lineas) + f"\n\nTotal: ${total_general:,.2f}"
+        texto_respuesta = "Detalle de tu pedido:\n" + "\n".join(resumen_lineas) + f"\n\nTotal: ${total_general:,.2f}"
 
         if faltan_datos:
             faltantes = []
@@ -691,15 +691,20 @@ def calcular_y_preparar_pedido(
             texto_respuesta = aviso_horario
         else:
             entrega = PICKUP_ADDRESS if es_retiro else f"Envío a domicilio: {shipping_address}"
-            horario = describir_horario_programado(horario_programado, ahora_local())
+            datos_de_entrega = [f"- Nombre: {customer_name}", f"- Teléfono: {telefono}", f"- {entrega}"]
+            # El horario y las observaciones solo aparecen si hay algo que mostrar (un pedido para ahora no lleva horario).
+            if horario_programado:
+                datos_de_entrega.append(f"- Horario: {describir_horario_programado(horario_programado, ahora_local())}")
+            if notas:
+                datos_de_entrega.append(f"- Observaciones: {notas}")
 
             if pago_normalizado:
                 pago_label = "MercadoPago" if pago_normalizado == PaymentMethod.MERCADOPAGO.value else "Efectivo"
-                pago_linea = f"- Método de pago: {pago_label}"
-                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+                datos_de_entrega.append(f"- Método de pago: {pago_label}")
+                # Con todos los datos, incluido el pago: es la única vez que se le pide confirmar.
+                cierre = "¿Está todo bien para confirmar el pedido?"
             else:
-                pago_linea = '💳 Método de pago: ¿Qué método de pago preferís? Ofrecemos "Efectivo" y "MercadoPago".'
-                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+                cierre = '💳 ¿Cómo preferís pagar? Ofrecemos "Efectivo" y "MercadoPago".'
 
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
@@ -709,15 +714,9 @@ def calcular_y_preparar_pedido(
                 f"💰 Total: ${total_general:,.2f}",
                 "",
                 "🚚 Entrega:",
-                f"- Nombre: {customer_name}",
-                f"- Teléfono: {telefono}",
-                f"- {entrega}",
-                f"- Horario: {horario}",
-                f"- Observaciones: {notas or 'sin observaciones'}",
-                *( [pago_linea] if pago_normalizado else [] ),
+                *datos_de_entrega,
                 "",
-                *( [pago_linea, ""] if not pago_normalizado else [] ),
-                pregunta_final,
+                cierre,
             ])
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 

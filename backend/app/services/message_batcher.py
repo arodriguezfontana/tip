@@ -54,8 +54,11 @@ class AgrupadorDeMensajes:
         # Referencias a las tareas en vuelo: sin ellas el intérprete podría descartarlas a mitad de camino.
         self._tareas: set[asyncio.Task] = set()
 
-    def recibir(self, chat_id: str, mensaje: str) -> None:
-        """Registra un mensaje. Debe llamarse desde el event loop; no espera ni bloquea."""
+    def recibir(self, chat_id: str, mensaje: str, espera_segundos: float | None = None) -> None:
+        """Registra un mensaje. Debe llamarse desde el event loop; no espera ni bloquea.
+
+        espera_segundos: espera propia de este mensaje, en lugar de la general (ej. más corta para un audio).
+        """
         chat = self._chats.get(chat_id)
         if chat is None:
             chat = self._chats[chat_id] = _Chat()
@@ -70,7 +73,8 @@ class AgrupadorDeMensajes:
         # Cada mensaje nuevo reinicia la espera, hasta el tope desde el primero del grupo.
         if chat.temporizador is not None:
             chat.temporizador.cancel()
-        espera = min(self._espera, max(0.0, chat.desde + self._espera_maxima - ahora))
+        espera_del_mensaje = self._espera if espera_segundos is None else espera_segundos
+        espera = min(espera_del_mensaje, max(0.0, chat.desde + self._espera_maxima - ahora))
         chat.tareas += 1
         chat.temporizador = self._lanzar(self._esperar_y_procesar(chat_id, chat, espera))
         # Se limpia al terminar la tarea, también si se cancela antes de empezar (ahí su cuerpo nunca corre).

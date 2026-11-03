@@ -465,3 +465,75 @@ def test_pizza_mitad_y_mitad_persiste_en_bd_unificada(db_session, products):
     assert item.secondary_product_id == napo.id
     assert order.total_amount == 9500.0
 
+
+
+# --- Resumen: solo lo que hace falta y una sola pregunta de confirmación ---
+
+
+def _resumen_completo(**extra) -> str:
+    args = {
+        "items_solicitados": "1 Pizza Muzzarella",
+        "customer_name": "Juan",
+        "customer_phone": "1144445555",
+        "shipping_address": "Calle 123",
+        "metodo_entrega": "domicilio",
+        **extra,
+    }
+    return _calcular(**args)["mensaje_para_usuario"]
+
+
+def test_un_pedido_para_ahora_sin_observaciones_no_muestra_horario_ni_observaciones(products):
+    resumen = _resumen_completo(metodo_pago="efectivo")
+
+    assert "Horario" not in resumen
+    assert "Observaciones" not in resumen
+    assert "sin observaciones" not in resumen
+    assert "Nombre: Juan" in resumen and "Envío a domicilio: Calle 123" in resumen
+
+
+def test_las_observaciones_aparecen_solo_si_hay(products):
+    assert "- Observaciones: timbre 2B" in _resumen_completo(metodo_pago="efectivo", observaciones="timbre 2B")
+
+
+def test_con_todos_los_datos_pregunta_una_sola_vez_si_esta_todo_bien(products):
+    resumen = _resumen_completo(metodo_pago="mercadopago")
+
+    assert resumen.count("¿Está todo bien para confirmar el pedido?") == 1
+    assert "- Método de pago: MercadoPago" in resumen
+
+
+def test_si_falta_el_metodo_de_pago_solo_pregunta_eso(products):
+    resumen = _resumen_completo()
+
+    assert "¿Está todo bien" not in resumen
+    assert resumen.rstrip().endswith('💳 ¿Cómo preferís pagar? Ofrecemos "Efectivo" y "MercadoPago".')
+
+
+def test_si_faltan_datos_no_pide_confirmar(products):
+    resumen = _calcular(items_solicitados="1 Pizza Muzzarella")["mensaje_para_usuario"]
+
+    assert resumen.startswith("Detalle de tu pedido:")
+    assert "confirmar" not in resumen.lower()
+
+
+def test_el_bot_confirma_una_sola_vez_al_final():
+    from unittest.mock import MagicMock
+
+    from app.services.chat_service import ChatService
+
+    prompt = ChatService(llm=MagicMock()).system_prompt
+
+    assert "Primera confirmación" not in prompt and "Segunda confirmación" not in prompt
+    assert "Confirmación única" in prompt
+    assert "no le preguntes si está bien" in prompt
+
+
+def test_si_saluda_y_ya_pide_algo_el_bot_lo_procesa_en_la_misma_respuesta():
+    from unittest.mock import MagicMock
+
+    from app.services.chat_service import ChatService
+
+    prompt = ChatService(llm=MagicMock()).system_prompt
+
+    assert "saludalo y procesalo en la misma respuesta" in prompt
+    assert "Si solo saluda, preguntale amablemente si quiere ver el menú" in prompt

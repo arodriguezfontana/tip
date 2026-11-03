@@ -94,7 +94,7 @@ A diferencia de Telegram, **WhatsApp no permite registrar el webhook por API**: 
   cliente. Los avisos de cambio de estado del pedido que salgan después (ej. un pedido programado para otro
   día) los rechaza Meta y quedan en el log como `Error al enviar mensaje a WhatsApp`. Para esos casos haría
   falta crear **plantillas de mensaje** aprobadas por Meta; hoy no están implementadas.
-- Solo se procesan mensajes de **texto**. Imágenes, audios y ubicaciones se ignoran.
+- Se procesan mensajes de **texto** y de **voz** (ver abajo). Imágenes y ubicaciones se ignoran.
 - Las respuestas de WhatsApp se muestran como texto plano (igual que en Telegram).
 
 ## Menú en imagen
@@ -110,6 +110,42 @@ carta y un mensaje que lo invita a pedir. El dueño las carga desde el panel, en
 - Sin imagen cargada, o si el envío falla, el bot responde con el menú en texto como siempre.
 - WhatsApp: el backend sube cada imagen a Meta una vez por versión y reutiliza ese archivo para todos los clientes
   (Meta lo conserva 30 días; si venció, se vuelve a subir solo). No hace falta que el backend tenga URL pública.
+
+## Mensajes de voz
+
+El cliente puede mandar su pedido como nota de voz (o un audio adjunto). El bot lo transcribe y lo atiende igual
+que si lo hubiera escrito:
+
+1. El webhook recibe el mensaje `audio` (`.ogg` las notas de voz, `.mp4` algunos audios adjuntos) y le responde
+   200 a Meta enseguida; el resto sigue en segundo plano.
+2. El backend descarga el archivo de la Graph API (primero pide la URL con el id del audio y después lo baja, siempre
+   con `WHATSAPP_ACCESS_TOKEN`). Se ignoran los audios de más de 16 MB, el máximo de WhatsApp.
+3. Gemini lo transcribe (`app/services/speech_to_text.py`), con la misma `GOOGLE_API_KEY` y los mismos modelos del
+   chat (ver abajo). Si el primer modelo no respondió en 6 s, se le pide también al de respaldo y se usa la primera
+   respuesta.
+4. La transcripción entra al mismo pipeline que un texto (agrupador de mensajes, IA y herramientas), marcada como
+   `[Mensaje de voz transcripto]`, con una espera de 1,5 s en lugar de la general (ya pasaron unos segundos
+   transcribiéndolo). Por la marca el bot sabe que puede haber errores: nunca registra un pedido directo desde un
+   audio, siempre le muestra el detalle en texto para que el cliente lo confirme.
+
+Si el audio no se puede descargar, está vacío o no se entiende, el bot le pide al cliente que lo escriba o lo mande
+de nuevo. Si el chat lo está atendiendo una persona, en el panel aparece la transcripción (o el aviso de que no se
+pudo transcribir) y el bot no responde.
+
+No hace falta configurar nada en Meta: los audios llegan por la misma suscripción a `messages`.
+
+### Modelo principal y de respaldo
+
+Gemini a veces deja una petición colgada (decenas de segundos) o responde 503 por alta demanda, y la misma
+petición repetida al rato vuelve en un segundo. Por eso el bot usa dos modelos (`app/services/gemini_models.py`):
+
+- `BOT_LLM_MODEL` (por defecto `gemini-3.5-flash-lite`) y `BOT_LLM_FALLBACK_MODELS`, separados por coma
+  (`gemini-flash-lite-latest,gemini-3.1-flash-lite`; vacío para no usar respaldo). Todos son del plan gratuito y cada
+  uno tiene su propia cuota diaria. Se eligieron midiéndolos con el prompt real del bot: `3.5-flash-lite` respondió en
+  1 a 2 s y eligió bien las herramientas; cada modelo se cae por su lado (mientras uno daba 503, otro andaba bien).
+- En el chat, cada llamada tiene 12 s; si el modelo no responde o falla, se reintenta con el siguiente (20 s).
+- Después de una falla del principal, durante 2 minutos se empieza por el respaldo, así no se paga la espera en
+  cada mensaje mientras dura el problema. En el log queda `Gemini ... no está respondiendo: se usa ... primero`.
 
 ## Cómo está armado (para quien mantenga el código)
 
