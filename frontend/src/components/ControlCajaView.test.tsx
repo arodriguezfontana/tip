@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlCajaView } from '@/components/ControlCajaView';
 import * as cashShiftService from '@/services/cashShiftService';
 import type { CashShift, CashShiftDetail } from '@/types/cashShift';
@@ -233,5 +233,32 @@ describe('ControlCajaView', () => {
     await waitFor(() => {
       expect(screen.queryByText('Detalle del turno #1')).not.toBeInTheDocument();
     });
+  });
+});
+
+describe('ControlCajaView - refresco automático', () => {
+  beforeEach(() => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    service.fetchCashShiftsHistory.mockResolvedValue({ items: [], total: 0 });
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+  });
+
+  it('actualiza la caja esperada sin perder lo que se está escribiendo', async () => {
+    const user = userEvent.setup({ advanceTimers: vi.advanceTimersByTime });
+    service.fetchCurrentCashShift.mockResolvedValue({ is_open: true, shift: MOCK_OPEN_SHIFT });
+    render(<ControlCajaView />);
+    await user.type(await screen.findByLabelText(/Monto \(\$\)/), '750');
+
+    service.fetchCurrentCashShift.mockResolvedValue({
+      is_open: true,
+      shift: { ...MOCK_OPEN_SHIFT, summary: { ...MOCK_OPEN_SHIFT.summary!, expected_cash: 58700 } },
+    });
+    await vi.advanceTimersByTimeAsync(10000);
+
+    expect(await screen.findByText(/58\.700,00/)).toBeInTheDocument();
+    expect(screen.getByLabelText(/Monto \(\$\)/)).toHaveValue(750);
   });
 });

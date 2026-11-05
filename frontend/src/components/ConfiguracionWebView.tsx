@@ -16,6 +16,7 @@ import {
 import { resizeImageToDataUrl } from '@/utils/images';
 import { applyThemeColor } from '@/utils/theme';
 import { CreditCardIcon, LocationPinIcon, PhoneIcon } from '@/components/Icons';
+import { PanelNote } from '@/components/ui/PanelNote';
 
 const LOGIN_BG_CHOICES: {
   id: Exclude<LoginBgOption, 'custom'>;
@@ -212,11 +213,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
   const isCustomColor = !(PRESET_THEME_KEYS as readonly string[]).includes(themeColor);
 
   if (loading) {
-    return (
-      <div className="flex items-center justify-center py-20 text-gray-500">
-        <p className="text-sm font-medium">Cargando configuración...</p>
-      </div>
-    );
+    return <PanelNote>Cargando configuración...</PanelNote>;
   }
 
   return (

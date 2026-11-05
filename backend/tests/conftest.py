@@ -65,6 +65,16 @@ def _set_sqlite_pragma(dbapi_connection, connection_record):
 TestingSessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
+@pytest.fixture(autouse=True)
+def _modelos_de_gemini_sin_fallas():
+    """Cada test arranca con el modelo principal de Gemini (una falla simulada no pasa al test siguiente)."""
+    from app.services.gemini_models import modelos
+
+    modelos._respaldo_hasta = 0.0
+    yield
+    modelos._respaldo_hasta = 0.0
+
+
 @pytest.fixture()
 def db_session():
     Base.metadata.create_all(bind=engine)

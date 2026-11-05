@@ -386,8 +386,19 @@ def change_order_status(
 
     with transaction(db):
         order.transition_to(new_status, estimated_minutes, current_delay_minutes=estimate_delay_minutes(db))
+        if order.status == OrderStatus.COMPLETED.value and order.awaits_cash_payment:
+            _collect_cash_payment(db, order)
     db.refresh(order)
     return order
+
+
+def _collect_cash_payment(db: Session, order: Order) -> None:
+    """Un pedido en efectivo se cobra al entregarlo: al finalizar entra a la caja, sin marcarlo a mano."""
+    order.is_paid = True
+    if not order.cash_shift_id:
+        shift = cash_shift_service.get_current_open_shift(db)
+        if shift:
+            order.cash_shift_id = shift.id
 
 
 def assign_delivery_driver(

@@ -227,6 +227,87 @@ def test_recuerda_solo_los_ultimos_chats(monkeypatch):
     assert list(canal._ultimo_mensaje_recibido) == ["chat1", "chat2"]
 
 
+# --- Mensajes de voz ---
+
+
+def _nota_de_voz(telefono="5491155551234", media_id="AUDIO123", mime="audio/ogg; codecs=opus"):
+    notificacion = _notificacion(telefono=telefono, message_id="wamid.VOZ")
+    notificacion["entry"][0]["changes"][0]["value"]["messages"] = [
+        {"from": telefono, "id": "wamid.VOZ", "type": "audio", "audio": {"id": media_id, "mime_type": mime, "voice": True}}
+    ]
+    return notificacion
+
+
+def test_una_nota_de_voz_se_manda_a_transcribir_sin_tratarla_como_texto(public_client, bot):
+    response = _post(public_client, _nota_de_voz())
+
+    assert response.status_code == 200
+    bot.recibir_audio.assert_called_once_with(Channel.WHATSAPP, "5491155551234", "AUDIO123")
+    bot.recibir_mensaje.assert_not_called()
+    bot.registrar_perfil.assert_called_once_with(Channel.WHATSAPP, "5491155551234", "Ana", telefono="5491155551234")
+    assert obtener_canal(Channel.WHATSAPP)._ultimo_mensaje_recibido["5491155551234"] == "wamid.VOZ"
+
+
+def test_un_audio_sin_id_se_ignora(public_client, bot):
+    notificacion = _nota_de_voz()
+    notificacion["entry"][0]["changes"][0]["value"]["messages"][0]["audio"] = {}
+
+    assert _post(public_client, notificacion).status_code == 200
+    bot.recibir_audio.assert_not_called()
+
+
+@pytest.fixture()
+def meta_media(monkeypatch):
+    """Graph API falsa: primero devuelve la URL del audio y después el archivo."""
+    canal = WhatsAppChannel()
+    estado = {
+        "requests": [],
+        "status": 200,
+        "info": {"url": "https://lookaside.fbsbx.com/audio?mid=1", "mime_type": "audio/ogg", "file_size": 7},
+    }
+
+    def responder(request: httpx.Request) -> httpx.Response:
+        estado["requests"].append(request)
+        if request.url.host == "graph.facebook.com":
+            return httpx.Response(estado["status"], json=estado["info"])
+        return httpx.Response(200, content=b"OggS123", headers={"content-type": "audio/ogg"})
+
+    monkeypatch.setattr(canal, "_cliente", lambda: httpx.AsyncClient(transport=httpx.MockTransport(responder)))
+    estado["canal"] = canal
+    return estado
+
+
+def test_descarga_el_audio_en_dos_pasos_con_el_token(meta_media):
+    audio = asyncio.run(meta_media["canal"].descargar_audio("AUDIO123"))
+
+    assert (audio.datos, audio.mime_type) == (b"OggS123", "audio/ogg")
+    pedido_de_url, descarga = meta_media["requests"]
+    assert pedido_de_url.url == f"https://graph.facebook.com/{settings.WHATSAPP_API_VERSION}/AUDIO123"
+    assert str(descarga.url) == "https://lookaside.fbsbx.com/audio?mid=1"
+    assert all(r.headers["Authorization"] == "Bearer token-de-acceso" for r in meta_media["requests"])
+
+
+def test_no_descarga_audios_de_mas_de_16_mb(meta_media):
+    meta_media["info"]["file_size"] = 17 * 1024 * 1024
+
+    assert asyncio.run(meta_media["canal"].descargar_audio("AUDIO123")) is None
+    assert len(meta_media["requests"]) == 1
+
+
+def test_un_error_de_meta_al_descargar_el_audio_devuelve_none(meta_media, caplog):
+    meta_media["status"] = 404
+
+    assert asyncio.run(meta_media["canal"].descargar_audio("AUDIO123")) is None
+    assert "No se pudo descargar el audio AUDIO123" in caplog.text
+
+
+def test_sin_credenciales_no_intenta_descargar_el_audio(meta_media, monkeypatch):
+    monkeypatch.setattr(settings, "WHATSAPP_ACCESS_TOKEN", "")
+
+    assert asyncio.run(meta_media["canal"].descargar_audio("AUDIO123")) is None
+    assert meta_media["requests"] == []
+
+
 # --- Configuración y claves de conversación ---
 
 _BASE = {
