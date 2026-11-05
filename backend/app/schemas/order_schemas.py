@@ -20,6 +20,8 @@ class OrderResponse(BaseModel):
     source: str
     # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
     channel: str | None = None
+    # El pedido salió de un chat del bot y se puede hablar con el cliente desde el panel.
+    has_chat: bool = False
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
@@ -57,6 +59,7 @@ class OrderResponse(BaseModel):
             delivery_method=order.delivery_method,
             source=order.source,
             channel=order.channel,
+            has_chat=bool(order.channel and order.chat_id),
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,

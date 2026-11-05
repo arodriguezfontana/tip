@@ -1,4 +1,5 @@
-export type HandoffStatus = 'waiting' | 'in_progress';
+/** 'bot': nadie intervino el chat (solo se muestra su historial); 'in_progress': bot pausado por una persona. */
+export type HandoffStatus = 'waiting' | 'in_progress' | 'bot';
 export type HandoffMessageAuthor = 'customer' | 'bot' | 'employee' | 'system';
 
 export interface HandoffMessage {
@@ -16,6 +17,10 @@ export interface HandoffSummary {
   reason: string | null;
   status: HandoffStatus;
   handled_by: string | null;
+  /** El local escribió desde Meta Business Suite y no hay un empleado del panel a cargo. */
+  external?: boolean;
+  /** Cuándo vuelve el bot si no hay más mensajes. */
+  expires_at?: string | null;
   requested_at: string;
   /** Mensajes del cliente que el empleado todavía no vio. */
   unread_count?: number;

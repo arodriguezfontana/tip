@@ -53,6 +53,8 @@ class Settings(BaseSettings):
     # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
     BOT_BATCH_WINDOW_SECONDS: float = 2.0
     BOT_BATCH_MAX_WAIT_SECONDS: float = 6.0
+    # Sin mensajes durante este tiempo, un chat intervenido por una persona vuelve al bot (10 minutos).
+    MANUAL_MODE_TIMEOUT_SECONDS: float = 600.0
 
     # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
     RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"

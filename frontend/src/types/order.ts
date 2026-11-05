@@ -205,6 +205,8 @@ export interface AdminOrder {
   delivery_method: DeliveryMethod;
   source: OrderSource;
   channel?: OrderChannel | null;
+  /** El pedido salió de un chat del bot: se puede hablar con el cliente desde el panel. */
+  has_chat?: boolean;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;

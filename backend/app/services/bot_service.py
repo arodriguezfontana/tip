@@ -14,7 +14,7 @@ from app.core.phone import normalize_phone
 from app.services.channels import CanalDeMensajeria, obtener_canal
 from app.services.chat_memory import SesionChat
 from app.services.chat_service import ChatService
-from app.services.human_handoff import derivaciones
+from app.services.human_handoff import MensajeDerivacion, derivaciones
 from app.services.message_batcher import AgrupadorDeMensajes
 
 logger = logging.getLogger(__name__)
@@ -69,6 +69,20 @@ class BotService:
             return
         self.agrupador.recibir(clave, mensaje)
 
+    def transcripcion(self, clave: str) -> list[MensajeDerivacion]:
+        """Lo que el cliente y el bot se dijeron hasta ahora en el chat (vacío si el bot no lo tiene en memoria)."""
+        sesion = self.chat_service.sesiones.get(clave)
+        return list(sesion.transcripcion) if sesion is not None else []
+
+    def perfil(self, clave: str) -> dict[str, str]:
+        sesion = self.chat_service.sesiones.get(clave)
+        return dict(sesion.perfil) if sesion is not None else {}
+
+    def registrar_mensaje_saliente(self, canal: Channel, chat_id: str, texto: str) -> None:
+        """El local le escribió al cliente por fuera del panel (app de Meta): pausa al bot en ese chat."""
+        clave = session_key(canal, chat_id)
+        derivaciones.registrar_mensaje_externo(clave, texto, historial=self.transcripcion(clave))
+
     @staticmethod
     def _canal_y_chat(clave: str) -> tuple[CanalDeMensajeria, str]:
         canal, chat_id = split_session_key(clave)
@@ -103,6 +117,10 @@ class BotService:
         """Procesa el mensaje con el ChatService (IA) y despacha la respuesta por el canal del cliente."""
         inicio = time.perf_counter()
         canal, chat_id = self._canal_y_chat(clave)
+        if derivaciones.esta_derivado(clave):
+            # Un empleado intervino el chat mientras el mensaje esperaba en la cola: no se responde, solo se guarda.
+            derivaciones.registrar_mensaje_del_cliente(clave, mensaje)
+            return
         try:
             indicador = asyncio.create_task(_mantener_escribiendo(canal, chat_id))
             try:

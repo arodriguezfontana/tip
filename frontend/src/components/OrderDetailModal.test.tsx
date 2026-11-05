@@ -75,6 +75,23 @@ describe('OrderDetailModal', () => {
     expect(within(dialog).getByText('Total (abonado)')).toBeInTheDocument();
   });
 
+  it('un pedido del bot ofrece abrir el chat con el cliente', async () => {
+    const opened = vi.fn();
+    window.addEventListener('restoit:open-order-chat', (e) => opened((e as CustomEvent<number>).detail));
+    const { onClose, user } = renderModal({ ...ORDER, source: 'bot', channel: 'whatsapp', has_chat: true });
+
+    await user.click(screen.getByRole('button', { name: /Abrir chat con el cliente/ }));
+
+    expect(opened).toHaveBeenCalledWith(55);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('un pedido que no salió de un chat no ofrece el chat', () => {
+    renderModal();
+
+    expect(screen.queryByRole('button', { name: /Abrir chat con el cliente/ })).not.toBeInTheDocument();
+  });
+
   it('un pedido sin pago informado figura pendiente de pago', async () => {
     service.fetchOrderDetail.mockResolvedValue(makeOrderDetail({ ...ORDER, payment_method: null, is_paid: false }));
     renderModal();
