@@ -14,6 +14,8 @@ DEFAULT_STORE_CONFIG = {
     "panel_bg": "none",
     "logo_url": None,
     "mp_alias": None,
+    "cash_pin_enabled": False,
+    "cash_pin": None,
 }
 
 
@@ -43,6 +45,7 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
         config.panel_bg = data.panel_bg
         config.panel_bg_image = data.panel_bg_image
         config.panel_bg_color = data.panel_bg_color
+        config.cash_pin_enabled = data.cash_pin_enabled
+        config.cash_pin = data.cash_pin if data.cash_pin_enabled else None
     db.refresh(config)
     return config
-

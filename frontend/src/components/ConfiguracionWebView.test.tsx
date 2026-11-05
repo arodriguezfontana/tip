@@ -339,4 +339,38 @@ describe('ConfiguracionWebView', () => {
       expect(screen.getByRole('button', { name: 'Panel: fondo liso' })).toHaveAttribute('aria-pressed', 'true');
     });
   });
+
+  describe('Seguridad y PIN de Caja', () => {
+    it('permite habilitar protección por PIN, valida 4 dígitos y lo guarda', async () => {
+      const user = userEvent.setup();
+      render(<ConfiguracionWebView />);
+      await screen.findByDisplayValue('Pizzería Los Troncos');
+
+      const checkbox = screen.getByRole('checkbox', { name: /Proteger el módulo de Caja/i });
+      expect(checkbox).not.toBeChecked();
+
+      await user.click(checkbox);
+      expect(checkbox).toBeChecked();
+
+      const pinInput = screen.getByLabelText(/PIN de Caja/i);
+      expect(pinInput).toBeInTheDocument();
+
+      // Intento guardar con PIN incompleto
+      await user.type(pinInput, '12');
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      expect(await screen.findByRole('alert')).toHaveTextContent(/exactamente 4 dígitos/i);
+
+      // Completar 4 dígitos y guardar exitosamente
+      await user.type(pinInput, '34');
+      await user.click(screen.getByRole('button', { name: 'Guardar cambios' }));
+      await waitFor(() => {
+        expect(storeConfigService.updateStoreConfig).toHaveBeenCalledWith(
+          expect.objectContaining({
+            cash_pin_enabled: true,
+            cash_pin: '1234',
+          })
+        );
+      });
+    });
+  });
 });

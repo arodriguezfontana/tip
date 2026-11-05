@@ -2,9 +2,15 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.core.config import settings
 from app.models.order import Order, OrderItem
 
 STATS_URL = "/api/v1/stats"
+
+
+@pytest.fixture(autouse=True)
+def _auth_stats_pin(client):
+    client.headers["X-Admin-PIN"] = settings.ADMIN_PIN
 
 # 2026-09-28 es lunes.
 LUNES_MEDIODIA = datetime(2026, 9, 28, 15, 0, tzinfo=timezone.utc)  # 12:00 en Argentina

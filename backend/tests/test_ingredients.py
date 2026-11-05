@@ -4,8 +4,16 @@ from datetime import datetime, timezone
 
 import pytest
 
+from app.core.config import settings
 from app.models.menu import Ingredient, ProductIngredient
 from app.models.order import Order, OrderItem
+
+
+@pytest.fixture(autouse=True)
+def _auth_pin_for_reports(request):
+    if "client" in request.fixturenames:
+        c = request.getfixturevalue("client")
+        c.headers["X-Admin-PIN"] = settings.ADMIN_PIN
 
 INGREDIENTS_URL = "/api/v1/ingredients"
 PRODUCTS_URL = "/api/v1/products"

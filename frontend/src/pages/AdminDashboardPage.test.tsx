@@ -16,6 +16,7 @@ import * as promotionImageService from '@/services/promotionImageService';
 import * as promotionService from '@/services/promotionService';
 import * as statsService from '@/services/statsService';
 import * as storeConfigService from '@/services/storeConfigService';
+import * as securityService from '@/services/securityService';
 import { ADMIN, MUZZA, fakeAuth, renderWithProviders } from '@/test/utils';
 
 vi.mock('@/services/orderService');
@@ -29,6 +30,7 @@ vi.mock('@/services/catalogService');
 vi.mock('@/services/cashShiftService');
 vi.mock('@/services/businessHoursService');
 vi.mock('@/services/storeConfigService');
+vi.mock('@/services/securityService');
 vi.mock('@/services/promotionService');
 vi.mock('@/services/menuImageService');
 vi.mock('@/services/promotionImageService');
@@ -69,6 +71,24 @@ beforeEach(() => {
     next_opening_label: null,
     ranges: [],
   });
+  vi.mocked(securityService.fetchPinStatus).mockResolvedValue({
+    admin_pin_required: true,
+    admin_blocked: false,
+    admin_blocked_seconds_remaining: 0,
+    cash_pin_required: false,
+    cash_blocked: false,
+    cash_blocked_seconds_remaining: 0,
+  });
+  vi.mocked(securityService.verifyAdminPin).mockResolvedValue({
+    token: 'mock-admin-token',
+    expires_in: 300,
+    message: 'ok',
+  });
+  vi.mocked(securityService.verifyCashPin).mockResolvedValue({
+    token: 'mock-cash-token',
+    expires_in: 300,
+    message: 'ok',
+  });
   vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue({
     id: 1,
     store_name: 'RestoIT',
@@ -97,6 +117,16 @@ async function goTo(user: ReturnType<typeof userEvent.setup>, section: string) {
   await user.click(target);
   // Al elegir una sección el menú lateral se cierra solo.
   expect(screen.getByRole('button', { name: 'Abrir menú' })).toHaveAttribute('aria-expanded', 'false');
+
+  // Si la ruta exige PIN, se ingresa para desbloquear
+  const pinDialog = screen.queryByRole('dialog');
+  if (pinDialog) {
+    const dialog = within(pinDialog);
+    await user.click(dialog.getByRole('button', { name: '1' }));
+    await user.click(dialog.getByRole('button', { name: '2' }));
+    await user.click(dialog.getByRole('button', { name: '3' }));
+    await user.click(dialog.getByRole('button', { name: '4' }));
+  }
 }
 
 describe('AdminDashboardPage', () => {
@@ -305,5 +335,41 @@ describe('AdminDashboardPage', () => {
 
     expect(auth.logout).toHaveBeenCalled();
     expect(screen.getByTestId('location')).toHaveTextContent('/login');
+  });
+
+  it('al intentar navegar a Estadísticas sin desbloquear pide PIN y al cancelar vuelve a Comandas', async () => {
+    const { user } = renderDashboard();
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    const btn = screen.getAllByRole('button', { name: 'Estadísticas' }).find((b) => !b.hasAttribute('aria-controls'))!;
+    await user.click(btn);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Acceso a Datos Sensibles y Estadísticas' })).toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Volver al panel' }));
+    expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+    expect(screen.getByText('Panel de Comandas')).toBeVisible();
+  });
+
+  it('con PIN de caja activado exige PIN antes de ingresar a Control de caja', async () => {
+    vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValueOnce({
+      id: 1,
+      store_name: 'RestoIT',
+      address: '',
+      contact_phone: '',
+      logo_url: null,
+      theme_color: 'black',
+      cash_pin_enabled: true,
+      cash_pin: '5678',
+    });
+    const { user } = renderDashboard();
+    await screen.findByText('RestoIT');
+
+    await user.click(screen.getByRole('button', { name: 'Abrir menú' }));
+    const btn = screen.getAllByRole('button', { name: 'Control de caja' }).find((b) => !b.hasAttribute('aria-controls'))!;
+    await user.click(btn);
+
+    expect(screen.getByRole('dialog')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Control de Caja Protegido' })).toBeInTheDocument();
   });
 });

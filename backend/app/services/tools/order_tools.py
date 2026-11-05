@@ -675,7 +675,11 @@ def calcular_y_preparar_pedido(
             "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
-        texto_respuesta = "Detalle de tu pedido:\n" + "\n".join(resumen_lineas) + f"\n\nTotal: ${total_general:,.2f}"
+        hay_modificaciones = any(item.get("modifications") for item in items_validados)
+        bloque_productos_resumen = [*resumen_lineas]
+        if hay_modificaciones:
+            bloque_productos_resumen.extend(["", "ℹ️ Aclaración: Las modificaciones y adicionales se realizan según los ingredientes y adicionales permitidos de cada plato."])
+        texto_respuesta = "Detalle de tu pedido:\n" + "\n".join(bloque_productos_resumen) + f"\n\nTotal: ${total_general:,.2f}"
 
         if faltan_datos:
             faltantes = []
@@ -713,21 +717,19 @@ def calcular_y_preparar_pedido(
             else:
                 cierre = '💳 ¿Cómo preferís pagar? Ofrecemos "Efectivo" y "MercadoPago".'
 
+            bloque_productos_final = [*resumen_lineas]
+            if hay_modificaciones:
+                bloque_productos_final.extend(["", "ℹ️ Aclaración: Las modificaciones y adicionales se realizan según los ingredientes y adicionales permitidos de cada plato."])
+
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
                 "",
                 "🛒 Productos:",
-                *resumen_lineas,
+                *bloque_productos_final,
                 f"💰 Total: ${total_general:,.2f}",
                 "",
                 "🚚 Entrega:",
                 *datos_de_entrega,
-                f"- Nombre: {customer_name}",
-                f"- Teléfono: {telefono}",
-                f"- {entrega}",
-                f"- Horario: {horario}",
-                f"- Observaciones: {notas or 'sin observaciones'}",
-                *( [pago_linea] if pago_normalizado else [] ),
                 "",
                 cierre,
             ])

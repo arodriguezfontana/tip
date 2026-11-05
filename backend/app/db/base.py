@@ -13,6 +13,7 @@ from app.models.menu import Category, Ingredient, Product, ProductAllowedExtra, 
 from app.models.menu_image import MenuImage
 from app.models.order import Order, OrderItem
 from app.models.promotion import Promotion, PromotionImage, PromotionPhoto, PromotionProduct
+from app.models.security import PinLockout, SecurityAuditEvent
 from app.models.store_config import StoreConfig
 from app.models.user import User
 
@@ -26,6 +27,7 @@ __all__ = [
     "DeliveryDriver",
     "Ingredient",
     "MenuImage",
+    "PinLockout",
     "Order",
     "OrderItem",
     "Product",
@@ -36,6 +38,7 @@ __all__ = [
     "PromotionImage",
     "PromotionPhoto",
     "PromotionProduct",
+    "SecurityAuditEvent",
     "StoreConfig",
     "User",
 ]
