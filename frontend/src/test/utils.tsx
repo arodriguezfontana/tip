@@ -1,4 +1,4 @@
-import { render } from '@testing-library/react';
+import { render, type RenderResult } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router-dom';
 import { vi } from 'vitest';
@@ -126,7 +126,7 @@ interface RenderOptions {
 export function renderWithProviders(
   ui: ReactElement,
   { auth = fakeAuth(), route = '/', path = '*', routes = [] }: RenderOptions = {}
-) {
+): RenderResult {
   return render(
     <MemoryRouter initialEntries={[route]}>
       <AuthContext.Provider value={auth}>

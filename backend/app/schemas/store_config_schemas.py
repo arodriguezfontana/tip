@@ -2,6 +2,8 @@ from datetime import datetime
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
+from app.core.config import settings
+
 THEME_COLOR_PATTERN = r"^(black|red|blue|emerald|orange|#[0-9a-fA-F]{6})$"
 LOGIN_BG_PATTERN = r"^(bistro|kitchen|trattoria|custom)$"
 PANEL_BG_PATTERN = r"^(none|color|bistro|kitchen|trattoria|custom)$"
@@ -24,6 +26,8 @@ class StoreConfigResponse(BaseModel):
     menu_link: str | None = None
     promotions_link: str | None = None
     mp_alias: str | None = None
+    cash_pin_enabled: bool = False
+    cash_pin: str | None = None
     created_at: datetime
     updated_at: datetime
 
@@ -58,6 +62,8 @@ class StoreConfigUpdate(BaseModel):
     menu_link: str | None = Field(None, description="Link externo a la carta o menú del local")
     promotions_link: str | None = Field(None, description="Link externo a las promociones del local")
     mp_alias: str | None = Field(None, max_length=100, description="Alias de Mercado Pago")
+    cash_pin_enabled: bool = Field(False, description="Si la caja exige PIN de 4 dígitos para ser operada")
+    cash_pin: str | None = Field(None, pattern=r"^\d{4}$", description="PIN de 4 dígitos para control de caja")
 
     @model_validator(mode="after")
     def custom_login_bg_requires_image(self) -> "StoreConfigUpdate":
@@ -75,4 +81,13 @@ class StoreConfigUpdate(BaseModel):
     def color_panel_bg_requires_color(self) -> "StoreConfigUpdate":
         if self.panel_bg == "color" and not self.panel_bg_color:
             raise ValueError("Para usar un color de fondo en el panel hay que elegir el color.")
+        return self
+
+    @model_validator(mode="after")
+    def validate_cash_pin(self) -> "StoreConfigUpdate":
+        if self.cash_pin_enabled:
+            if not self.cash_pin:
+                raise ValueError("Para proteger la caja se debe ingresar un PIN de 4 dígitos.")
+            if self.cash_pin == settings.ADMIN_PIN:
+                raise ValueError("El PIN de caja debe ser distinto al PIN de administración.")
         return self

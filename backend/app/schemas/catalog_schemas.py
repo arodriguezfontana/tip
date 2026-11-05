@@ -21,6 +21,7 @@ class ProductPayload(BaseModel):
     category_id: int = Field(..., gt=0)
     is_active: bool = Field(True, description="Si está disponible para pedir.")
     dietary_restrictions: list[str] = Field(default_factory=list, max_length=MAX_DIETARY_RESTRICTIONS)
+    allowed_extra_ids: list[int] = Field(default_factory=list, description="IDs de ingredientes permitidos como adicionales.")
 
     @field_validator("dietary_restrictions")
     @classmethod
@@ -42,6 +43,14 @@ class ProductPayload(BaseModel):
         return ProductData(**self.model_dump())
 
 
+class IngredientExtraResponse(BaseModel):
+    id: int
+    name: str
+    extra_price: float
+
+    model_config = ConfigDict(from_attributes=True)
+
+
 class AdminProductResponse(BaseModel):
     """Producto tal como lo ve el panel: incluye los no disponibles, los sin categoría y su receta."""
 
@@ -54,6 +63,7 @@ class AdminProductResponse(BaseModel):
     category: CategoryResponse | None
     image_url: str | None
     recipe: list[RecipeItemResponse]
+    allowed_extras: list[IngredientExtraResponse] = Field(default_factory=list)
 
     @classmethod
     def from_model(cls, product: Product) -> "AdminProductResponse":
@@ -70,6 +80,15 @@ class AdminProductResponse(BaseModel):
                 (RecipeItemResponse.from_model(item) for item in product.recipe_items),
                 key=lambda item: item.ingredient_name.lower(),
             ),
+            allowed_extras=[
+                IngredientExtraResponse(
+                    id=item.ingredient.id,
+                    name=item.ingredient.name,
+                    extra_price=float(item.ingredient.extra_price or 0.0),
+                )
+                for item in getattr(product, "allowed_extra_items", [])
+                if getattr(item, "ingredient", None)
+            ],
         )
 
 

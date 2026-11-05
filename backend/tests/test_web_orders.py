@@ -341,11 +341,13 @@ def test_pedido_web_con_exclusiones_en_observaciones(public_client, client, db_s
 
 
 def test_pedido_web_con_extras_en_observaciones_suma_precio(public_client, db_session, products):
+    from app.models.menu import ProductAllowedExtra
     # Crear ingrediente Queso con costo extra
     queso = Ingredient(name="Queso", unit="gramos", extra_price=1000)
     db_session.add(queso)
     db_session.flush()
     db_session.add(ProductIngredient(product_id=products["muzza"].id, ingredient_id=queso.id, quantity=100))
+    db_session.add(ProductAllowedExtra(product_id=products["muzza"].id, ingredient_id=queso.id))
     db_session.commit()
 
     items = [{"product_id": products["muzza"].id, "quantity": 2}]

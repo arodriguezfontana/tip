@@ -19,9 +19,13 @@ import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
 import { HandoffNotifications } from '@/components/HandoffNotifications';
+import { PinModal } from '@/components/PinModal';
+import { PinSecurityProvider } from '@/context/PinSecurityContext';
+import { usePinSecurity } from '@/hooks/usePinSecurity';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
 import type { StoreConfig } from '@/types/storeConfig';
+import type { PinType } from '@/types/security';
 import { panelBackground } from '@/utils/panelBackground';
 import { canKeepMenuOpen } from '@/utils/sidebarDock';
 
@@ -29,13 +33,40 @@ import { canKeepMenuOpen } from '@/utils/sidebarDock';
 const CHAT_COLUMN_PADDING = 'chat-column-offset';
 
 export default function AdminDashboardPage() {
+  return (
+    <PinSecurityProvider>
+      <AdminDashboardContent />
+    </PinSecurityProvider>
+  );
+}
+
+function AdminDashboardContent() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { isAdminUnlocked, unlockAdmin, isCashUnlocked, unlockCash } = usePinSecurity();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('comandas');
   // Con la columna de chats a la derecha, las secciones se corren solo si no entran a su izquierda.
   const [chatColumnVisible, setChatColumnVisible] = useState(false);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+
+  const [pendingProtectedView, setPendingProtectedView] = useState<ViewKey | null>(null);
+
+  const needsAdminPin =
+    !isAdminUnlocked &&
+    (activeView === 'estadisticas' ||
+      activeView === 'reporte-ingredientes' ||
+      pendingProtectedView === 'estadisticas' ||
+      pendingProtectedView === 'reporte-ingredientes');
+
+  const needsCashPin =
+    !isCashUnlocked &&
+    Boolean(storeConfig?.cash_pin_enabled) &&
+    (activeView === 'caja' || pendingProtectedView === 'caja');
+
+  const pinModalOpen = needsAdminPin || needsCashPin;
+  const pinModalType: PinType = needsAdminPin ? 'admin' : 'cash';
 
   useEffect(() => {
     let cancelled = false;
@@ -55,6 +86,48 @@ export default function AdminDashboardPage() {
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  const handleSelectView = (view: ViewKey) => {
+    // 1. Estadísticas o Reporte de ingredientes -> requiere PIN de admin
+    if ((view === 'estadisticas' || view === 'reporte-ingredientes') && !isAdminUnlocked) {
+      setPendingProtectedView(view);
+      if (!canKeepMenuOpen()) setMenuOpen(false);
+      return;
+    }
+
+    // 2. Control de caja -> requiere PIN de caja si está habilitado
+    if (view === 'caja' && storeConfig?.cash_pin_enabled && !isCashUnlocked) {
+      setPendingProtectedView(view);
+      if (!canKeepMenuOpen()) setMenuOpen(false);
+      return;
+    }
+
+    setActiveView(view);
+    if (!canKeepMenuOpen()) setMenuOpen(false);
+  };
+
+  const handlePinSuccess = (token: string) => {
+    if (pinModalType === 'admin') {
+      unlockAdmin(token);
+    } else {
+      unlockCash(token);
+    }
+    if (pendingProtectedView) {
+      setActiveView(pendingProtectedView);
+      setPendingProtectedView(null);
+    }
+  };
+
+  const handlePinCancel = () => {
+    setPendingProtectedView(null);
+    // Si la vista activa requiere protección y no está desbloqueada, volver a comandas
+    if (
+      (!isAdminUnlocked && (activeView === 'estadisticas' || activeView === 'reporte-ingredientes')) ||
+      (!isCashUnlocked && activeView === 'caja' && storeConfig?.cash_pin_enabled)
+    ) {
+      setActiveView('comandas');
+    }
   };
 
   const background = panelBackground(storeConfig);
@@ -78,7 +151,11 @@ export default function AdminDashboardPage() {
         logoUrl={storeConfig?.logo_url}
         themeColor={storeConfig?.theme_color}
       />
-      <main className={`flex-1 px-4 py-6 lg:min-h-0 lg:overflow-y-auto transition-[padding] ${chatColumnVisible ? CHAT_COLUMN_PADDING : ''}`}>
+      <main
+        className={`flex-1 px-4 py-6 lg:min-h-0 lg:overflow-y-auto transition-[padding] ${
+          chatColumnVisible ? CHAT_COLUMN_PADDING : ''
+        } ${pinModalOpen ? 'filter blur-sm pointer-events-none select-none' : ''}`}
+      >
         <div className="max-w-6xl mx-auto lg:h-full">
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
@@ -129,14 +206,18 @@ export default function AdminDashboardPage() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         activeView={activeView}
-        onSelect={(view) => {
-          setActiveView(view);
-          if (!canKeepMenuOpen()) setMenuOpen(false);
-        }}
+        onSelect={handleSelectView}
         themeColor={storeConfig?.theme_color}
       />
 
       <HandoffNotifications onVisibleChange={setChatColumnVisible} />
+
+      <PinModal
+        isOpen={pinModalOpen}
+        pinType={pinModalType}
+        onSuccess={handlePinSuccess}
+        onCancel={handlePinCancel}
+      />
     </div>
   );
 }

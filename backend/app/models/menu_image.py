@@ -7,7 +7,7 @@ from app.db.base_class import Base
 from app.models.menu import ProductImage
 
 # El menú puede estar partido en varias imágenes (una por sección de la carta, por ejemplo).
-MAX_MENU_IMAGES = 3
+MAX_MENU_IMAGES = 5
 
 
 class MenuImage(Base):

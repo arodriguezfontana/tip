@@ -3,7 +3,7 @@ from datetime import datetime
 from fastapi import APIRouter, Depends, Query
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin
+from app.api.deps import get_current_admin, require_admin_pin
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.ingredient_schemas import IngredientConsumptionResponse
@@ -11,7 +11,7 @@ from app.schemas.stats_schemas import BestSellingDayResponse, StatusDistribution
 from app.services import stats_service
 from app.services.ingredient_service import ingredient_consumption
 
-router = APIRouter()
+router = APIRouter(dependencies=[Depends(require_admin_pin)])
 
 
 @router.get("/status-distribution", response_model=StatusDistributionResponse)

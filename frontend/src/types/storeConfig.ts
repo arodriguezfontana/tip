@@ -120,6 +120,8 @@ export interface StoreConfig {
   panel_bg_image?: string | null;
   panel_bg_color?: string | null;
   mp_alias?: string | null;
+  cash_pin_enabled?: boolean;
+  cash_pin?: string | null;
 }
 
 export interface StoreConfigUpdatePayload {
@@ -134,4 +136,6 @@ export interface StoreConfigUpdatePayload {
   panel_bg_image?: string | null;
   panel_bg_color?: string | null;
   mp_alias?: string | null;
+  cash_pin_enabled?: boolean;
+  cash_pin?: string | null;
 }

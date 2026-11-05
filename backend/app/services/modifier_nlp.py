@@ -8,10 +8,12 @@ Calcula precios asociados a modificadores positivos y prepara el formateo de com
 import difflib
 import re
 import unicodedata
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 if TYPE_CHECKING:
     from sqlalchemy.orm import Session
+
+    from app.models.menu import Product
 
 # Triggers negativos: "sin", "quitale", "no le pongas", "sacale", etc.
 PATRON_NEGATIVO = re.compile(
@@ -232,4 +234,89 @@ def formatear_comanda_modificaciones(mods: list[dict]) -> str:
             tag = f"[SIN {nombre}]" if tipo in ("negative", "remove") else f"[EXTRA {nombre}]"
         tags.append(tag)
     return " ".join(tags)
+
+
+def filtrar_modificadores_para_producto(
+    mods: list[dict],
+    product: "Product | None",
+    secondary_product: "Product | None" = None,
+) -> list[dict]:
+    """Filtra y valida modificadores para un producto específico:
+    - Restricciones ([SIN ...]): solo se aplican si el ingrediente forma parte de la receta del producto.
+    - Adicionales ([EXTRA ...]): solo se aplican si el ingrediente está en los allowed_extras del producto,
+      y se les asigna el precio extra_price configurado en el ingrediente.
+    """
+    if not mods or product is None:
+        return []
+
+    prods = [product]
+    if secondary_product is not None:
+        prods.append(secondary_product)
+
+    # 1. Ingredientes de la receta (para restricciones)
+    recipe_ing_ids: set[int] = set()
+    recipe_ing_names: set[str] = set()
+    for p in prods:
+        for item in getattr(p, "recipe_items", []):
+            if getattr(item, "ingredient_id", None) is not None:
+                recipe_ing_ids.add(item.ingredient_id)
+            if getattr(item, "ingredient", None) and getattr(item.ingredient, "name", None):
+                recipe_ing_names.add(sin_acentos(item.ingredient.name.lower()))
+
+    # 2. Adicionales permitidos (para extras)
+    allowed_extras_by_id: dict[int, Any] = {}
+    allowed_extras_by_name: dict[str, Any] = {}
+    for p in prods:
+        for item in getattr(p, "allowed_extra_items", []):
+            ing = getattr(item, "ingredient", None)
+            if ing:
+                allowed_extras_by_id[ing.id] = ing
+                allowed_extras_by_name[sin_acentos(ing.name.lower())] = ing
+
+    filtrados = []
+    for mod in mods:
+        m = dict(mod)
+        m_type = m.get("type") or m.get("action")
+        ing_id = m.get("ingredient_id")
+        name_clean = m.get("name", "").strip()
+        name_norm = sin_acentos(name_clean.lower())
+
+        if m_type in ("negative", "remove"):
+            coincide = False
+            if ing_id is not None and ing_id in recipe_ing_ids or name_norm in recipe_ing_names:
+                coincide = True
+            else:
+                for rname in recipe_ing_names:
+                    if name_norm in rname or rname in name_norm:
+                        coincide = True
+                        break
+
+            if coincide:
+                m["type"] = "negative"
+                m["action"] = "remove"
+                m["price"] = 0.0
+                m["tag"] = f"[SIN {name_clean.upper()}]"
+                filtrados.append(m)
+        else:
+            matched_extra = None
+            if ing_id is not None and ing_id in allowed_extras_by_id:
+                matched_extra = allowed_extras_by_id[ing_id]
+            elif name_norm in allowed_extras_by_name:
+                matched_extra = allowed_extras_by_name[name_norm]
+            else:
+                for aname, extra_ing in allowed_extras_by_name.items():
+                    if name_norm in aname or aname in name_norm:
+                        matched_extra = extra_ing
+                        break
+
+            if matched_extra is not None:
+                m["type"] = "positive"
+                m["action"] = "add"
+                m["ingredient_id"] = matched_extra.id
+                m["name"] = matched_extra.name.lower()
+                m["price"] = float(matched_extra.extra_price or 0.0)
+                m["tag"] = f"[EXTRA {matched_extra.name.upper()}]"
+                filtrados.append(m)
+
+    return filtrados
 

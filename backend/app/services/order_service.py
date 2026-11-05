@@ -139,6 +139,7 @@ def _attach_notes_modifiers(db: Session, notes: str | None, parsed_items: list[t
 
     from app.services.modifier_nlp import (
         extraer_modificadores_de_texto,
+        filtrar_modificadores_para_producto,
         vincular_modificadores_con_db,
     )
 
@@ -213,6 +214,8 @@ def _attach_notes_modifiers(db: Session, notes: str | None, parsed_items: list[t
         existing_mods = list(line[4]) if len(line) > 4 and line[4] else []
         promo = line[5] if len(line) > 5 else None
         all_mods = existing_mods + item_mods_to_add.get(i, [])
+        if p1 is not None:
+            all_mods = filtrar_modificadores_para_producto(all_mods, p1, p2)
         updated_items.append((p1, qty, p2, cname, all_mods, promo))
 
     return updated_items
@@ -228,9 +231,21 @@ def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order
         status=OrderStatus.PENDING.value,
     )
     order.set_delivery(request.delivery_method, request.shipping_address)
+    from app.services.modifier_nlp import filtrar_modificadores_para_producto
     parsed_items = _products_for(db, request.items)
     parsed_items = _attach_notes_modifiers(db, request.notes, parsed_items)
-    order.set_items(parsed_items)
+    validated_items = []
+    for line in parsed_items:
+        p1 = line[0]
+        qty = line[1]
+        p2 = line[2] if len(line) > 2 else None
+        cname = line[3] if len(line) > 3 else None
+        mods = list(line[4]) if len(line) > 4 and line[4] else []
+        promo = line[5] if len(line) > 5 else None
+        if p1 is not None:
+            mods = filtrar_modificadores_para_producto(mods, p1, p2)
+        validated_items.append((p1, qty, p2, cname, mods, promo))
+    order.set_items(validated_items)
     return order
 
 

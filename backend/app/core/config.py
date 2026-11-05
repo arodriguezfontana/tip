@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
 
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str
+    ADMIN_PIN: str = "1234"
 
     # WhatsApp Business Platform (Cloud API oficial de Meta). Ver backend/docs/whatsapp.md.
     WHATSAPP_ACCESS_TOKEN: str = ""
@@ -98,6 +100,8 @@ class Settings(BaseSettings):
             faltan = [nombre for nombre in requeridas[canal] if not getattr(self, nombre)]
             if faltan:
                 raise ValueError(f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}.")
+        if not re.match(r"^\d{4}$", self.ADMIN_PIN):
+            raise ValueError("ADMIN_PIN debe ser un código numérico de 4 dígitos (ej. '1234').")
         return self
 
     @property
