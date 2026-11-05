@@ -45,6 +45,11 @@ def _pedido(db, products, payment_method="efectivo", paid=False, canal="whatsapp
     return order
 
 
+def _aceptar(db, order) -> None:
+    order.status = "Confirmado"
+    db.commit()
+
+
 def _agregar(items: str, canal="whatsapp", chat_id=CHAT) -> str:
     return agregar_items_al_pedido.invoke({"items_solicitados": items, "canal": canal, "chat_id": chat_id})
 
@@ -161,8 +166,21 @@ def test_tool_agregar_a_pedido_no_pagado_informa_el_nuevo_total(db_session, prod
     assert order.total_amount == Decimal("13500.00")
 
 
-def test_tool_agregar_a_pedido_de_mercadopago_sin_pagar_genera_un_link_por_el_total_nuevo(db_session, products):
+def test_tool_agregar_a_pedido_de_mercadopago_pendiente_no_manda_link(db_session, products):
     _pedido(db_session, products, payment_method="mercadopago")
+
+    respuesta = _agregar("1 Coca-Cola")
+
+    assert "Nuevo total: $13,500.00" in respuesta
+    assert "cuando el local acepte tu pedido" in respuesta
+    assert "https://" not in respuesta
+    db_session.expire_all()
+    assert db_session.query(Order).one().mp_preference_id is None
+
+
+def test_tool_agregar_a_pedido_de_mercadopago_aceptado_genera_un_link_por_el_total_nuevo(db_session, products):
+    order = _pedido(db_session, products, payment_method="mercadopago")
+    _aceptar(db_session, order)
 
     respuesta = _agregar("1 Coca-Cola")
 
@@ -231,8 +249,21 @@ def test_tool_cambiar_a_efectivo_actualiza_el_pago_del_mismo_pedido(db_session, 
     assert order.kitchen_update_pending is False
 
 
-def test_tool_cambiar_a_mercadopago_manda_el_link(db_session, products):
+def test_tool_cambiar_a_mercadopago_con_el_pedido_pendiente_no_manda_link(db_session, products):
     _pedido(db_session, products, payment_method="efectivo")
+
+    respuesta = _cambiar_pago("mercadopago")
+
+    assert "$11,000.00" in respuesta and "cuando el local acepte tu pedido" in respuesta
+    assert "https://" not in respuesta
+    db_session.expire_all()
+    order = db_session.query(Order).one()
+    assert order.payment_method == "mercadopago" and order.mp_preference_id is None
+
+
+def test_tool_cambiar_a_mercadopago_con_el_pedido_aceptado_manda_el_link(db_session, products):
+    order = _pedido(db_session, products, payment_method="efectivo")
+    _aceptar(db_session, order)
 
     respuesta = _cambiar_pago("mercadopago")
 
@@ -248,12 +279,41 @@ def test_tool_cambiar_pago_de_un_pedido_ya_abonado(db_session, products):
     assert "ya está abonado" in _cambiar_pago("efectivo")
 
 
-def test_tool_cambiar_pago_con_pedido_en_camino(db_session, products):
+def test_tool_cambiar_pago_con_pedido_en_camino_avisa_y_ofrece_un_pedido_nuevo(db_session, products):
     order = _pedido(db_session, products)
     order.status = "En Camino"
     db_session.commit()
 
+    respuesta = _cambiar_pago("mercadopago")
+
+    assert f"Tu pedido #{order.id} ya está en camino" in respuesta
+    assert "te tomo un pedido nuevo" in respuesta
+    db_session.expire_all()
+    assert db_session.query(Order).one().payment_method == "efectivo"
+
+
+def test_tool_cambiar_pago_con_pedido_listo_para_retirar(db_session, products):
+    order = _pedido(db_session, products)
+    order.status = "Listo para Retirar"
+    db_session.commit()
+
     assert "ya salió" in _cambiar_pago("mercadopago")
+
+
+@pytest.mark.parametrize("minutos", [2, 15])
+def test_tool_agregar_a_un_pedido_en_camino_avisa_y_ofrece_un_pedido_nuevo(db_session, products, minutos):
+    order = _pedido(db_session, products)
+    order.status = "En Camino"
+    _hace_minutos(db_session, order, minutos)
+
+    respuesta = _agregar("1 Coca-Cola")
+
+    assert respuesta == (
+        f"Tu pedido #{order.id} ya está en camino 🛵, así que no es posible modificarlo. "
+        "Si querés, te tomo un pedido nuevo: contame qué te gustaría pedir."
+    )
+    db_session.expire_all()
+    assert len(db_session.query(Order).one().items) == 2
 
 
 def test_tool_metodo_de_pago_que_no_entiende(db_session, products):
@@ -280,7 +340,8 @@ def test_la_diferencia_en_efectivo_queda_como_pago_mixto(db_session, products):
 
 
 def test_la_diferencia_por_mercadopago_genera_un_link_solo_por_ese_monto(db_session, products):
-    _pedido(db_session, products, payment_method="mercadopago", paid=True)
+    order = _pedido(db_session, products, payment_method="mercadopago", paid=True)
+    _aceptar(db_session, order)
     _agregar("1 Coca-Cola")
 
     respuesta = _cambiar_pago("mercadopago")

@@ -313,3 +313,89 @@ def test_historial_y_detalle_de_turnos(client):
     assert det["expected_amount"] == 10000.0
     assert det["difference"] == 200.0
     assert det["difference_type"] == "sobrante"
+
+
+# --- El efectivo entra a la caja al cobrarse ---
+
+
+def _pedido_listo(db_session, shift, payment_method="efectivo", total=5000.0, status="Listo para Retirar", **campos):
+    order = Order(
+        customer_name="Carlitos",
+        shipping_address="Retiro en el local",
+        delivery_method="retiro",
+        total_amount=total,
+        status=status,
+        payment_method=payment_method,
+        cash_shift_id=shift.id if shift else None,
+        **campos,
+    )
+    db_session.add(order)
+    db_session.commit()
+    return order
+
+
+def _resumen(client) -> dict:
+    return client.get(f"{CASH_SHIFTS_URL}/current").json()["shift"]["summary"]
+
+
+def _finalizar(client, order):
+    return client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Finalizado"})
+
+
+def test_el_efectivo_cuenta_en_la_caja_al_finalizar_el_pedido_no_al_entrar(client, db_session, open_shift):
+    order = _pedido_listo(db_session, open_shift)
+
+    assert _resumen(client)["expected_cash"] == 10000.0
+
+    assert _finalizar(client, order).status_code == 200
+
+    db_session.refresh(order)
+    assert order.is_paid is True
+    assert _resumen(client)["cash_sales"] == 5000.0
+    assert _resumen(client)["expected_cash"] == 15000.0
+
+
+def test_finalizar_un_pedido_que_entro_sin_caja_abierta_lo_suma_al_turno_actual(client, db_session, open_shift):
+    order = _pedido_listo(db_session, None)
+
+    _finalizar(client, order)
+
+    db_session.refresh(order)
+    assert order.cash_shift_id == open_shift.id
+    assert _resumen(client)["expected_cash"] == 15000.0
+
+
+def test_finalizar_un_pedido_de_mercadopago_sin_pagar_no_lo_da_por_cobrado(client, db_session, open_shift):
+    order = _pedido_listo(db_session, open_shift, payment_method="mercadopago")
+
+    _finalizar(client, order)
+
+    db_session.refresh(order)
+    assert order.is_paid is False
+    assert _resumen(client)["expected_cash"] == 10000.0
+
+
+def test_un_pedido_en_efectivo_cancelado_no_entra_a_la_caja(client, db_session, open_shift):
+    order = _pedido_listo(db_session, open_shift)
+
+    client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Cancelado"})
+
+    assert _resumen(client)["expected_cash"] == 10000.0
+
+
+def test_la_diferencia_en_efectivo_solo_suma_ese_monto_a_la_caja(client, db_session, open_shift):
+    # Pagó $5.000 por MercadoPago y después agregó productos por $2.000 que abona en efectivo.
+    order = _pedido_listo(
+        db_session, open_shift, payment_method="mercadopago", total=7000.0,
+        paid_amount=5000.0, balance_payment_method="efectivo",
+    )
+
+    antes = _resumen(client)
+    assert (antes["cash_sales"], antes["mercadopago_sales"]) == (0.0, 5000.0)
+
+    _finalizar(client, order)
+
+    despues = _resumen(client)
+    assert (despues["cash_sales"], despues["mercadopago_sales"]) == (2000.0, 5000.0)
+    assert despues["expected_cash"] == 12000.0
+    assert despues["total_sales"] == 7000.0

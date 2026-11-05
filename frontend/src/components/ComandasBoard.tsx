@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from 'react';
-import { ACTIVE_ORDER_STATUSES, FINISHED_ORDER_STATUSES, SECTOR_CONFIG } from '@/types/order';
+import { ACTIVE_ORDER_STATUSES, FINISHED_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/types/order';
 import type { AdminOrder, OrderStatus, PreparationSector, SectorFilter } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
 import {
@@ -14,11 +14,13 @@ import {
 import { fetchDeliveryDrivers } from '@/services/deliveryDriverService';
 import { ComandaCard } from '@/components/ComandaCard';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
+import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
 import { SectorIcon, UtensilsIcon } from '@/components/Icons';
+import { formatCurrency } from '@/utils/currency';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -88,6 +90,10 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
   const [detailOrderId, setDetailOrderId] = useState<number | null>(null);
   const closeDetail = useCallback(() => setDetailOrderId(null), []);
+
+  // Pedido que se quiso finalizar sin estar abonado: se pide confirmar el cobro antes de cerrarlo.
+  const [unpaidToFinish, setUnpaidToFinish] = useState<AdminOrder | null>(null);
+  const [finishingUnpaid, setFinishingUnpaid] = useState(false);
 
   useEffect(() => {
     if (isSimulating) return;
@@ -208,6 +214,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
       // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
       const totalCount = allOrdersForStatus.length;
+      const modifiedCount = allOrdersForStatus.filter((o) => o.kitchen_update_pending).length;
 
       if (status === 'Pendiente') {
         if (pendingFilter === 'ahora') {
@@ -228,6 +235,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         status,
         orders: paginatedOrders,
         totalCount,
+        modifiedCount,
         currentPage: safePage,
         totalPages,
       };
@@ -239,18 +247,49 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   // Se busca en la lista para que la ventana refleje el estado actualizado por el sondeo.
   const detailOrder = detailOrderId === null ? null : orders.find((order) => order.id === detailOrderId) ?? null;
 
-  // Suena mientras haya pedidos por aceptar o productos agregados que cocina todavía no vio.
+  // Suena mientras haya pedidos por aceptar y, con otro sonido, confirmados con productos que cocina todavía no vio.
   const pendingOrderIds = useMemo(() => {
-    return orders.filter((o) => o.status === 'Pendiente' || o.kitchen_update_pending).map((o) => o.id);
+    return orders.filter((o) => o.status === 'Pendiente').map((o) => o.id);
+  }, [orders]);
+  const modifiedOrderIds = useMemo(() => {
+    return orders.filter((o) => o.status === 'Confirmado' && o.kitchen_update_pending).map((o) => o.id);
   }, [orders]);
 
-  const soundAlert = useNewOrderAlert(pendingOrderIds);
+  const soundAlert = useNewOrderAlert(pendingOrderIds, undefined, modifiedOrderIds);
 
   const handlePageChange = (status: string, newPage: number) => {
     setPages((prev) => ({ ...prev, [status]: newPage }));
   };
 
   const handleStatusChange = async (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => {
+    const order = orders.find((o) => o.id === orderId);
+    if (newStatus === 'Finalizado' && order && !order.is_paid) {
+      setUnpaidToFinish(order);
+      return;
+    }
+    await applyStatusChange(orderId, newStatus, estimatedMinutes);
+  };
+
+  // Con un pago parcial lo que falta es la diferencia, que puede cobrarse por otro medio.
+  const unpaidMethod =
+    unpaidToFinish && ((unpaidToFinish.paid_amount ?? 0) > 0 ? unpaidToFinish.balance_payment_method : unpaidToFinish.payment_method);
+
+  const handlePayAndFinish = async (event: React.FormEvent) => {
+    event.preventDefault();
+    if (!unpaidToFinish) return;
+    setFinishingUnpaid(true);
+    try {
+      if (!isSimulating) await updateOrderPayment(unpaidToFinish.id, true);
+      await applyStatusChange(unpaidToFinish.id, 'Finalizado');
+    } catch {
+      setError('No se pudo marcar el pedido como abonado. No se finalizó.');
+    } finally {
+      setFinishingUnpaid(false);
+      setUnpaidToFinish(null);
+    }
+  };
+
+  const applyStatusChange = async (orderId: number, newStatus: OrderStatus, estimatedMinutes?: number) => {
     if (isSimulating) {
       setOrders((prev) => {
         const isTerminal = FINISHED_ORDER_STATUSES.includes(newStatus);
@@ -564,7 +603,18 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
           {columns.map((column) => (
             <div key={column.status} className="bg-gray-50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
               <div className="shrink-0 flex items-center justify-between pb-3 px-1 border-b border-gray-200/60 mb-2">
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700">{COLUMN_LABELS[column.status]}</h3>
+                <div className="flex items-center gap-2 min-w-0">
+                  <h3 className="text-xs font-bold uppercase tracking-wider text-gray-700">{COLUMN_LABELS[column.status]}</h3>
+                  {column.status === 'Confirmado' && column.modifiedCount > 0 && (
+                    <span
+                      title="Pedidos a los que el cliente les agregó productos y cocina todavía no vio"
+                      className="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full bg-amber-100 text-amber-900 border border-amber-300 whitespace-nowrap"
+                    >
+                      <span className="w-1.5 h-1.5 rounded-full bg-amber-500 animate-pulse" aria-hidden="true" />
+                      {column.modifiedCount === 1 ? '1 modificado' : `${column.modifiedCount} modificados`}
+                    </span>
+                  )}
+                </div>
                 <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${column.status === 'Pendiente' && column.totalCount > 0 ? 'bg-amber-200 text-amber-900' : 'bg-gray-200 text-gray-800'}`}>
                   {column.totalCount}
                 </span>
@@ -651,6 +701,30 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
           onCancel={(orderId) => handleStatusChange(orderId, 'Cancelado')}
           onClose={closeDetail}
         />
+      )}
+
+      {unpaidToFinish && (
+        <Modal
+          title="El pedido aún no está pago"
+          subtitle={`Pedido #${unpaidToFinish.id} · ${unpaidToFinish.customer_name}`}
+          onClose={() => setUnpaidToFinish(null)}
+          closeDisabled={finishingUnpaid}
+          width="md"
+        >
+          <form onSubmit={handlePayAndFinish}>
+            <ModalBody>
+              <p className="text-sm text-gray-700">
+                Falta cobrar <strong>{formatCurrency(unpaidToFinish.pending_amount ?? unpaidToFinish.total_amount)}</strong>
+                {unpaidMethod && ` (${PAYMENT_METHOD_LABEL[unpaidMethod]})`}. ¿Querés marcarlo como pago y finalizarlo?
+              </p>
+            </ModalBody>
+            <ModalFooter
+              onCancel={() => setUnpaidToFinish(null)}
+              submitLabel="Marcar como pago y finalizar"
+              saving={finishingUnpaid}
+            />
+          </form>
+        </Modal>
       )}
     </div>
   );

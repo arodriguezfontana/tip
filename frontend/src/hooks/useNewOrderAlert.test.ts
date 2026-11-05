@@ -5,6 +5,7 @@ import * as alertSound from '@/utils/alertSound';
 
 vi.mock('@/utils/alertSound', () => ({
   playAlertSound: vi.fn(() => true),
+  playModifiedOrderSound: vi.fn(() => true),
   unlockAudio: vi.fn(async () => true),
   subscribeAlertAudioState: vi.fn(() => () => undefined),
   getAlertAudioState: vi.fn(() => 'running'),
@@ -107,5 +108,41 @@ describe('useNewOrderAlert', () => {
 
     expect(result.current.audioSupported).toBe(supported);
     expect(result.current.audioBlocked).toBe(blocked);
+  });
+});
+
+describe('useNewOrderAlert - pedidos modificados', () => {
+  function renderWithModified(pending: number[], modified: number[]) {
+    return renderHook(({ p, m }) => useNewOrderAlert(p, undefined, m), { initialProps: { p: pending, m: modified } });
+  }
+
+  it('los pedidos modificados suenan con su propio sonido y se repiten hasta que cocina los ve', () => {
+    const { rerender } = renderWithModified([], [3]);
+
+    expect(sound.playModifiedOrderSound).toHaveBeenCalledTimes(1);
+    expect(sound.playAlertSound).not.toHaveBeenCalled();
+    act(() => vi.advanceTimersByTime(ALERT_REPEAT_MS * 2));
+    expect(sound.playModifiedOrderSound).toHaveBeenCalledTimes(3);
+
+    rerender({ p: [], m: [] });
+    act(() => vi.advanceTimersByTime(ALERT_REPEAT_MS * 3));
+    expect(sound.playModifiedOrderSound).toHaveBeenCalledTimes(3);
+  });
+
+  it('con pendientes y modificados a la vez suena cada uno con el suyo', () => {
+    renderWithModified([1], [3]);
+
+    expect(sound.playAlertSound).toHaveBeenCalledTimes(1);
+    expect(sound.playModifiedOrderSound).toHaveBeenCalledTimes(1);
+  });
+
+  it('silenciar corta también el sonido de los modificados', () => {
+    const { result } = renderWithModified([], [3]);
+    sound.playModifiedOrderSound.mockClear();
+
+    act(() => result.current.toggleEnabled());
+    act(() => vi.advanceTimersByTime(ALERT_REPEAT_MS * 3));
+
+    expect(sound.playModifiedOrderSound).not.toHaveBeenCalled();
   });
 });

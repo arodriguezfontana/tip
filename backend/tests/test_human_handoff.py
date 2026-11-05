@@ -108,7 +108,7 @@ def test_con_una_derivacion_activa_el_bot_no_responde_y_el_mensaje_llega_al_empl
         servicio.recibir_mensaje(Channel.TELEGRAM, "999", "Hola")
         servicio.recibir_mensaje(Channel.WHATSAPP, "12345", "Hola, soy de WhatsApp")
 
-    assert [c.args for c in agrupador.call_args_list] == [
+    assert [c.args[:2] for c in agrupador.call_args_list] == [
         ("telegram:999", "Hola"),
         ("whatsapp:12345", "Hola, soy de WhatsApp"),
     ]

@@ -354,6 +354,33 @@ class Order(Base):
     def has_partial_payment(self) -> bool:
         return not self.is_paid and to_money(self.paid_amount or 0) > 0
 
+    @property
+    def pending_payment_method(self) -> str | None:
+        """Con qué se cobra lo que falta (el pedido entero o, con un pago parcial, la diferencia)."""
+        if self.is_paid:
+            return None
+        return self.balance_payment_method if self.has_partial_payment else self.payment_method
+
+    @property
+    def awaits_mercadopago_payment(self) -> bool:
+        return self.pending_payment_method == PaymentMethod.MERCADOPAGO.value
+
+    @property
+    def awaits_cash_payment(self) -> bool:
+        return self.pending_payment_method == PaymentMethod.CASH.value
+
+    @property
+    def collected_payments(self) -> list[tuple[str | None, Decimal]]:
+        """Lo cobrado hasta ahora por medio de pago: si se agregaron productos, la diferencia va por el suyo."""
+        total = to_money(self.total_amount)
+        first_payment = to_money(self.paid_amount or 0)
+        if not self.is_paid:
+            return [(self.payment_method, first_payment)] if first_payment > 0 else []
+        if first_payment > 0:
+            balance_method = self.balance_payment_method or self.payment_method
+            return [(self.payment_method, first_payment), (balance_method, total - first_payment)]
+        return [(self.payment_method, total)]
+
     def change_payment_method(self, method: PaymentMethod | str) -> None:
         """Cambia cómo se paga el pedido, siempre que no haya salido y todavía haya algo por pagar.
 

@@ -8,6 +8,7 @@ from langchain_core.messages import AIMessage, HumanMessage, ToolMessage
 
 from app.models.order import Order
 from app.services import chat_memory
+from app.services import chat_service as chat_service_module
 from app.services.chat_service import MENSAJE_PEDIDO_YA_REGISTRADO, ChatService
 from tests.conftest import TestingSessionLocal
 
@@ -227,3 +228,76 @@ def test_despues_de_registrar_se_puede_armar_y_registrar_otro_pedido(bot, muzza,
     _armar_y_confirmar_pedido(servicio, llm)
 
     assert db_session.query(Order).count() == 2
+
+
+def _calcular_y_confirmar_juntos(datos_json: str) -> AIMessage:
+    """El modelo pide calcular y registrar en la misma respuesta (lo hizo el modelo gratuito con un pedido por audio)."""
+    return AIMessage(
+        content="",
+        tool_calls=[
+            {"name": "calcular_y_preparar_pedido", "args": _pedido_args(), "id": "c1"},
+            {"name": "confirmar_y_guardar_pedido", "args": {"datos_pedido_json": datos_json}, "id": "c2"},
+        ],
+    )
+
+
+def test_no_registra_un_pedido_en_el_mismo_turno_en_que_lo_arma(bot, muzza, db_session):
+    servicio, llm = bot
+    # Datos completos y válidos: sin el bloqueo, el pedido se registraría.
+    datos = {
+        "items": [{"product_id": muzza.id, "quantity": 1}],
+        "cliente": "Paula",
+        "telefono": "11 4444-5555",
+        "metodo_entrega": "domicilio",
+        "direccion": "Belgrano 95",
+    }
+    llm.respuestas = [_calcular_y_confirmar_juntos(json.dumps(datos))]
+
+    respuesta = _conversar(servicio, "Quiero una muzza, soy Paula, 11 4444-5555, a Belgrano 95, confirmalo")
+
+    assert db_session.query(Order).count() == 0
+    # Le llega el resumen para que lo valide.
+    assert "Pizza Muzzarella (x1)" in respuesta
+    [bloqueo] = [m for m in servicio.sesiones[SESSION].historial if isinstance(m, ToolMessage) and m.tool_call_id == "c2"]
+    assert bloqueo.content == chat_service_module.MENSAJE_RESUMEN_SIN_CONFIRMAR
+
+
+def test_despues_de_ver_el_resumen_el_cliente_puede_confirmarlo(bot, muzza, db_session):
+    servicio, llm = bot
+    llm.respuestas = [_calcular_y_confirmar_juntos("{}")]
+    _conversar(servicio, "Quiero una muzza, soy Paula, 11 4444-5555, a Belgrano 95")
+
+    datos = servicio.sesiones[SESSION].pedido_en_curso
+    llm.respuestas = [_tool_call("confirmar_y_guardar_pedido", {"datos_pedido_json": json.dumps(datos)}, "c3")]
+    respuesta = _conversar(servicio, "Sí, confirmo")
+
+    assert db_session.query(Order).count() == 1
+    assert "Recibimos tu pedido" in respuesta
+
+
+def test_el_bot_no_cambia_un_producto_que_no_esta_en_el_menu_por_otro(bot):
+    servicio, _ = bot
+
+    assert "nunca lo reemplaces por otro producto del menú" in servicio.system_prompt
+    assert "no supongas que quiso decir otro" in servicio.system_prompt
+    assert "errores en nombres de productos" not in servicio.system_prompt
+
+
+def test_si_el_primer_mensaje_ya_trae_el_pedido_el_resumen_sale_con_saludo(bot, muzza):
+    servicio, llm = bot
+    llm.respuestas = [_tool_call("calcular_y_preparar_pedido", _pedido_args(), "c1")]
+
+    respuesta = _conversar(servicio, "Hola! Soy Paula, quiero una muzza a Belgrano 95, mi tel es 11 4444-5555")
+
+    assert respuesta.startswith("👋 ¡Hola, Paula!\n\n📝 Resumen de tu pedido")
+
+
+def test_mas_adelante_en_la_charla_el_resumen_no_repite_el_saludo(bot, muzza):
+    servicio, llm = bot
+    llm.respuestas = [_texto("¡Hola! ¿Qué querés pedir?")]
+    _conversar(servicio, "Hola")
+
+    llm.respuestas = [_tool_call("calcular_y_preparar_pedido", _pedido_args(), "c1")]
+    respuesta = _conversar(servicio, "Una muzza, soy Paula, 11 4444-5555, a Belgrano 95")
+
+    assert respuesta.startswith("📝 Resumen de tu pedido")

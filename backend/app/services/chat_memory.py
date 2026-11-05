@@ -53,6 +53,8 @@ class SesionChat:
     pedido_en_curso: dict | None = None
     ultimo_pedido: str | None = None
     pedido_registrado_en_este_turno: bool = False
+    # El pedido se armó (o cambió) en este turno: el cliente todavía no vio su resumen, así que no se puede registrar.
+    pedido_armado_en_este_turno: bool = False
     ultima_actividad: datetime = field(default_factory=_ahora)
     # La charla completa de la sesión (a diferencia del historial, que se recorta para el modelo).
     transcripcion: list[MensajeDerivacion] = field(default_factory=list)
@@ -72,6 +74,7 @@ class SesionChat:
             self.cliente_consultado = False  # se vuelve a leer el perfil: el local pudo haberlo editado
         self.ultima_actividad = _ahora()
         self.pedido_registrado_en_este_turno = False
+        self.pedido_armado_en_este_turno = False
         self.historial.append(HumanMessage(content=mensaje_usuario))
         self._anotar(AutorMensaje.CLIENTE, mensaje_usuario)
 
@@ -106,6 +109,7 @@ class SesionChat:
             except (ValueError, KeyError, TypeError):
                 return None
             self.pedido_en_curso = datos
+            self.pedido_armado_en_este_turno = True
             if datos.get("cliente"):
                 self.cliente["nombre"] = datos["cliente"]
             if datos.get("telefono"):
