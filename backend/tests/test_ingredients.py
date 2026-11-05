@@ -58,7 +58,7 @@ def test_crea_un_ingrediente(client, db_session):
     response = client.post(INGREDIENTS_URL, json={"name": "  Harina 000 ", "unit": "gramos"})
 
     assert response.status_code == 201
-    assert response.json() == {"id": response.json()["id"], "name": "Harina 000", "unit": "gramos", "products_count": 0}
+    assert response.json() == {"id": response.json()["id"], "name": "Harina 000", "unit": "gramos", "extra_price": 0.0, "products_count": 0}
     assert db_session.query(Ingredient).one().name == "Harina 000"
 
 
@@ -80,7 +80,7 @@ def test_edita_un_ingrediente(client, ingredients, recipe):
     response = client.put(f"{INGREDIENTS_URL}/{ingredient_id}", json={"name": "Muzzarella en barra", "unit": "kilos"})
 
     assert response.status_code == 200
-    assert response.json() == {"id": ingredient_id, "name": "Muzzarella en barra", "unit": "kilos", "products_count": 1}
+    assert response.json() == {"id": ingredient_id, "name": "Muzzarella en barra", "unit": "kilos", "extra_price": 0.0, "products_count": 1}
 
 
 def test_editar_con_el_nombre_de_otro_ingrediente_falla(client, ingredients):
@@ -245,3 +245,16 @@ def test_filtrar_por_un_ingrediente_inexistente_responde_404(client):
 
 def test_sin_pedidos_finalizados_el_reporte_esta_vacio(client, recipe):
     assert client.get(CONSUMPTION_URL).json() == {"completed_orders": 0, "items": [], "products_without_recipe": []}
+
+def test_crea_y_edita_ingrediente_con_precio_extra(client, db_session):
+    # Crear con precio extra
+    res = client.post(INGREDIENTS_URL, json={"name": "Cebolla Caramelizada", "unit": "gramos", "extra_price": 500.0})
+    assert res.status_code == 201
+    ing_id = res.json()["id"]
+    assert res.json()["extra_price"] == 500.0
+
+    # Editar precio extra
+    res_edit = client.put(f"{INGREDIENTS_URL}/{ing_id}", json={"name": "Cebolla Caramelizada", "unit": "gramos", "extra_price": 750.0})
+    assert res_edit.status_code == 200
+    assert res_edit.json()["extra_price"] == 750.0
+

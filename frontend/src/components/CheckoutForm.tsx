@@ -73,13 +73,24 @@ export function CheckoutForm({
         delivery_method: deliveryMethod,
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
-        items: items.map((item) => ({
-          product_id: item.promotion ? undefined : item.product?.id,
-          promotion_id: item.promotion ? item.promotion.id : undefined,
-          quantity: item.quantity,
-          secondary_product_id: item.secondary_product?.id,
-          custom_name: item.custom_name,
-        })),
+        items: items.map((item) => {
+          const it: any = { quantity: item.quantity };
+          if (item.promotion) {
+            it.promotion_id = item.promotion.id;
+          } else {
+            it.product_id = item.product?.id;
+          }
+          if (item.secondary_product?.id) {
+            it.secondary_product_id = item.secondary_product.id;
+          }
+          if (item.custom_name) {
+            it.custom_name = item.custom_name;
+          }
+          if (item.modifications && item.modifications.length > 0) {
+            it.modifications = item.modifications;
+          }
+          return it;
+        }),
         payment_method: paymentMethod,
       });
       onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes, paymentMethod });

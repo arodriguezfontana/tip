@@ -106,6 +106,57 @@ describe('CartContext', () => {
     expect(result.current.items).toEqual([]);
   });
 
+  it('permite actualizar modificaciones y recalcular precio unitario y total', () => {
+    const { result } = renderCart();
+    act(() => {
+      result.current.addItem(MUZZA, 1);
+    });
+
+    const item = result.current.items[0];
+    expect(item.unit_price).toBe(8500);
+
+    act(() => {
+      result.current.updateItemModifications(item.id!, [
+        { type: 'negative', action: 'remove', name: 'cebolla', tag: '[SIN CEBOLLA]', price: 0 },
+        { type: 'positive', action: 'add', name: 'anana', tag: '[EXTRA ANANA]', price: 500, ingredient_id: 10 },
+      ]);
+    });
+
+    expect(result.current.items[0].unit_price).toBe(9000);
+    expect(result.current.total).toBe(9000);
+    expect(result.current.items[0].modifications).toHaveLength(2);
+  });
+
+  it('permite dividir un item con cantidad mayor a 1 para personalizarlo por separado', () => {
+    const { result } = renderCart();
+    act(() => {
+      result.current.addItem(MUZZA, 2);
+    });
+
+    expect(result.current.items).toHaveLength(1);
+    expect(result.current.items[0].quantity).toBe(2);
+
+    const firstId = result.current.items[0].id!;
+    act(() => {
+      result.current.splitItem?.(firstId);
+    });
+
+    expect(result.current.items).toHaveLength(2);
+    expect(result.current.items[0].quantity).toBe(1);
+    expect(result.current.items[1].quantity).toBe(1);
+
+    // Personalizar solo la primera pizza
+    act(() => {
+      result.current.updateItemModifications(result.current.items[0].id!, [
+        { type: 'positive', action: 'add', name: 'anana', price: 500 },
+      ]);
+    });
+
+    expect(result.current.items[0].unit_price).toBe(9000);
+    expect(result.current.items[1].unit_price).toBe(8500);
+    expect(result.current.total).toBe(9000 + 8500);
+  });
+
   it('useCart fuera del provider avisa del error de uso', () => {
     expect(() => renderHook(() => useCart())).toThrow('useCart debe usarse dentro de un CartProvider');
   });

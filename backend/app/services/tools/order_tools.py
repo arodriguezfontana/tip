@@ -40,6 +40,7 @@ from app.services.catalog_service import find_available_products_by_name
 from app.services.mercadopago_service import create_payment_preference
 from app.services.modifier_nlp import (
     extraer_modificadores_de_texto,
+    filtrar_modificadores_para_producto,
     vincular_modificadores_con_db,
 )
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
@@ -467,6 +468,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                     resumen_lineas.append(f"- '{s2_str}' puede ser: {opciones}. ¿Cuál querés?")
                 continue
 
+            all_mitad_mods = filtrar_modificadores_para_producto(all_mitad_mods, p1, p2)
             # Regla de cobro: la pizza mitad y mitad toma el valor del gusto más caro
             base_unitario = max(p1.price, p2.price)
             extra_cost = sum(
@@ -480,8 +482,10 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
 
             nombre_unificado = format_half_and_half_name(p1.name, p2.name, size_hint)
             tags_texto = " ".join(m["tag"] for m in all_mitad_mods if m.get("tag"))
-            nombre_mostrado = f"{nombre_unificado} {tags_texto}".strip() if tags_texto else nombre_unificado
-            resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
+            if tags_texto:
+                resumen_lineas.append(f"- {nombre_unificado} (x{cantidad}) ${subtotal:,.2f}\n  {tags_texto}")
+            else:
+                resumen_lineas.append(f"- {nombre_unificado} (x{cantidad}) ${subtotal:,.2f}")
             items_validados.append({
                 "product_id": p1.id,
                 "secondary_product_id": p2.id,
@@ -572,6 +576,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
             resumen_lineas.append(f"- '{base_nombre}' puede ser: {opciones}. ¿Cuál querés?")
             continue
 
+        all_item_mods = filtrar_modificadores_para_producto(all_item_mods, producto)
         extra_cost = sum(
             to_money(m.get("price", 0))
             for m in all_item_mods
@@ -582,8 +587,10 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
         total_general += subtotal
 
         tags_texto = " ".join(m["tag"] for m in all_item_mods if m.get("tag"))
-        nombre_mostrado = f"{producto.name} {tags_texto}".strip() if tags_texto else producto.name
-        resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
+        if tags_texto:
+            resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}\n  {tags_texto}")
+        else:
+            resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
         items_validados.append({
             "product_id": producto.id,
             "nombre": producto.name,
@@ -715,6 +722,7 @@ def calcular_y_preparar_pedido(
                 f"- Teléfono: {telefono}",
                 f"- {entrega}",
                 f"- Horario: {horario}",
+                "ℹ️ Aclaración: Las modificaciones y adicionales se realizan según los ingredientes y adicionales permitidos de cada plato.",
                 f"- Observaciones: {notas or 'sin observaciones'}",
                 *( [pago_linea] if pago_normalizado else [] ),
                 "",

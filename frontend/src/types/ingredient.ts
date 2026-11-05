@@ -3,6 +3,8 @@ export interface Ingredient {
   name: string;
   /** Unidad en la que se expresan todas sus cantidades (ej. "gramos"). */
   unit: string;
+  /** Precio adicional opcional cuando se agrega como extra a un producto. */
+  extra_price?: number;
   /** Cantidad de productos en cuya receta figura. */
   products_count: number;
 }
@@ -10,6 +12,7 @@ export interface Ingredient {
 export interface IngredientPayload {
   name: string;
   unit: string;
+  extra_price?: number;
 }
 
 export interface RecipeItem {

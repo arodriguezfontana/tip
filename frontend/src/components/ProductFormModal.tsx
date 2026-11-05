@@ -3,24 +3,30 @@ import type { FormEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { INPUT_FULL_CLASS as INPUT_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, ImageChange, ProductPayload } from '@/types/catalog';
+import type { Ingredient } from '@/types/ingredient';
 import { getErrorMessage } from '@/utils/errors';
+import { formatCurrency } from '@/utils/currency';
 import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_MB, parseRestrictions, productImageSrc, validateImageFile } from '@/utils/catalog';
 
 interface ProductFormModalProps {
   /** null para crear un producto nuevo. */
   product: AdminProduct | null;
   categories: AdminCategory[];
+  availableIngredients?: Ingredient[];
   onClose: () => void;
   onSave: (payload: ProductPayload, image: ImageChange) => Promise<void>;
 }
 
-export function ProductFormModal({ product, categories, onClose, onSave }: ProductFormModalProps) {
+export function ProductFormModal({ product, categories, availableIngredients = [], onClose, onSave }: ProductFormModalProps) {
   const [name, setName] = useState(product?.name ?? '');
   const [description, setDescription] = useState(product?.description ?? '');
   const [price, setPrice] = useState(product ? String(product.price) : '');
   const [categoryId, setCategoryId] = useState<number | null>(product?.category?.id ?? null);
   const [restrictions, setRestrictions] = useState(product?.dietary_restrictions.join(', ') ?? '');
   const [isActive, setIsActive] = useState(product?.is_active ?? true);
+  const [allowedExtraIds, setAllowedExtraIds] = useState<number[]>(
+    product?.allowed_extras?.map((e) => e.id) ?? []
+  );
   const [image, setImage] = useState<ImageChange>({ type: 'keep' });
   const [imageError, setImageError] = useState<string | null>(null);
   const [saving, setSaving] = useState(false);
@@ -68,17 +74,18 @@ export function ProductFormModal({ product, categories, onClose, onSave }: Produ
 
     setSaving(true);
     try {
-      await onSave(
-        {
-          name: name.trim(),
-          description: description.trim(),
-          price: parsedPrice,
-          category_id: categoryId,
-          is_active: isActive,
-          dietary_restrictions: parseRestrictions(restrictions),
-        },
-        image
-      );
+      const payload: ProductPayload = {
+        name: name.trim(),
+        description: description.trim(),
+        price: parsedPrice,
+        category_id: categoryId,
+        is_active: isActive,
+        dietary_restrictions: parseRestrictions(restrictions),
+      };
+      if (allowedExtraIds.length > 0) {
+        payload.allowed_extra_ids = allowedExtraIds;
+      }
+      await onSave(payload, image);
     } catch (err) {
       setFormError(getErrorMessage(err, 'No se pudo guardar el producto.'));
       setSaving(false);
@@ -178,6 +185,43 @@ export function ProductFormModal({ product, categories, onClose, onSave }: Produ
               onChange={(e) => setRestrictions(e.target.value)}
               className={INPUT_CLASS}
             />
+          </div>
+
+          <div>
+            <label className={LABEL_CLASS}>Adicionales permitidos (opcional)</label>
+            <p className="text-[11px] text-gray-500 mb-2">
+              Elegí qué ingredientes se pueden sumar como extra con costo al pedir este producto.
+            </p>
+            {availableIngredients.length > 0 ? (
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
+                {availableIngredients.map((ing) => {
+                  const isChecked = allowedExtraIds.includes(ing.id);
+                  const priceLabel = ing.extra_price ? ` (+${formatCurrency(ing.extra_price)})` : '';
+                  return (
+                    <label key={ing.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
+                      <input
+                        type="checkbox"
+                        checked={isChecked}
+                        onChange={(e) => {
+                          if (e.target.checked) {
+                            setAllowedExtraIds([...allowedExtraIds, ing.id]);
+                          } else {
+                            setAllowedExtraIds(allowedExtraIds.filter((id) => id !== ing.id));
+                          }
+                        }}
+                        className="w-4 h-4 accent-black rounded"
+                      />
+                      <span className="truncate">
+                        {ing.name}
+                        <span className="text-gray-500 font-medium">{priceLabel}</span>
+                      </span>
+                    </label>
+                  );
+                })}
+              </div>
+            ) : (
+              <p className="text-xs text-gray-400 italic">No hay ingredientes cargados en el sistema.</p>
+            )}
           </div>
 
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">

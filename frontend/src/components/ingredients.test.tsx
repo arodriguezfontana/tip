@@ -99,6 +99,20 @@ describe('IngredientesView', () => {
     expect(screen.getByLabelText('Nombre del nuevo ingrediente')).toHaveValue('');
   });
 
+  it('permite agregar un ingrediente con precio extra opcional', async () => {
+    service.createIngredient.mockResolvedValue({ id: 5, name: 'Cebolla', unit: 'gramos', extra_price: 500, products_count: 0 });
+    render(<IngredientesView />);
+    const user = userEvent.setup();
+    await screen.findByRole('cell', { name: 'Muzzarella' });
+
+    await user.type(screen.getByLabelText('Nombre del nuevo ingrediente'), 'Cebolla');
+    await user.type(screen.getByLabelText('Unidad del nuevo ingrediente'), 'gramos');
+    await user.type(screen.getByLabelText('Precio extra del nuevo ingrediente'), '500');
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
+
+    expect(service.createIngredient).toHaveBeenCalledWith({ name: 'Cebolla', unit: 'gramos', extra_price: 500 });
+  });
+
   it('valida nombre y unidad antes de agregar', async () => {
     render(<IngredientesView />);
     const user = userEvent.setup();

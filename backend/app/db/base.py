@@ -9,7 +9,7 @@ from app.models.business_hours import BusinessHours
 from app.models.cash_shift import CashMovement, CashShift
 from app.models.client import Client
 from app.models.delivery_driver import DeliveryDriver
-from app.models.menu import Category, Ingredient, Product, ProductImage, ProductIngredient
+from app.models.menu import Category, Ingredient, Product, ProductAllowedExtra, ProductImage, ProductIngredient
 from app.models.menu_image import MenuImage
 from app.models.order import Order, OrderItem
 from app.models.promotion import Promotion, PromotionImage, PromotionPhoto, PromotionProduct
@@ -29,6 +29,7 @@ __all__ = [
     "Order",
     "OrderItem",
     "Product",
+    "ProductAllowedExtra",
     "ProductImage",
     "ProductIngredient",
     "Promotion",

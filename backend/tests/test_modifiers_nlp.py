@@ -68,9 +68,13 @@ def hamburguesa(db_session, categoria, ingredientes):
     )
     db_session.add(prod)
     db_session.flush()
+    from app.models.menu import ProductAllowedExtra
     # Receta con Cebolla (50g) y Tomate (50g)
     db_session.add(ProductIngredient(product_id=prod.id, ingredient_id=ingredientes["cebolla"].id, quantity=50))
     db_session.add(ProductIngredient(product_id=prod.id, ingredient_id=ingredientes["tomate"].id, quantity=50))
+    # Extras permitidos: Queso y Panceta
+    db_session.add(ProductAllowedExtra(product_id=prod.id, ingredient_id=ingredientes["queso"].id))
+    db_session.add(ProductAllowedExtra(product_id=prod.id, ingredient_id=ingredientes["panceta"].id))
     db_session.commit()
     return prod
 
@@ -304,3 +308,56 @@ def test_flujo_completo_bot_con_modificadores(db_session, hamburguesa, ingredien
     assert db_item.unit_price == Decimal("11000.00")
     assert len(db_item.modifications) == 2
     assert db_item.comanda_display == "Hamburguesa Completa [SIN CEBOLLA] [EXTRA QUESO]"
+
+def test_restriccion_se_descarta_si_ingrediente_no_esta_en_receta(db_session, hamburguesa):
+    # Hamburguesa solo tiene Cebolla y Tomate en su receta. Si piden "sin lechuga" o "sin pepino", se descarta.
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa sin pepino y sin cebolla",
+        "customer_name": "Pedro",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    datos = calc_res["datos_temporales"]
+    item = datos["items"][0]
+    # Solo "sin cebolla" debe quedar, "sin pepino" no está en la receta y se descarta
+    assert len(item["modifications"]) == 1
+    assert item["modifications"][0]["name"] == "cebolla"
+    assert "[SIN CEBOLLA]" in calc_res["mensaje_para_usuario"]
+    assert "[SIN PEPINO]" not in calc_res["mensaje_para_usuario"]
+
+
+def test_adicional_se_descarta_si_no_esta_en_allowed_extras(db_session, hamburguesa):
+    # Hamburguesa solo tiene Queso y Panceta como allowed_extras. Si piden "con anana", se descarta.
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa con anana y con extra queso",
+        "customer_name": "Maria",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    datos = calc_res["datos_temporales"]
+    item = datos["items"][0]
+    # Solo "queso" debe quedar, "anana" no está permitido para este producto y se descarta
+    assert len(item["modifications"]) == 1
+    assert item["modifications"][0]["name"] == "queso"
+    assert item["unit_price"] == 11000.0  # Base 10000 + 1000 extra queso
+    assert "[EXTRA QUESO]" in calc_res["mensaje_para_usuario"]
+    assert "[EXTRA ANANA]" not in calc_res["mensaje_para_usuario"]
+
+
+def test_bot_muestra_extras_debajo_del_producto_y_aclaracion(db_session, hamburguesa):
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa con extra queso y sin cebolla",
+        "customer_name": "Lucas",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    msg = calc_res["mensaje_para_usuario"]
+    # Formato: el plato y abajo las modificaciones una al lado de la otra
+    linea_esperada = "- Hamburguesa Completa (x1) $11,000.00\n  [EXTRA QUESO] [SIN CEBOLLA]"
+    assert linea_esperada in msg
+    # Aclaración de que las modificaciones se realizan según los permitidos
+    assert "modificaciones" in msg.lower() and "permitid" in msg.lower()
+

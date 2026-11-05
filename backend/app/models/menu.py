@@ -63,6 +63,18 @@ class ProductIngredient(Base):
     ingredient = relationship("Ingredient", back_populates="used_in_products")
 
 
+class ProductAllowedExtra(Base):
+    """Adicional permitido para un producto: insumo que se puede sumar como extra al pedirlo."""
+
+    __tablename__ = "product_allowed_extras"
+
+    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
+
+    product = relationship("Product", back_populates="allowed_extra_items")
+    ingredient = relationship("Ingredient", back_populates="allowed_in_products")
+
+
 class Category(Base):
     __tablename__ = "categories"
 
@@ -103,6 +115,7 @@ class Ingredient(Base):
     extra_price = Column(MoneyColumn, nullable=False, default=0, server_default="0")
 
     used_in_products = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
+    allowed_in_products = relationship("ProductAllowedExtra", back_populates="ingredient", cascade="all, delete-orphan")
 
     @validates("extra_price")
     def _as_money(self, _key: str, value) -> Decimal:
@@ -136,6 +149,7 @@ class Product(Base):
     sector = Column(String(50), nullable=True)
 
     recipe_items = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")
+    allowed_extra_items = relationship("ProductAllowedExtra", back_populates="product", cascade="all, delete-orphan")
     image = relationship("ProductImage", back_populates="product", uselist=False, cascade="all, delete-orphan")
 
     @property
@@ -202,6 +216,20 @@ class Product(Base):
         self.image = None
 
     # --- Receta -------------------------------------------------------------------------------------
+
+    @property
+    def allowed_extras(self) -> list[Ingredient]:
+        return [item.ingredient for item in self.allowed_extra_items if item.ingredient]
+
+    def replace_allowed_extras(self, ingredients: Iterable[Ingredient]) -> None:
+        current = {item.ingredient_id: item for item in self.allowed_extra_items}
+        new_items = {ing.id: ing for ing in ingredients}
+        for ing_id, item in list(current.items()):
+            if ing_id not in new_items:
+                self.allowed_extra_items.remove(item)
+        for ing_id, ing in new_items.items():
+            if ing_id not in current:
+                self.allowed_extra_items.append(ProductAllowedExtra(ingredient=ing))
 
     def replace_recipe(self, lines: list[tuple[Ingredient, float]]) -> None:
         """Reemplaza la receta. Cada línea es (ingrediente, cantidad por unidad de producto)."""
