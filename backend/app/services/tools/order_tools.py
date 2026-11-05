@@ -24,6 +24,7 @@ from app.core.time import ahora_local
 from app.db.session import SessionLocal
 from app.models.menu import Product
 from app.models.order import MAX_QUANTITY_PER_ITEM, PICKUP_ADDRESS, DeliveryMethod, InvalidOrderError, PaymentMethod
+from app.models.promotion import Promotion
 from app.repositories import promotion_repository
 from app.schemas.common import PHONE_PATTERN
 from app.services.business_hours_service import (
@@ -385,11 +386,126 @@ class ItemsResueltos:
         return "No se pudieron reconocer productos válidos en el menú para tu pedido."
 
 
+def _es_producto_suelto(item: dict) -> bool:
+    """Producto común, sin gustos combinados ni modificaciones: el único que puede pasar a formar parte de una promo."""
+    return (
+        item.get("product_id") is not None
+        and not item.get("promotion_id")
+        and not item.get("secondary_product_id")
+        and not item.get("modifications")
+    )
+
+
+def _aplicar_promociones(
+    db: Session,
+    items: list[dict],
+    lineas: list[str],
+    linea_de_item: list[int],
+    total: Decimal,
+) -> Decimal:
+    """Si los productos sueltos del pedido arman una promo vigente (y sale más barata), los reemplaza por ella.
+
+    Lo decide el sistema y no el modelo de lenguaje: el modelo solo pasa lo que dijo el cliente y acá se detecta
+    si eso ya es una promo, así nunca se agrega un producto de más ni se pierde un descuento. Modifica las listas
+    recibidas y devuelve el total actualizado.
+    """
+    sueltos = [i for i, item in enumerate(items) if _es_producto_suelto(item)]
+    if not sueltos:
+        return total
+    disponible: dict[int, int] = {}
+    for i in sueltos:
+        disponible[items[i]["product_id"]] = disponible.get(items[i]["product_id"], 0) + items[i]["quantity"]
+
+    inicial = dict(disponible)
+
+    def veces_que_entra(requisitos: dict[int, int]) -> int:
+        return min(disponible.get(pid, 0) // cantidad for pid, cantidad in requisitos.items())
+
+    candidatas = []
+    for promo in promotion_repository.list_available(db):
+        requisitos = {it.product_id: it.quantity for it in promo.items}
+        precio_normal = sum((to_money(it.product.price) * it.quantity for it in promo.items), Decimal(0))
+        ahorro = precio_normal - to_money(promo.price)
+        if ahorro > 0 and veces_que_entra(requisitos) >= 1:
+            candidatas.append((ahorro, promo, requisitos))
+    # Primero la promo que más ahorra por vez; cada producto se usa en una sola promo.
+    candidatas.sort(key=lambda c: (-c[0], c[1].id))
+
+    aplicadas: dict[int, tuple[Promotion, int, Decimal]] = {}
+    for ahorro, promo, requisitos in candidatas:
+        veces = veces_que_entra(requisitos)
+        if veces < 1:
+            continue
+        for pid, cantidad in requisitos.items():
+            disponible[pid] -= cantidad * veces
+        aplicadas[promo.id] = (promo, veces, ahorro * veces)
+    if not aplicadas:
+        return total
+
+    # Cuánto de cada producto suelto pasó a las promos.
+    consumo = {pid: inicial[pid] - disponible[pid] for pid in inicial}
+
+    existentes = {it["promotion_id"]: k for k, it in enumerate(items) if it.get("promotion_id")}
+    linea_a_item = {linea: k for k, linea in enumerate(linea_de_item)}
+    nuevos_items: list[dict] = []
+    nuevas_lineas: list[str] = []
+    promos_ya_puestas: set[int] = set()
+
+    def linea_de_promo(promo: Promotion, cantidad: int) -> str:
+        return f"- Promo: {promo.name} (x{cantidad}) ${to_money(promo.price) * cantidad:,.2f}"
+
+    def poner_promos() -> None:
+        for promo_id, (promo, veces, _ahorro) in aplicadas.items():
+            if promo_id in promos_ya_puestas or promo_id in existentes:
+                continue
+            promos_ya_puestas.add(promo_id)
+            nuevos_items.append({
+                "product_id": None,
+                "secondary_product_id": None,
+                "promotion_id": promo.id,
+                "nombre": promo.name,
+                "quantity": veces,
+                "unit_price": float(to_money(promo.price)),
+                "modifications": [],
+            })
+            nuevas_lineas.append(linea_de_promo(promo, veces))
+
+    for posicion, linea in enumerate(lineas):
+        k = linea_a_item.get(posicion)
+        if k is None:
+            nuevas_lineas.append(linea)
+            continue
+        item = items[k]
+        if item.get("promotion_id") in aplicadas and item["promotion_id"] in existentes:
+            # El modelo ya había puesto esta promo: se le suman las que se armaron con productos sueltos.
+            promo, veces, ahorro = aplicadas[item["promotion_id"]]
+            item["quantity"] += veces
+            nuevos_items.append(item)
+            nuevas_lineas.append(linea_de_promo(promo, item["quantity"]))
+            continue
+        if k in sueltos and consumo.get(item["product_id"], 0) > 0:
+            poner_promos()
+            tomado = min(item["quantity"], consumo[item["product_id"]])
+            consumo[item["product_id"]] -= tomado
+            item["quantity"] -= tomado
+            if item["quantity"] == 0:
+                continue
+            linea = f"- {item['nombre']} (x{item['quantity']}) ${to_money(item['unit_price']) * item['quantity']:,.2f}"
+        nuevos_items.append(item)
+        nuevas_lineas.append(linea)
+
+    items[:] = nuevos_items
+    lineas[:] = nuevas_lineas
+    return total - sum((ahorro for _, _, ahorro in aplicadas.values()), Decimal(0))
+
+
 def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
     """Interpreta lo que pidió el cliente ("2 Pizza Muzzarella, 1 Coca-Cola" o una lista JSON) y lo busca en el menú."""
     resumen_lineas = []
     total_general = Decimal(0)
     items_validados = []
+    # Posición en resumen_lineas de la línea de cada ítem validado (para reemplazarla si el pedido arma una promo).
+    linea_de_item: list[int] = []
     hay_ambiguos = False
     hay_cantidades_invalidas = False
 
@@ -490,6 +606,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                 "unit_price": float(precio_unitario),
                 "modifications": all_mitad_mods,
             })
+            linea_de_item.append(len(resumen_lineas) - 1)
             continue
 
         raw_nombre = str(item.get("nombre", "")).strip()
@@ -522,6 +639,15 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
         if not promociones and base_nombre != raw_nombre:
             promociones = promotion_repository.find_available_by_name(db, base_nombre)
 
+        # Una coincidencia parcial con el nombre de una promo ("Coca-Cola 500ml" dentro de "Muzzarella + Coca-Cola
+        # 500ml") no pisa a un producto del menú con ese nombre: el producto gana y, si el pedido arma una promo,
+        # se aplica después (ver _aplicar_promociones). Solo el nombre exacto de la promo, o un nombre que no
+        # corresponde a ningún producto, se toma como pedido de la promo.
+        nombres_exactos = {raw_nombre.lower(), base_nombre.lower()}
+        es_promo_exacta = any(p.name.lower() in nombres_exactos for p in promociones)
+        if promociones and not es_promo_exacta and (_buscar_producto(db, base_nombre) or _buscar_producto(db, raw_nombre)):
+            promociones = []
+
         if promociones:
             if len(promociones) == 1:
                 promo = promociones[0]
@@ -549,6 +675,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                     "unit_price": float(precio_unitario),
                     "modifications": [],
                 })
+                linea_de_item.append(len(resumen_lineas) - 1)
                 continue
             else:
                 hay_ambiguos = True
@@ -591,6 +718,9 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
             "unit_price": float(precio_unitario),
             "modifications": all_item_mods,
         })
+        linea_de_item.append(len(resumen_lineas) - 1)
+
+    total_general = _aplicar_promociones(db, items_validados, resumen_lineas, linea_de_item, total_general)
 
     return ItemsResueltos(
         validados=items_validados,
@@ -616,7 +746,9 @@ def calcular_y_preparar_pedido(
     """Calcula de forma exacta el total de un pedido consultando los precios reales.
 
     Args:
-        items_solicitados: Los productos y cantidades pedidos (ej: "2 Pizza Muzzarella, 1 Coca-Cola").
+        items_solicitados: Los productos y cantidades que pidió el cliente, tal cual, sin agregar nada
+            (ej: "2 Pizza Muzzarella, 1 Coca-Cola"). Si lo pedido arma una promoción vigente, el sistema la aplica
+            solo: no pases la promo ni sus productos por tu cuenta, salvo que el cliente haya nombrado la promo.
         customer_name: Nombre del cliente.
         customer_phone: Teléfono de contacto del cliente.
         shipping_address: Dirección de envío (solo para envíos a domicilio).
@@ -714,8 +846,9 @@ def calcular_y_preparar_pedido(
                 f"- Nombre: {customer_name}",
                 f"- Teléfono: {telefono}",
                 f"- {entrega}",
-                f"- Horario: {horario}",
-                f"- Observaciones: {notas or 'sin observaciones'}",
+                # Solo se muestran cuando aportan algo: no hace falta decir "para ahora" ni "sin observaciones".
+                *([f"- Horario: {horario}"] if horario_programado else []),
+                *([f"- Observaciones: {notas}"] if notas else []),
                 *( [pago_linea] if pago_normalizado else [] ),
                 "",
                 *( [pago_linea, ""] if not pago_normalizado else [] ),
