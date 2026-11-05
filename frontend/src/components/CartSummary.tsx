@@ -6,7 +6,7 @@ import { formatCurrency } from '@/utils/currency';
 
 function cleanModTag(m: { type: string; name: string; tag?: string }): string {
   const label = m.tag || (m.type === 'negative' ? `SIN ${m.name.toUpperCase()}` : `EXTRA ${m.name.toUpperCase()}`);
-  return label.replaceAll('[', '').replaceAll(']', '').trim();
+  return label.split('[').join('').split(']').join('').trim();
 }
 
 export function CartSummary() {
