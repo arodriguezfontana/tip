@@ -5,9 +5,12 @@ import { lookupClientByPhone } from '@/services/clientService';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
 import { createCounterOrder } from '@/services/orderService';
 import { fetchCurrentCashShift } from '@/services/cashShiftService';
+import { fetchAvailablePromotions } from '@/services/promotionService';
 import type { Client } from '@/types/client';
 import { COUNTER_PAYMENT_METHODS, MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
+import type { Promotion } from '@/types/promotion';
+import { productImageSrc } from '@/utils/catalog';
 import { formatCurrency } from '@/utils/currency';
 import { groupByCategory } from '@/utils/productGrouping';
 import { PHONE_PATTERN } from '@/utils/customerValidation';
@@ -16,6 +19,8 @@ import { INPUT_FULL_CLASS as INPUT_CLASS } from '@/styles/forms';
 import { CheckIcon } from '@/components/Icons';
 
 const ALL_CATEGORIES = 'all';
+const PROMOTIONS_CATEGORY = 'promos';
+type CategoryFilter = number | typeof ALL_CATEGORIES | typeof PROMOTIONS_CATEGORY;
 
 /** Espera tras la última tecla del teléfono antes de buscar al cliente. */
 const CLIENT_LOOKUP_DEBOUNCE_MS = 400;
@@ -34,7 +39,9 @@ type ClientLookup =
 export function TomarPedidoView() {
   // Catálogo
   const { products, loading: loadingProducts, error: productsError, reload: reloadProducts } = useMenuProducts();
-  const [activeCategory, setActiveCategory] = useState<number | typeof ALL_CATEGORIES>(ALL_CATEGORIES);
+  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const [loadingPromos, setLoadingPromos] = useState(false);
+  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL_CATEGORIES);
   const [search, setSearch] = useState('');
 
   // Pedido
@@ -60,6 +67,18 @@ export function TomarPedidoView() {
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
+
+  const loadPromos = () => {
+    setLoadingPromos(true);
+    fetchAvailablePromotions()
+      .then((data) => setPromotions(data ?? []))
+      .catch(() => {})
+      .finally(() => setLoadingPromos(false));
+  };
+
+  useEffect(() => {
+    loadPromos();
+  }, []);
 
   useEffect(() => {
     let active = true;
@@ -125,7 +144,23 @@ export function TomarPedidoView() {
 
   const categories = useMemo(() => groupByCategory(products).map((group) => group.category), [products]);
 
+  const visiblePromotions = useMemo(() => {
+    if (activeCategory !== ALL_CATEGORIES && activeCategory !== PROMOTIONS_CATEGORY) {
+      return [];
+    }
+    const term = search.trim().toLowerCase();
+    return promotions.filter(
+      (promo) =>
+        !term ||
+        promo.name.toLowerCase().includes(term) ||
+        (promo.description && promo.description.toLowerCase().includes(term))
+    );
+  }, [promotions, activeCategory, search]);
+
   const visibleGroups = useMemo(() => {
+    if (activeCategory === PROMOTIONS_CATEGORY) {
+      return [];
+    }
     const term = search.trim().toLowerCase();
     const filtered = products.filter(
       (product) =>
@@ -136,43 +171,91 @@ export function TomarPedidoView() {
   }, [products, activeCategory, search]);
 
   const quantityByProduct = useMemo(
-    () => new Map(lines.map((line) => [line.product.id, line.quantity])),
+    () => new Map(lines.filter((l) => !l.promotion).map((line) => [line.product.id, line.quantity])),
     [lines]
   );
 
-  const total = lines.reduce((sum, line) => sum + line.product.price * line.quantity, 0);
+  const quantityByPromo = useMemo(
+    () => new Map(lines.filter((l) => Boolean(l.promotion)).map((line) => [line.promotion!.id, line.quantity])),
+    [lines]
+  );
+
+  const total = lines.reduce(
+    (sum, line) => sum + (line.promotion ? line.promotion.price : line.product.price) * line.quantity,
+    0
+  );
   const units = lines.reduce((sum, line) => sum + line.quantity, 0);
+
+  const getLineKey = (line: CartItem): string => {
+    if (line.promotion) return `promo-${line.promotion.id}`;
+    return `prod-${line.product.id}`;
+  };
 
   const addProduct = (product: Product) => {
     setLastOrderId(null);
     setErrors((prev) => ({ ...prev, items: undefined }));
     setLines((prev) => {
-      const existing = prev.find((line) => line.product.id === product.id);
+      const existing = prev.find((line) => !line.promotion && line.product.id === product.id);
       if (existing) {
         return prev.map((line) =>
-          line.product.id === product.id
+          !line.promotion && line.product.id === product.id
             ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_ITEM) }
             : line
         );
       }
-      return [...prev, { product, quantity: 1 }];
+      return [...prev, { product, quantity: 1, unit_price: product.price }];
     });
   };
 
-  const changeQuantity = (productId: number, quantity: number) => {
+  const addPromotion = (promo: Promotion) => {
+    setLastOrderId(null);
+    setErrors((prev) => ({ ...prev, items: undefined }));
+    setLines((prev) => {
+      const existing = prev.find((line) => line.promotion?.id === promo.id);
+      if (existing) {
+        return prev.map((line) =>
+          line.promotion?.id === promo.id
+            ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_ITEM) }
+            : line
+        );
+      }
+      return [
+        ...prev,
+        {
+          id: `promo-${promo.id}`,
+          product: {
+            id: -promo.id,
+            name: promo.name,
+            description: promo.description,
+            price: promo.price,
+            category: { id: -1, name: 'Promociones' },
+            dietary_restrictions: [],
+            image_url: promo.image_url,
+          },
+          promotion: promo,
+          quantity: 1,
+          unit_price: promo.price,
+        },
+      ];
+    });
+  };
+
+  const changeLineQuantity = (lineKey: string, quantity: number) => {
     if (quantity <= 0) {
-      removeProduct(productId);
+      removeLine(lineKey);
       return;
     }
     setLines((prev) =>
       prev.map((line) =>
-        line.product.id === productId ? { ...line, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) } : line
+        getLineKey(line) === lineKey
+          ? { ...line, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) }
+          : line
       )
     );
   };
 
-  const removeProduct = (productId: number) => {
-    setLines((prev) => prev.filter((line) => line.product.id !== productId));
+  const removeLine = (lineKey: string) => {
+    setLines((prev) => prev.filter((line) => getLineKey(line) !== lineKey));
   };
 
   const resetOrder = () => {
@@ -230,7 +313,18 @@ export function TomarPedidoView() {
         notes: notes.trim() || null,
         payment_method: paymentMethod,
         is_paid: isPaid,
-        items: lines.map((line) => ({ product_id: line.product.id, quantity: line.quantity })),
+        items: lines.map((line) => {
+          if (line.promotion) {
+            return {
+              promotion_id: line.promotion.id,
+              quantity: line.quantity,
+            };
+          }
+          return {
+            product_id: line.product.id,
+            quantity: line.quantity,
+          };
+        }),
       });
       resetOrder();
       setLastOrderId(order.id);
@@ -415,6 +509,29 @@ export function TomarPedidoView() {
                 {category.name}
               </button>
             ))}
+            {promotions.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setActiveCategory(PROMOTIONS_CATEGORY)}
+                style={activeCategory === PROMOTIONS_CATEGORY ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
+                className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
+                  activeCategory === PROMOTIONS_CATEGORY
+                    ? 'text-white shadow-md'
+                    : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+                }`}
+              >
+                <span>Promociones</span>
+                <span
+                  className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
+                    activeCategory === PROMOTIONS_CATEGORY
+                      ? 'bg-white/20 text-white'
+                      : 'bg-amber-200 text-amber-900'
+                  }`}
+                >
+                  {promotions.length}
+                </span>
+              </button>
+            )}
           </div>
 
           {loadingProducts && products.length === 0 && (
@@ -424,17 +541,73 @@ export function TomarPedidoView() {
           {productsError && (
             <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm flex items-center justify-between gap-3">
               <span>{productsError}</span>
-              <button type="button" onClick={reloadProducts} className="shrink-0 font-semibold underline hover:no-underline">
+              <button type="button" onClick={() => { reloadProducts(); loadPromos(); }} className="shrink-0 font-semibold underline hover:no-underline">
                 Reintentar
               </button>
             </div>
           )}
 
-          {!loadingProducts && !productsError && visibleGroups.length === 0 && (
+          {!loadingProducts && !productsError && !loadingPromos && visibleGroups.length === 0 && visiblePromotions.length === 0 && (
             <p className="text-sm text-gray-500 text-center py-12">No hay productos que coincidan.</p>
           )}
 
           <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
+            {visiblePromotions.length > 0 && (
+              <div>
+                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5 mb-2">
+                  <span>Promociones vigentes</span>
+                  <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-extrabold">
+                    {visiblePromotions.length}
+                  </span>
+                </h3>
+                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
+                  {visiblePromotions.map((promo) => {
+                    const quantity = quantityByPromo.get(promo.id) ?? 0;
+                    return (
+                      <button
+                        key={`promo-${promo.id}`}
+                        type="button"
+                        onClick={() => addPromotion(promo)}
+                        disabled={quantity >= MAX_QUANTITY_PER_ITEM}
+                        title={`Agregar promoción ${promo.name}`}
+                        className={`relative flex flex-col items-center text-center gap-1.5 rounded-xl border p-3 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
+                          quantity > 0
+                            ? 'border-amber-600 bg-amber-50/70 ring-1 ring-amber-500'
+                            : 'border-amber-200/90 bg-gradient-to-b from-amber-50/40 to-white hover:border-amber-400 hover:shadow-md'
+                        }`}
+                      >
+                        <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 shadow-2xs">
+                          Promo
+                        </span>
+                        {quantity > 0 && (
+                          <span
+                            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+                            className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
+                          >
+                            {quantity}
+                          </span>
+                        )}
+                        {promo.image_url ? (
+                          <img
+                            src={productImageSrc(promo.image_url)}
+                            alt={promo.name}
+                            loading="lazy"
+                            className="w-10 h-10 rounded-xl object-cover bg-amber-50 shrink-0 shadow-2xs"
+                          />
+                        ) : (
+                          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 font-bold text-lg shrink-0 shadow-2xs">
+                            🎁
+                          </div>
+                        )}
+                        <span className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{promo.name}</span>
+                        <span className="text-xs font-bold text-amber-900">{formatCurrency(promo.price)}</span>
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            )}
+
             {visibleGroups.map((group) => (
               <div key={group.category.id}>
                 <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">{group.category.name}</h3>
@@ -497,49 +670,64 @@ export function TomarPedidoView() {
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {lines.map((line) => (
-                    <tr key={line.product.id}>
-                      <td className="py-2 px-1">
-                        <div className="flex items-center gap-1">
+                  {lines.map((line) => {
+                    const isPromo = Boolean(line.promotion);
+                    const lineKey = getLineKey(line);
+                    const name = line.promotion ? line.promotion.name : line.product.name;
+                    const price = line.promotion ? line.promotion.price : line.product.price;
+                    return (
+                      <tr key={lineKey} className={isPromo ? 'bg-amber-50/40' : undefined}>
+                        <td className="py-2 px-1">
+                          <div className="flex items-center gap-1">
+                            <button
+                              type="button"
+                              onClick={() => changeLineQuantity(lineKey, line.quantity - 1)}
+                              aria-label={`Restar una unidad de ${name}`}
+                              className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+                            >
+                              −
+                            </button>
+                            <span className="w-6 text-center font-semibold">{line.quantity}</span>
+                            <button
+                              type="button"
+                              onClick={() => changeLineQuantity(lineKey, line.quantity + 1)}
+                              disabled={line.quantity >= MAX_QUANTITY_PER_ITEM}
+                              aria-label={`Sumar una unidad de ${name}`}
+                              className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+                            >
+                              +
+                            </button>
+                          </div>
+                        </td>
+                        <td className="py-2 px-1 text-gray-900">
+                          <div className="flex items-center gap-1.5 flex-wrap">
+                            {isPromo && (
+                              <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-200">
+                                Promo
+                              </span>
+                            )}
+                            <span>{name}</span>
+                          </div>
+                        </td>
+                        <td className="py-2 px-1 text-right text-gray-600 whitespace-nowrap">
+                          {formatCurrency(price)}
+                        </td>
+                        <td className="py-2 px-1 text-right font-semibold text-gray-900 whitespace-nowrap">
+                          {formatCurrency(price * line.quantity)}
+                        </td>
+                        <td className="py-2 px-1 text-right">
                           <button
                             type="button"
-                            onClick={() => changeQuantity(line.product.id, line.quantity - 1)}
-                            aria-label={`Restar una unidad de ${line.product.name}`}
-                            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+                            onClick={() => removeLine(lineKey)}
+                            aria-label={`Eliminar ${name} del pedido`}
+                            className="w-6 h-6 rounded-lg text-gray-400 hover:text-red-600 transition"
                           >
-                            −
+                            ×
                           </button>
-                          <span className="w-6 text-center font-semibold">{line.quantity}</span>
-                          <button
-                            type="button"
-                            onClick={() => changeQuantity(line.product.id, line.quantity + 1)}
-                            disabled={line.quantity >= MAX_QUANTITY_PER_ITEM}
-                            aria-label={`Sumar una unidad de ${line.product.name}`}
-                            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                          >
-                            +
-                          </button>
-                        </div>
-                      </td>
-                      <td className="py-2 px-1 text-gray-900">{line.product.name}</td>
-                      <td className="py-2 px-1 text-right text-gray-600 whitespace-nowrap">
-                        {formatCurrency(line.product.price)}
-                      </td>
-                      <td className="py-2 px-1 text-right font-semibold text-gray-900 whitespace-nowrap">
-                        {formatCurrency(line.product.price * line.quantity)}
-                      </td>
-                      <td className="py-2 px-1 text-right">
-                        <button
-                          type="button"
-                          onClick={() => removeProduct(line.product.id)}
-                          aria-label={`Eliminar ${line.product.name} del pedido`}
-                          className="w-6 h-6 rounded-lg text-gray-400 hover:text-red-600 transition"
-                        >
-                          ×
-                        </button>
-                      </td>
-                    </tr>
-                  ))}
+                        </td>
+                      </tr>
+                    );
+                  })}
                 </tbody>
               </table>
             </div>

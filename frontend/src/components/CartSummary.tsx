@@ -4,6 +4,11 @@ import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import type { IngredientExtra, OrderItemModification } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 
+function cleanModTag(m: { type: string; name: string; tag?: string }): string {
+  let label = m.tag || (m.type === 'negative' ? `SIN ${m.name.toUpperCase()}` : `EXTRA ${m.name.toUpperCase()}`);
+  return label.replace(/[\[\]]/g, '').trim();
+}
+
 export function CartSummary() {
   const { items, updateQuantity, removeItem, updateItemModifications, splitItem, total } = useCart();
   const [openCustomizationId, setOpenCustomizationId] = useState<string | null>(null);
@@ -71,20 +76,17 @@ export function CartSummary() {
                       </div>
                       <p className="text-xs text-gray-500">{formatCurrency(unitPrice)} c/u</p>
                       {item.modifications && item.modifications.length > 0 && (
-                        <div className="flex flex-wrap gap-1 mt-1 text-[10px] font-bold uppercase">
+                        <div className="flex flex-wrap gap-1 mt-1 text-[10px]">
                           {item.modifications.map((m, idx) => (
                             <span
                               key={idx}
-                              className={`px-1.5 py-0.5 rounded ${
+                              className={`font-semibold text-[10px] px-1.5 py-0.2 rounded ${
                                 m.type === 'negative'
                                   ? 'bg-rose-100 text-rose-800'
                                   : 'bg-emerald-100 text-emerald-800'
                               }`}
                             >
-                              {m.tag ||
-                                (m.type === 'negative'
-                                  ? `[SIN ${m.name.toUpperCase()}]`
-                                  : `[EXTRA ${m.name.toUpperCase()}]`)}
+                              {cleanModTag(m)}
                             </span>
                           ))}
                         </div>
@@ -160,7 +162,7 @@ export function CartSummary() {
                                                 type: 'negative',
                                                 action: 'remove',
                                                 name: ing.toLowerCase(),
-                                                tag: `[SIN ${ing.toUpperCase()}]`,
+                                                tag: `SIN ${ing.toUpperCase()}`,
                                                 price: 0,
                                               },
                                             ];
@@ -211,7 +213,7 @@ export function CartSummary() {
                                                 type: 'positive',
                                                 action: 'add',
                                                 name: extra.name.toLowerCase(),
-                                                tag: `[EXTRA ${extra.name.toUpperCase()}]`,
+                                                tag: `EXTRA ${extra.name.toUpperCase()}`,
                                                 price: extra.extra_price,
                                                 ingredient_id: extra.id,
                                               },

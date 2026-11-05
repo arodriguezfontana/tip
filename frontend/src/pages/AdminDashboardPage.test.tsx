@@ -55,6 +55,7 @@ beforeEach(() => {
   vi.mocked(catalogService.fetchCategories).mockResolvedValue([]);
   vi.mocked(promotionService.fetchPromotions).mockResolvedValue([]);
   vi.mocked(promotionService.fetchPromotionsConfig).mockResolvedValue({ promotions_link: null });
+  vi.mocked(promotionService.fetchAvailablePromotions).mockResolvedValue([]);
   vi.mocked(menuImageService.fetchMenuImages).mockResolvedValue({ max_images: 3, images: [] });
   vi.mocked(menuImageService.fetchMenuConfig).mockResolvedValue({ menu_link: null });
   vi.mocked(promotionImageService.fetchPromotionImages).mockResolvedValue({ max_images: 3, images: [] });

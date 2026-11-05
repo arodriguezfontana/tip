@@ -184,12 +184,12 @@ describe('MenuPage', () => {
     // Tildar restricción Sin Orégano
     const sinOregano = screen.getByLabelText('Sin Orégano');
     await user.click(sinOregano);
-    expect(screen.getByText('[SIN ORÉGANO]')).toBeInTheDocument();
+    expect(screen.getByText('SIN ORÉGANO')).toBeInTheDocument();
 
     // Tildar adicional + Cebolla (+$500)
     const extraCebolla = screen.getByLabelText(/Cebolla/i);
     await user.click(extraCebolla);
-    expect(screen.getByText('[EXTRA CEBOLLA]')).toBeInTheDocument();
+    expect(screen.getByText('EXTRA CEBOLLA')).toBeInTheDocument();
 
     // El precio debe sumar los 500 extras: base 8500 + 500 = 9000
     expect(screen.getByText(/9\.?000.*c\/u/i)).toBeInTheDocument();
