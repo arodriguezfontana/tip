@@ -5,8 +5,8 @@ import type { IngredientExtra, OrderItemModification } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 
 function cleanModTag(m: { type: string; name: string; tag?: string }): string {
-  let label = m.tag || (m.type === 'negative' ? `SIN ${m.name.toUpperCase()}` : `EXTRA ${m.name.toUpperCase()}`);
-  return label.replace(/[\[\]]/g, '').trim();
+  const label = m.tag || (m.type === 'negative' ? `SIN ${m.name.toUpperCase()}` : `EXTRA ${m.name.toUpperCase()}`);
+  return label.replaceAll('[', '').replaceAll(']', '').trim();
 }
 
 export function CartSummary() {

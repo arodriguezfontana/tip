@@ -92,8 +92,8 @@ function normalizeProductName(name: string): string {
 }
 
 function cleanModTag(mod: { type: string; name: string; tag?: string }): string {
-  let label = mod.tag || (mod.type === 'negative' ? `SIN ${mod.name.toUpperCase()}` : `EXTRA ${mod.name.toUpperCase()}`);
-  return label.replace(/[\[\]]/g, '').trim();
+  const label = mod.tag || (mod.type === 'negative' ? `SIN ${mod.name.toUpperCase()}` : `EXTRA ${mod.name.toUpperCase()}`);
+  return label.replaceAll('[', '').replaceAll(']', '').trim();
 }
 
 function getModificationsKey(mods?: WebOrderItem['modifications']): string {

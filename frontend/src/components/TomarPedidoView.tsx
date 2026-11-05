@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, useState } from 'react';
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
 import { ProductThumbnail } from '@/components/ProductThumbnail';
 import { lookupClientByPhone } from '@/services/clientService';
@@ -68,16 +68,27 @@ export function TomarPedidoView() {
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
-  const loadPromos = () => {
+  const loadPromos = useCallback(() => {
     setLoadingPromos(true);
     fetchAvailablePromotions()
       .then((data) => setPromotions(data ?? []))
       .catch(() => {})
       .finally(() => setLoadingPromos(false));
-  };
+  }, []);
 
   useEffect(() => {
-    loadPromos();
+    let active = true;
+    fetchAvailablePromotions()
+      .then((data) => {
+        if (active) setPromotions(data ?? []);
+      })
+      .catch(() => {})
+      .finally(() => {
+        if (active) setLoadingPromos(false);
+      });
+    return () => {
+      active = false;
+    };
   }, []);
 
   useEffect(() => {

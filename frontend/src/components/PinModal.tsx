@@ -11,14 +11,13 @@ interface PinModalProps {
   onCancel: () => void;
 }
 
-export function PinModal({
-  isOpen,
+function PinModalDialog({
   pinType,
   title,
   description,
   onSuccess,
   onCancel,
-}: PinModalProps) {
+}: Omit<PinModalProps, 'isOpen'>) {
   const [pin, setPin] = useState('');
   const [loading, setLoading] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -34,15 +33,8 @@ export function PinModal({
       ? 'Ingresá el PIN de 4 dígitos para visualizar la facturación, reportes y estadísticas comerciales.'
       : 'Ingresá el PIN de 4 dígitos para abrir, cerrar o gestionar los movimientos de la caja.';
 
-  // Consultar estado de bloqueo al abrir
+  // Consultar estado de bloqueo al montar
   useEffect(() => {
-    if (!isOpen) {
-      setPin('');
-      setErrorMsg(null);
-      setBlockedSeconds(0);
-      return;
-    }
-
     let active = true;
     fetchPinStatus()
       .then((status) => {
@@ -64,7 +56,7 @@ export function PinModal({
     return () => {
       active = false;
     };
-  }, [isOpen, pinType]);
+  }, [pinType]);
 
   // Contador de bloqueo regresivo
   useEffect(() => {
@@ -134,8 +126,6 @@ export function PinModal({
 
   // Teclado físico
   useEffect(() => {
-    if (!isOpen) return;
-
     const handleKeyDown = (e: KeyboardEvent) => {
       if (e.key === 'Escape') {
         onCancel();
@@ -151,12 +141,8 @@ export function PinModal({
     };
 
     window.addEventListener('keydown', handleKeyDown);
-    return () => window.removeEventListener(keydownEventName, handleKeyDown);
-  }, [handleDelete, handleDigit, handleSubmit, isOpen, onCancel, pin]);
-
-  if (!isOpen) return null;
-
-  const keydownEventName = 'keydown';
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleDelete, handleDigit, handleSubmit, onCancel, pin]);
 
   const formatCountdown = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -320,3 +306,23 @@ export function PinModal({
   );
 }
 
+export function PinModal({
+  isOpen,
+  pinType,
+  title,
+  description,
+  onSuccess,
+  onCancel,
+}: PinModalProps) {
+  if (!isOpen) return null;
+
+  return (
+    <PinModalDialog
+      pinType={pinType}
+      title={title}
+      description={description}
+      onSuccess={onSuccess}
+      onCancel={onCancel}
+    />
+  );
+}

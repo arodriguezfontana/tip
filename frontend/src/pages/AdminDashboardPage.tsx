@@ -20,7 +20,8 @@ import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
 import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { PinModal } from '@/components/PinModal';
-import { PinSecurityProvider, usePinSecurity } from '@/context/PinSecurityContext';
+import { PinSecurityProvider } from '@/context/PinSecurityContext';
+import { usePinSecurity } from '@/hooks/usePinSecurity';
 import { fetchStoreConfig } from '@/services/storeConfigService';
 import { applyThemeColor } from '@/utils/theme';
 import type { StoreConfig } from '@/types/storeConfig';
@@ -50,10 +51,22 @@ function AdminDashboardContent() {
   const [chatColumnVisible, setChatColumnVisible] = useState(false);
   const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
 
-  // Estado del modal de verificación de PIN
-  const [pinModalOpen, setPinModalOpen] = useState(false);
-  const [pinModalType, setPinModalType] = useState<PinType>('admin');
   const [pendingProtectedView, setPendingProtectedView] = useState<ViewKey | null>(null);
+
+  const needsAdminPin =
+    !isAdminUnlocked &&
+    (activeView === 'estadisticas' ||
+      activeView === 'reporte-ingredientes' ||
+      pendingProtectedView === 'estadisticas' ||
+      pendingProtectedView === 'reporte-ingredientes');
+
+  const needsCashPin =
+    !isCashUnlocked &&
+    Boolean(storeConfig?.cash_pin_enabled) &&
+    (activeView === 'caja' || pendingProtectedView === 'caja');
+
+  const pinModalOpen = needsAdminPin || needsCashPin;
+  const pinModalType: PinType = needsAdminPin ? 'admin' : 'cash';
 
   useEffect(() => {
     let cancelled = false;
@@ -79,17 +92,13 @@ function AdminDashboardContent() {
     // 1. Estadísticas o Reporte de ingredientes -> requiere PIN de admin
     if ((view === 'estadisticas' || view === 'reporte-ingredientes') && !isAdminUnlocked) {
       setPendingProtectedView(view);
-      setPinModalType('admin');
-      setPinModalOpen(true);
       if (!canKeepMenuOpen()) setMenuOpen(false);
       return;
     }
 
     // 2. Control de caja -> requiere PIN de caja si está habilitado
     if (view === 'caja' && storeConfig?.cash_pin_enabled && !isCashUnlocked) {
-      setPendingProtectedView('caja');
-      setPinModalType('cash');
-      setPinModalOpen(true);
+      setPendingProtectedView(view);
       if (!canKeepMenuOpen()) setMenuOpen(false);
       return;
     }
@@ -104,7 +113,6 @@ function AdminDashboardContent() {
     } else {
       unlockCash(token);
     }
-    setPinModalOpen(false);
     if (pendingProtectedView) {
       setActiveView(pendingProtectedView);
       setPendingProtectedView(null);
@@ -112,7 +120,6 @@ function AdminDashboardContent() {
   };
 
   const handlePinCancel = () => {
-    setPinModalOpen(false);
     setPendingProtectedView(null);
     // Si la vista activa requiere protección y no está desbloqueada, volver a comandas
     if (
@@ -122,23 +129,6 @@ function AdminDashboardContent() {
       setActiveView('comandas');
     }
   };
-
-  // Re-bloqueo ante expiración por inactividad si el usuario estaba mirando la pantalla crítica
-  useEffect(() => {
-    if (!isAdminUnlocked && (activeView === 'estadisticas' || activeView === 'reporte-ingredientes')) {
-      setPendingProtectedView(activeView);
-      setPinModalType('admin');
-      setPinModalOpen(true);
-    }
-  }, [isAdminUnlocked, activeView]);
-
-  useEffect(() => {
-    if (!isCashUnlocked && activeView === 'caja' && storeConfig?.cash_pin_enabled) {
-      setPendingProtectedView('caja');
-      setPinModalType('cash');
-      setPinModalOpen(true);
-    }
-  }, [isCashUnlocked, activeView, storeConfig?.cash_pin_enabled]);
 
   const background = panelBackground(storeConfig);
 

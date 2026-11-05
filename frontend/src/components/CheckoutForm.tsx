@@ -10,7 +10,7 @@ import { PHONE_PATTERN } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { PAYMENT_METHOD_LABEL, WEB_PAYMENT_METHODS } from '@/types/order';
-import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated, WebPaymentMethod } from '@/types/order';
+import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated, WebOrderItemPayload, WebPaymentMethod } from '@/types/order';
 
 /**
  * Formulario de datos del pedido. Si el cliente tiene la sesión iniciada, arranca autocompletado
@@ -74,7 +74,7 @@ export function CheckoutForm({
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
         items: items.map((item) => {
-          const it: any = { quantity: item.quantity };
+          const it: WebOrderItemPayload = { quantity: item.quantity };
           if (item.promotion) {
             it.promotion_id = item.promotion.id;
           } else {

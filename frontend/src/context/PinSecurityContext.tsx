@@ -1,31 +1,14 @@
 import {
-  createContext,
   useCallback,
-  useContext,
   useEffect,
   useRef,
   useState,
   type ReactNode,
 } from 'react';
 import { setAdminPrivilegedToken, setCashPrivilegedToken } from '@/services/api';
+import { PinSecurityContext, type PinSecurityContextValue } from './pin-security-context';
 
 const INACTIVITY_TIMEOUT_MS = 5 * 60 * 1000; // 5 minutos de inactividad
-
-interface PinSecurityContextValue {
-  isAdminUnlocked: boolean;
-  adminToken: string | null;
-  unlockAdmin: (token: string) => void;
-  lockAdmin: () => void;
-
-  isCashUnlocked: boolean;
-  cashToken: string | null;
-  unlockCash: (token: string) => void;
-  lockCash: () => void;
-
-  lockAll: () => void;
-}
-
-const PinSecurityContext = createContext<PinSecurityContextValue | null>(null);
 
 export function PinSecurityProvider({ children }: { children: ReactNode }) {
   const [adminToken, setAdminTokenState] = useState<string | null>(null);
@@ -119,12 +102,3 @@ export function PinSecurityProvider({ children }: { children: ReactNode }) {
 
   return <PinSecurityContext.Provider value={value}>{children}</PinSecurityContext.Provider>;
 }
-
-export function usePinSecurity(): PinSecurityContextValue {
-  const ctx = useContext(PinSecurityContext);
-  if (!ctx) {
-    throw new Error('usePinSecurity debe usarse dentro de un PinSecurityProvider');
-  }
-  return ctx;
-}
-
