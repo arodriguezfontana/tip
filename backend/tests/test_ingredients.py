@@ -66,7 +66,7 @@ def test_crea_un_ingrediente(client, db_session):
     response = client.post(INGREDIENTS_URL, json={"name": "  Harina 000 ", "unit": "gramos"})
 
     assert response.status_code == 201
-    assert response.json() == {"id": response.json()["id"], "name": "Harina 000", "unit": "gramos", "extra_price": 0.0, "products_count": 0}
+    assert response.json() == {"id": response.json()["id"], "name": "Harina 000", "unit": "gramos", "cost": 0.0, "extra_price": 0.0, "products_count": 0}
     assert db_session.query(Ingredient).one().name == "Harina 000"
 
 
@@ -88,7 +88,7 @@ def test_edita_un_ingrediente(client, ingredients, recipe):
     response = client.put(f"{INGREDIENTS_URL}/{ingredient_id}", json={"name": "Muzzarella en barra", "unit": "kilos"})
 
     assert response.status_code == 200
-    assert response.json() == {"id": ingredient_id, "name": "Muzzarella en barra", "unit": "kilos", "extra_price": 0.0, "products_count": 1}
+    assert response.json() == {"id": ingredient_id, "name": "Muzzarella en barra", "unit": "kilos", "cost": 0.0, "extra_price": 0.0, "products_count": 1}
 
 
 def test_editar_con_el_nombre_de_otro_ingrediente_falla(client, ingredients):
@@ -115,6 +115,15 @@ def test_no_elimina_un_ingrediente_que_esta_en_una_receta(client, db_session, in
     assert response.status_code == 409
     assert "forma parte de la receta de: Pizza Muzzarella" in response.json()["detail"]
     assert db_session.query(ProductIngredient).count() == 2
+
+
+def test_crea_un_ingrediente_con_costo(client, db_session):
+    response = client.post(INGREDIENTS_URL, json={"name": "Panceta Ahumada", "unit": "kg", "cost": 4500.0, "extra_price": 800.0})
+
+    assert response.status_code == 201
+    assert response.json()["name"] == "Panceta Ahumada"
+    assert response.json()["cost"] == 4500.0
+    assert response.json()["extra_price"] == 800.0
 
 
 def test_ingredientes_y_recetas_son_solo_para_administradores(public_client, customer_headers):

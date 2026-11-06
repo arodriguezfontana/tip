@@ -56,16 +56,16 @@ def _check_unique_name(db: Session, name: str, exclude_id: int | None = None) ->
         raise ConflictError(f"Ya existe un ingrediente llamado '{name}'.")
 
 
-def create_ingredient(db: Session, name: str, unit: str, extra_price: float = 0.0) -> IngredientUsage:
+def create_ingredient(db: Session, name: str, unit: str, extra_price: float = 0.0, cost: float = 0.0) -> IngredientUsage:
     _check_unique_name(db, name)
-    ingredient = Ingredient(name=name, unit=unit, extra_price=extra_price)
+    ingredient = Ingredient(name=name, unit=unit, extra_price=extra_price, cost=cost)
     with transaction(db):
         ingredient_repository.add(db, ingredient)
     db.refresh(ingredient)
     return IngredientUsage(ingredient=ingredient, products_count=0)
 
 
-def update_ingredient(db: Session, ingredient_id: int, name: str, unit: str, extra_price: float = 0.0) -> IngredientUsage:
+def update_ingredient(db: Session, ingredient_id: int, name: str, unit: str, extra_price: float = 0.0, cost: float = 0.0) -> IngredientUsage:
     """Cambiar la unidad no convierte las cantidades de las recetas: se interpretan en la unidad nueva."""
     ingredient = _get_ingredient(db, ingredient_id)
     _check_unique_name(db, name, exclude_id=ingredient_id)
@@ -73,6 +73,7 @@ def update_ingredient(db: Session, ingredient_id: int, name: str, unit: str, ext
         ingredient.name = name
         ingredient.unit = unit
         ingredient.extra_price = extra_price
+        ingredient.cost = cost
     db.refresh(ingredient)
     return IngredientUsage(ingredient=ingredient, products_count=len(ingredient.used_in_products))
 

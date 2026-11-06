@@ -1,16 +1,61 @@
-import { useMemo, useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import { useStats } from '@/hooks/useStats';
 import { formatCurrency } from '@/utils/currency';
 import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, presetLabel, rangeForPreset } from '@/utils/dateRange';
 import { PanelNote } from '@/components/ui/PanelNote';
+import { BusinessGoalsModal } from '@/components/BusinessGoalsModal';
+import { StrategicInsightModal } from '@/components/StrategicInsightModal';
+import { fetchStrategicInsight } from '@/services/statsService';
+import type { GrowthMetric, StrategicInsightResponse } from '@/types/stats';
 
 const PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
+
+function GrowthIndicator({ metric, label }: { metric?: GrowthMetric; label?: string }) {
+  if (!metric || metric.growth_pct === null) return null;
+  const isUp = metric.trend === 'up';
+  const isDown = metric.trend === 'down';
+  const isPositive = metric.is_positive;
+
+  const colorClass = isUp
+    ? isPositive
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      : 'text-red-700 bg-red-50 border-red-200'
+    : isDown
+    ? isPositive
+      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+      : 'text-red-700 bg-red-50 border-red-200'
+    : 'text-gray-600 bg-gray-50 border-gray-200';
+
+  const symbol = isUp ? '↑' : isDown ? '↓' : '•';
+  const prefix = isUp ? '+' : '';
+
+  return (
+    <span
+      className={`inline-flex items-center gap-1 text-[11px] font-bold px-2 py-0.5 rounded-full border ${colorClass}`}
+      title={`Período previo: ${metric.previous}`}
+    >
+      <span>{symbol}</span>
+      <span>
+        {prefix}
+        {metric.growth_pct}%
+      </span>
+      {label && <span className="font-normal opacity-85">{label}</span>}
+    </span>
+  );
+}
 
 export function StatsSection() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');
+
+  const [goalsModalOpen, setGoalsModalOpen] = useState(false);
+  const [insightModalOpen, setInsightModalOpen] = useState(false);
+
+  const [aiData, setAiData] = useState<StrategicInsightResponse | null>(null);
+  const [aiLoading, setAiLoading] = useState(false);
+  const [aiError, setAiError] = useState<string | null>(null);
 
   const range = useMemo(
     () =>
@@ -21,20 +66,37 @@ export function StatsSection() {
     [preset, customFrom, customTo]
   );
 
-  const { statusDistribution, topProducts, bestDay, loading, error } = useStats({
+  const handleRequestAi = useCallback(async () => {
+    setAiLoading(true);
+    setAiError(null);
+    try {
+      const res = await fetchStrategicInsight({
+        dateFrom: range.from,
+        dateTo: range.to,
+      });
+      setAiData(res);
+    } catch {
+      setAiError('El servicio de Inteligencia Artificial tardó demasiado o no pudo responder. Podés reintentar.');
+    } finally {
+      setAiLoading(false);
+    }
+  }, [range.from, range.to]);
+
+  const { statusDistribution, topProducts, bestDay, kpis, loading, error, reload } = useStats({
     dateFrom: range.from,
     dateTo: range.to,
   });
 
   return (
     <div className="flex flex-col gap-6 lg:h-full">
-      <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6">
+      {/* Barra superior con filtros y acciones */}
+      <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
         <div>
           <h3 className="text-lg font-bold text-gray-900">Panel de Rendimiento y Ventas</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Filtrado dinámico por período</p>
+          <p className="text-xs text-gray-500 mt-0.5">Métricas clave, seguimiento de metas y evaluación de rentabilidad comercial.</p>
         </div>
-        
-        <div className="flex flex-wrap gap-2">
+
+        <div className="flex flex-wrap items-center gap-2">
           {PRESETS.map((p) => (
             <button
               key={p}
@@ -47,18 +109,36 @@ export function StatsSection() {
               {presetLabel(p)}
             </button>
           ))}
+
+          <div className="h-4 w-px bg-gray-200 mx-1 hidden sm:block" />
+
+          <button
+            type="button"
+            onClick={() => setGoalsModalOpen(true)}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition flex items-center gap-1.5 shadow-2xs"
+          >
+            <span>🎯</span> Metas Comerciales
+          </button>
+
+          <button
+            type="button"
+            onClick={handleRequestAi}
+            className="rounded-xl px-3 py-1.5 text-xs font-semibold bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
+          >
+            <span>💡</span> Consejos de IA
+          </button>
         </div>
       </div>
 
       {preset === 'custom' && (
-        <div className="shrink-0 flex items-center gap-2 bg-white p-4 rounded-2xl shadow-md">
+        <div className="shrink-0 flex items-center gap-2 bg-white p-4 rounded-2xl shadow-md border border-gray-100">
           <input
             type="date"
             value={customFrom}
             onChange={(e) => setCustomFrom(e.target.value)}
             className="flex-1 rounded-xl border border-gray-300 px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-black"
           />
-          <span className="text-gray-400 text-sm">a</span>
+          <span className="text-gray-400 text-sm font-medium">a</span>
           <input
             type="date"
             value={customTo}
@@ -74,10 +154,359 @@ export function StatsSection() {
         <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
       ) : (
         <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
-          <div className="shrink-0 grid grid-cols-1 md:grid-cols-2 gap-6">
-            <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col justify-between">
+          {/* US-49: Visualización del Progreso de Metas de Negocio */}
+          {kpis?.goal && (
+            <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 mb-4">
+                <div>
+                  <h4 className="text-sm font-bold text-gray-900 flex items-center gap-2">
+                    <span>🎯</span> Seguimiento de Metas Comerciales
+                    <span className="text-xs font-semibold px-2 py-0.5 rounded-full bg-zinc-100 text-zinc-700 uppercase tracking-wider">
+                      {kpis.goal.period_type === 'daily'
+                        ? 'Meta Diaria'
+                        : kpis.goal.period_type === 'weekly'
+                        ? 'Meta Semanal'
+                        : 'Meta Mensual'}
+                    </span>
+                  </h4>
+                  <p className="text-xs text-gray-500">
+                    Comparación del rendimiento real contra la meta configurada para este período.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setGoalsModalOpen(true)}
+                  className="text-xs font-semibold text-gray-700 hover:text-black underline"
+                >
+                  Modificar metas
+                </button>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
+                {/* Meta de Facturación */}
+                <div className="bg-gray-50/70 rounded-xl p-4 border border-gray-200/60">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Facturación</span>
+                    <span className="text-xs font-bold text-gray-900">
+                      {formatCurrency(kpis.revenue.current)} / {formatCurrency(kpis.goal.target_revenue)}
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden my-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        kpis.goal.revenue_progress_pct >= 100
+                          ? 'bg-emerald-500'
+                          : kpis.goal.revenue_progress_pct >= 60
+                          ? 'bg-blue-600'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(100, kpis.goal.revenue_progress_pct)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span className="font-bold text-gray-800">{kpis.goal.revenue_progress_pct}% alcanzado</span>
+                    {kpis.goal.revenue_remaining > 0 ? (
+                      <span>Faltan {formatCurrency(kpis.goal.revenue_remaining)}</span>
+                    ) : (
+                      <span className="text-emerald-700 font-bold">¡Objetivo alcanzado! 🎉</span>
+                    )}
+                  </div>
+                </div>
+
+                {/* Meta de Pedidos */}
+                <div className="bg-gray-50/70 rounded-xl p-4 border border-gray-200/60">
+                  <div className="flex justify-between items-baseline mb-1">
+                    <span className="text-xs font-bold text-gray-700 uppercase tracking-wide">Cantidad de Pedidos</span>
+                    <span className="text-xs font-bold text-gray-900">
+                      {kpis.completed_orders_count} / {kpis.goal.target_orders} pedidos
+                    </span>
+                  </div>
+                  <div className="w-full bg-gray-200 rounded-full h-3 overflow-hidden my-2">
+                    <div
+                      className={`h-full rounded-full transition-all duration-500 ${
+                        kpis.goal.orders_progress_pct >= 100
+                          ? 'bg-emerald-500'
+                          : kpis.goal.orders_progress_pct >= 60
+                          ? 'bg-blue-600'
+                          : 'bg-amber-500'
+                      }`}
+                      style={{ width: `${Math.min(100, kpis.goal.orders_progress_pct)}%` }}
+                    />
+                  </div>
+                  <div className="flex justify-between items-center text-xs text-gray-500">
+                    <span className="font-bold text-gray-800">{kpis.goal.orders_progress_pct}% alcanzado</span>
+                    {kpis.goal.orders_remaining > 0 ? (
+                      <span>Faltan {kpis.goal.orders_remaining} pedidos</span>
+                    ) : (
+                      <span className="text-emerald-700 font-bold">¡Objetivo alcanzado! 🎉</span>
+                    )}
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* US-49: Nuevos KPIs Estratégicos con Indicadores de Crecimiento */}
+          {kpis && (
+            <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
+              {/* Facturación Total */}
+              <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Facturación Total</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpis.revenue.current)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <GrowthIndicator metric={kpis.revenue} label="vs. anterior" />
+                  <span className="text-[11px] text-gray-400">{kpis.orders_count.current} pedidos</span>
+                </div>
+              </div>
+
+              {/* Ticket Promedio */}
+              <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ticket Promedio</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpis.average_ticket.current)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <GrowthIndicator metric={kpis.average_ticket} label="vs. anterior" />
+                  <span className="text-[11px] text-gray-400">por pedido fin.</span>
+                </div>
+              </div>
+
+              {/* Rentabilidad y Margen Bruto */}
+              <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <div className="flex items-center justify-between">
+                    <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Margen Bruto</span>
+                    <span className="text-xs font-bold text-emerald-700 bg-emerald-50 px-2 py-0.5 rounded-full border border-emerald-200">
+                      {kpis.gross_margin_pct}%
+                    </span>
+                  </div>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpis.gross_profit.current)}</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-500">
+                  <span>Costo insumos (COGS):</span>
+                  <span className="font-semibold text-gray-700">{formatCurrency(kpis.cogs.current)}</span>
+                </div>
+              </div>
+
+              {/* Tasa de Rechazo / Cancelación */}
+              <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+                <div>
+                  <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Tasa de Cancelación</span>
+                  <div className="flex items-baseline justify-between mt-2">
+                    <p className="text-2xl font-bold text-gray-900">{kpis.cancellation_rate.current}%</p>
+                  </div>
+                </div>
+                <div className="mt-3 pt-3 border-t border-gray-100 flex items-center justify-between">
+                  <GrowthIndicator metric={kpis.cancellation_rate} label="vs. anterior" />
+                  <span className="text-[11px] text-gray-400">rechazos y canc.</span>
+                </div>
+              </div>
+            </div>
+          )}
+
+          {/* US-46: Apartado de Consejos de IA */}
+          <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
               <div>
-                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Día más rentable</p>
+                <h4 className="text-base font-bold text-gray-900 flex items-center gap-2">
+                  <span className="text-lg">💡</span> Consejos de IA
+                  <span className="text-[10px] font-bold uppercase tracking-wider bg-sky-100 text-sky-800 px-2 py-0.5 rounded-full">
+                    Inteligencia Artificial
+                  </span>
+                </h4>
+                <p className="text-xs text-gray-500 mt-0.5">
+                  Análisis inteligente de ventas, tiempos de espera y flujo de pedidos para detectar debilidades operativas y oportunidades.
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleRequestAi}
+                disabled={aiLoading}
+                className="inline-flex items-center gap-1.5 px-4 py-2 rounded-xl text-xs font-bold transition shadow-xs bg-sky-600 hover:bg-sky-700 text-white disabled:opacity-50 cursor-pointer"
+              >
+                {aiLoading ? (
+                  <>
+                    <div className="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                    <span>Analizando...</span>
+                  </>
+                ) : aiData ? (
+                  <>
+                    <span>🔄</span>
+                    <span>Actualizar consejos</span>
+                  </>
+                ) : (
+                  <>
+                    <span>✨</span>
+                    <span>Pedir análisis con IA</span>
+                  </>
+                )}
+              </button>
+            </div>
+
+            {aiError && (
+              <div className="p-4 rounded-xl bg-red-50 text-red-700 text-xs font-medium border border-red-200 flex flex-col sm:flex-row sm:items-center justify-between gap-3 my-2">
+                <div className="flex items-center gap-2">
+                  <span className="text-base">⚠️</span>
+                  <span>{aiError}</span>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestAi}
+                  className="px-3 py-1.5 bg-red-700 hover:bg-red-800 text-white rounded-lg font-bold text-xs transition shrink-0 cursor-pointer"
+                >
+                  Reintentar
+                </button>
+              </div>
+            )}
+
+            {aiLoading ? (
+              <div className="py-10 flex flex-col items-center justify-center text-center space-y-2 bg-gray-50/60 rounded-xl border border-gray-100">
+                <div className="w-7 h-7 border-3 border-gray-300 border-t-sky-600 rounded-full animate-spin" />
+                <p className="text-xs font-bold text-gray-800">Analizando métricas de ventas, tiempos de espera y flujos con IA...</p>
+                <p className="text-[11px] text-gray-500">Evaluando cuellos de botella en horas pico, demoras de entrega y rentabilidad de insumos.</p>
+              </div>
+            ) : aiData ? (
+              <div className="space-y-4 text-xs">
+                {/* Métricas operativas contextuales */}
+                {aiData.operational_metrics && (
+                  <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50/70 p-3 rounded-xl border border-gray-200/60 text-gray-700">
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">⏱️</span>
+                      <div>
+                        <span className="font-semibold block text-[11px] text-gray-500 uppercase">Demora promedio</span>
+                        <span className="font-bold text-gray-900">{aiData.operational_metrics.avg_wait_minutes} min</span>
+                        <span className="text-[10px] text-gray-400 ml-1">(máx {aiData.operational_metrics.max_wait_minutes} min)</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">📈</span>
+                      <div>
+                        <span className="font-semibold block text-[11px] text-gray-500 uppercase">Hora pico de demanda</span>
+                        <span className="font-bold text-gray-900">
+                          {aiData.operational_metrics.peak_hour !== null ? `${aiData.operational_metrics.peak_hour}:00 hs` : 'Sin picos'}
+                        </span>
+                        <span className="text-[10px] text-gray-400 ml-1">({aiData.operational_metrics.peak_hour_orders} pedidos)</span>
+                      </div>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <span className="text-sm">🛵</span>
+                      <div>
+                        <span className="font-semibold block text-[11px] text-gray-500 uppercase">Modalidad de entrega</span>
+                        <span className="font-bold text-gray-900">
+                          {aiData.operational_metrics.delivery_pct}% Domicilio / {aiData.operational_metrics.pickup_pct}% Retiro
+                        </span>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                {/* Diagnóstico General */}
+                <div className="bg-gradient-to-br from-gray-900 to-zinc-800 text-white rounded-xl p-4 shadow-2xs">
+                  <span className="text-[10px] font-bold uppercase tracking-wider text-amber-400 block mb-1">
+                    📋 Diagnóstico General
+                  </span>
+                  <p className="text-xs leading-relaxed text-gray-100">{aiData.summary}</p>
+                </div>
+
+                <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                  {/* Debilidades Operativas Detectadas */}
+                  <div className="bg-amber-50/70 border border-amber-200/70 rounded-xl p-4">
+                    <span className="text-xs font-bold uppercase tracking-wide text-amber-900 flex items-center gap-1.5 mb-2.5">
+                      <span>⚠️</span> Debilidades Operativas Detectadas
+                    </span>
+                    <ul className="space-y-2 text-xs text-amber-950 font-medium">
+                      {(aiData.operational_weaknesses ?? aiData.warnings).map((w, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-amber-600 font-bold shrink-0">•</span>
+                          <span>{w}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+
+                  {/* Recomendaciones Concretas */}
+                  <div className="bg-sky-50/70 border border-sky-200/70 rounded-xl p-4">
+                    <span className="text-xs font-bold uppercase tracking-wide text-sky-900 flex items-center gap-1.5 mb-2.5">
+                      <span>🚀</span> Recomendaciones Concretas
+                    </span>
+                    <ul className="space-y-2 text-xs text-sky-950 font-medium">
+                      {aiData.recommendations.map((r, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-sky-600 font-bold shrink-0">→</span>
+                          <span>{r}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                </div>
+
+                {/* Oportunidades y Puntos Destacados */}
+                {aiData.highlights.length > 0 && (
+                  <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-xl p-4">
+                    <span className="text-xs font-bold uppercase tracking-wide text-emerald-900 flex items-center gap-1.5 mb-2">
+                      <span>✨</span> Oportunidades y Puntos Fuertes
+                    </span>
+                    <ul className="space-y-1.5 text-xs text-emerald-950 font-medium">
+                      {aiData.highlights.map((h, i) => (
+                        <li key={i} className="flex items-start gap-2">
+                          <span className="text-emerald-600 font-bold shrink-0">•</span>
+                          <span>{h}</span>
+                        </li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </div>
+            ) : (
+              <div className="py-6 px-4 bg-gray-50/50 rounded-xl border border-dashed border-gray-200 flex flex-col sm:flex-row items-center justify-between gap-3 text-center sm:text-left">
+                <div>
+                  <p className="text-xs font-semibold text-gray-700">El análisis con IA se genera solo a pedido para el período seleccionado.</p>
+                  <p className="text-[11px] text-gray-400 mt-0.5">
+                    Elegí el rango de fechas arriba y presioná el botón para obtener debilidades y recomendaciones.
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={handleRequestAi}
+                  className="px-3.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer"
+                >
+                  Analizar con IA
+                </button>
+              </div>
+            )}
+          </div>
+
+          {/* Sección Día más rentable y Estados de Pedidos */}
+          <div className="shrink-0 grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col justify-between border border-gray-100">
+              <div>
+                <div className="flex items-center justify-between">
+                  <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Día más rentable</p>
+                  {kpis?.best_selling_day && (
+                    <GrowthIndicator
+                      metric={
+                        kpis.best_selling_day.growth_pct !== null
+                          ? {
+                              current: kpis.best_selling_day.revenue || 0,
+                              previous: 0,
+                              growth_pct: kpis.best_selling_day.growth_pct,
+                              trend: (kpis.best_selling_day.trend as 'up' | 'down' | 'neutral') || 'neutral',
+                              is_positive: true,
+                            }
+                          : undefined
+                      }
+                      label="vs. anterior"
+                    />
+                  )}
+                </div>
                 <p className="text-2xl font-bold text-gray-900 mt-2">{bestDay.best_selling_day || 'Sin datos'}</p>
               </div>
               {bestDay.total_revenue !== null && (
@@ -87,7 +516,7 @@ export function StatsSection() {
               )}
             </div>
 
-            <div className="bg-white rounded-2xl shadow-md p-6">
+            <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500 mb-3">Estado de los Pedidos</p>
               <div className="space-y-2">
                 {Object.keys(statusDistribution).length === 0 ? (
@@ -106,8 +535,19 @@ export function StatsSection() {
             </div>
           </div>
 
-          <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-48">
-            <p className="shrink-0 text-xs font-semibold uppercase tracking-wide text-gray-500 mb-4">Top Productos más Vendidos</p>
+          {/* Top Productos más Vendidos con Rentabilidad y Márgenes */}
+          <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-48 border border-gray-100">
+            <div className="shrink-0 flex items-center justify-between mb-4">
+              <div>
+                <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top Productos más Vendidos</p>
+                <p className="text-xs text-gray-400 mt-0.5">
+                  {kpis?.top_products?.length
+                    ? 'Desglose comercial detallado con estimación de costos por receta y márgenes brutos.'
+                    : 'Unidades vendidas e ingresos brutos por producto.'}
+                </p>
+              </div>
+            </div>
+
             {topProducts.length === 0 ? (
               <p className="text-sm text-gray-500">No hay productos vendidos registrados en este período.</p>
             ) : (
@@ -118,18 +558,47 @@ export function StatsSection() {
                       <th className="px-4 py-2">Producto</th>
                       <th className="px-4 py-2 text-right">Cantidad Vendida</th>
                       <th className="px-4 py-2 text-right">Ingresos</th>
+                      {kpis?.top_products && kpis.top_products.length > 0 && (
+                        <>
+                          <th className="px-4 py-2 text-right">Costo Est.</th>
+                          <th className="px-4 py-2 text-right">Ganancia Bruta</th>
+                          <th className="px-4 py-2 text-right">Margen %</th>
+                        </>
+                      )}
                     </tr>
                   </thead>
                   <tbody className="divide-y divide-gray-100">
-                    {topProducts.map((prod) => (
-                      <tr key={prod.product_name} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{prod.product_name}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{prod.total_quantity}</td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-900">
-                          {formatCurrency(prod.total_revenue)}
-                        </td>
-                      </tr>
-                    ))}
+                    {topProducts.map((prod) => {
+                      const kpiProd = kpis?.top_products?.find((p) => p.product_name === prod.product_name);
+                      return (
+                        <tr key={prod.product_name} className="hover:bg-gray-50">
+                          <td className="px-4 py-3 font-medium text-gray-900">{prod.product_name}</td>
+                          <td className="px-4 py-3 text-right text-gray-600">{prod.total_quantity}</td>
+                          <td className="px-4 py-3 text-right font-medium text-gray-900">
+                            {formatCurrency(prod.total_revenue)}
+                          </td>
+                          {kpis?.top_products && kpis.top_products.length > 0 && (
+                            <>
+                              <td className="px-4 py-3 text-right text-gray-500 text-xs">
+                                {kpiProd ? formatCurrency(kpiProd.estimated_cost) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right font-semibold text-emerald-700 text-xs">
+                                {kpiProd ? formatCurrency(kpiProd.gross_profit) : '—'}
+                              </td>
+                              <td className="px-4 py-3 text-right text-xs">
+                                {kpiProd ? (
+                                  <span className="font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
+                                    {kpiProd.margin_pct}%
+                                  </span>
+                                ) : (
+                                  '—'
+                                )}
+                              </td>
+                            </>
+                          )}
+                        </tr>
+                      );
+                    })}
                   </tbody>
                 </table>
               </div>
@@ -137,6 +606,19 @@ export function StatsSection() {
           </div>
         </div>
       )}
+
+      {/* Modales */}
+      <BusinessGoalsModal
+        isOpen={goalsModalOpen}
+        onClose={() => setGoalsModalOpen(false)}
+        onSaved={reload}
+      />
+
+      <StrategicInsightModal
+        isOpen={insightModalOpen}
+        onClose={() => setInsightModalOpen(false)}
+        params={{ dateFrom: range.from, dateTo: range.to }}
+      />
     </div>
   );
 }
