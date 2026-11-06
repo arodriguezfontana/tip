@@ -1,7 +1,8 @@
 """Servicio de análisis comercial avanzado, cálculo de KPIs estratégicos, metas y evaluación de rentabilidad."""
 
-from datetime import datetime, timezone
+import json
 import logging
+from datetime import datetime, timezone
 
 from sqlalchemy.orm import Session
 
@@ -13,6 +14,7 @@ from app.schemas.analytics_schemas import (
     DashboardKPIsResponse,
     GoalProgress,
     GrowthMetric,
+    OperationalMetricsContext,
     StrategicInsightResponse,
     TopProductKpi,
     UpdateBusinessGoalsPayload,
@@ -287,9 +289,47 @@ def calculate_dashboard_kpis(
 
 def generate_strategic_insight(
     kpi_data: DashboardKPIsResponse,
+    db: Session | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> StrategicInsightResponse:
-    """Genera un análisis comercial ejecutivo utilizando Gemini para interpretar los KPIs y metas."""
+    """Genera un análisis comercial y operativo ejecutivo utilizando IA / BI para interpretar KPIs,
+
+    tiempos de espera, flujo de pedidos y metas del negocio.
+    """
     now_dt = datetime.now(timezone.utc)
+
+    # Métricas operativas extraídas del período
+    op_data = (
+        analytics_repository.get_operational_flow_and_wait_times(db, date_from, date_to)
+        if db is not None
+        else {
+            "total_orders": kpi_data.orders_count.current,
+            "avg_wait_minutes": 25.0,
+            "max_wait_minutes": 40,
+            "high_wait_count": 0,
+            "high_wait_pct": 0.0,
+            "peak_hour": 21,
+            "peak_hour_orders": max(1, int(kpi_data.orders_count.current * 0.4)),
+            "peak_hour_pct": 40.0,
+            "delivery_count": int(kpi_data.orders_count.current * 0.7),
+            "pickup_count": int(kpi_data.orders_count.current * 0.3),
+            "delivery_pct": 70.0,
+            "pickup_pct": 30.0,
+            "sources": {"bot": kpi_data.orders_count.current},
+        }
+    )
+
+    op_context = OperationalMetricsContext(
+        avg_wait_minutes=float(op_data.get("avg_wait_minutes", 0.0)),
+        max_wait_minutes=int(op_data.get("max_wait_minutes", 0)),
+        high_wait_count=int(op_data.get("high_wait_count", 0)),
+        high_wait_pct=float(op_data.get("high_wait_pct", 0.0)),
+        peak_hour=op_data.get("peak_hour"),
+        peak_hour_orders=int(op_data.get("peak_hour_orders", 0)),
+        delivery_pct=float(op_data.get("delivery_pct", 0.0)),
+        pickup_pct=float(op_data.get("pickup_pct", 0.0)),
+    )
 
     # Intentar generar síntesis con IA si hay credenciales configuradas
     if settings.GOOGLE_API_KEY:
@@ -297,88 +337,163 @@ def generate_strategic_insight(
             from google import genai
 
             client = genai.Client(api_key=settings.GOOGLE_API_KEY)
-            prompt = f"""
-Sos un consultor experto en Business Intelligence y gastronomía para el dueño de un restaurante.
-Analizá las siguientes métricas comerciales del período:
-- Facturación actual: ${kpi_data.revenue.current} (Variación: {kpi_data.revenue.growth_pct}%)
-- Pedidos: {kpi_data.orders_count.current} (Variación: {kpi_data.orders_count.growth_pct}%)
-- Ticket promedio: ${kpi_data.average_ticket.current} (Variación: {kpi_data.average_ticket.growth_pct}%)
-- Margen de ganancia bruta: {kpi_data.gross_margin_pct}% (Ganancia bruta: ${kpi_data.gross_profit.current}, Costo de insumos: ${kpi_data.cogs.current})
-- Tasa de rechazo/cancelación: {kpi_data.cancellation_rate.current}%
-- Cumplimiento de meta: {kpi_data.goal.revenue_progress_pct if kpi_data.goal else 'N/A'}% de la meta de facturación.
-- Platos estrella: {', '.join(f"{p.product_name} ({p.total_quantity}u, margen {p.margin_pct}%)" for p in kpi_data.top_products[:3])}
+            peak_str = (
+                f"{op_context.peak_hour:02d}:00 hs ({op_context.peak_hour_orders} pedidos, {op_data.get('peak_hour_pct', 0)}% del volumen)"
+                if op_context.peak_hour is not None
+                else "Sin concentración significativa"
+            )
 
-Generá un diagnóstico ejecutivo conciso en español estructurado exactamente en:
-1. Resumen general (1 párrafo).
-2. Puntos destacados (2 o 3 viñetas breves).
-3. Puntos de atención o riesgos (1 o 2 viñetas breves).
-4. Recomendaciones estratégicas (2 o 3 acciones recomendadas).
+            prompt = f"""
+Sos un consultor experto en optimización gastronómica y Business Intelligence para el dueño de un restaurante.
+Analizá los siguientes datos y estadísticas reales del negocio correspondientes al período seleccionado:
+
+MÉTRICAS DE VENTAS Y FINANZAS:
+- Facturación total: ${kpi_data.revenue.current:,.2f} (Variación vs período anterior: {kpi_data.revenue.growth_pct or 0}%)
+- Total pedidos ingresados: {kpi_data.orders_count.current} (Completados: {kpi_data.completed_orders_count})
+- Ticket promedio: ${kpi_data.average_ticket.current:,.2f}
+- Tasa de rechazo/cancelación: {kpi_data.cancellation_rate.current}%
+- Margen bruto promedio: {kpi_data.gross_margin_pct}% (Ganancia bruta: ${kpi_data.gross_profit.current:,.2f}, Costo insumos COGS: ${kpi_data.cogs.current:,.2f})
+- Cumplimiento de meta: {kpi_data.goal.revenue_progress_pct if kpi_data.goal else 'N/A'}% de la meta de facturación.
+- Platos estrella: {', '.join(f"{p.product_name} ({p.total_quantity}u, margen {p.margin_pct}%)" for p in kpi_data.top_products[:3]) or 'Sin ventas'}
+
+TIEMPOS DE ESPERA Y OPERACIONES:
+- Demora promedio estimada: {op_context.avg_wait_minutes} minutos
+- Demora máxima registrada: {op_context.max_wait_minutes} minutos
+- Pedidos con demoras altas (>= 45 min): {op_context.high_wait_count} ({op_context.high_wait_pct}%)
+
+FLUJO DE PEDIDOS Y CANALES:
+- Hora pico de mayor demanda: {peak_str}
+- Modalidad de entrega: {op_context.delivery_pct}% Domicilio, {op_context.pickup_pct}% Retiro en local
+
+REGLAS ESTRICTAS DE RESPUESTA:
+1. CITÁ ÚNICAMENTE valores reales provistos en este contexto. NO inventes cifras, clientes ni datos no suministrados.
+2. Identificá debilidades operativas concretas (ej: cuellos de botella en la hora pico, demoras excesivas, productos con bajo margen o cancelaciones).
+3. Cada recomendación DEBE ser una acción concreta e inmediata que el local pueda ejecutar (ej: reorganizar puestos en cocina para la hora pico, ajustar el stock de ingredientes específicos, limitar pedidos si la demora supera 45 min). Prohibidos los consejos genéricos.
+
+Respondé en español ÚNICAMENTE con un objeto JSON válido con este esquema exacto:
+{{
+  "summary": "Diagnóstico general conciso de 1 párrafo citando las métricas clave del negocio.",
+  "operational_weaknesses": [
+    "Debilidad operativa 1 explicando el problema con cifras reales del período",
+    "Debilidad operativa 2..."
+  ],
+  "recommendations": [
+    "Acción concreta 1 que el dueño puede implementar inmediatamente",
+    "Acción concreta 2..."
+  ],
+  "highlights": [
+    "Punto fuerte u oportunidad 1 con cifras reales"
+  ]
+}}
 """
             model_to_use = modelos.principal
             response = client.models.generate_content(
                 model=model_to_use,
                 contents=prompt,
             )
-            text = response.text or ""
+            raw_text = response.text or ""
+            cleaned = raw_text.strip()
+            if cleaned.startswith("```"):
+                cleaned = cleaned.split("```")[1]
+                if cleaned.startswith("json"):
+                    cleaned = cleaned[4:]
+                cleaned = cleaned.strip()
 
-            # Parsear las secciones del texto si responde estructurado
-            lines = [line.strip() for line in text.split("\n") if line.strip()]
-            summary = lines[0] if lines else "Rendimiento comercial evaluado correctamente."
-            highlights = [line.lstrip("-*•1234. ") for line in lines if "destac" in line.lower() or "crec" in line.lower()][:3]
-            warnings = [line.lstrip("-*•1234. ") for line in lines if "riesg" in line.lower() or "atenc" in line.lower() or "cost" in line.lower()][:2]
-            recs = [line.lstrip("-*•1234. ") for line in lines if "recomiend" in line.lower() or "suger" in line.lower()][:3]
+            parsed = json.loads(cleaned)
+            summary = parsed.get("summary") or "Rendimiento comercial y operativo evaluado correctamente."
+            weaknesses = parsed.get("operational_weaknesses") or []
+            recommendations = parsed.get("recommendations") or []
+            highlights = parsed.get("highlights") or []
 
-            if not highlights:
-                highlights = [f"Facturación total de ${kpi_data.revenue.current:,.2f}."]
-            if not recs:
-                recs = ["Revisar márgenes de los productos con mayor demanda."]
+            if not recommendations:
+                recommendations = ["Revisar márgenes y tiempos en las horas de mayor demanda."]
+            if not weaknesses:
+                weaknesses = ["No se detectaron cuellos de botella críticos en las comandas del período."]
 
             return StrategicInsightResponse(
                 summary=summary,
                 highlights=highlights,
-                warnings=warnings,
-                recommendations=recs,
+                warnings=weaknesses,
+                operational_weaknesses=weaknesses,
+                recommendations=recommendations,
+                operational_metrics=op_context,
                 generated_at=now_dt,
             )
         except Exception as e:
             logger.warning("Fallo al consultar Gemini para insights comerciales: %s", e)
 
-    # Fallback determinístico basado en reglas de negocio (sin depender de API externa)
+    # Fallback determinístico basado en reglas de negocio (sin depender de API externa o cuando falla)
     rev = kpi_data.revenue.current
     growth = kpi_data.revenue.growth_pct
     margin = kpi_data.gross_margin_pct
     ticket = kpi_data.average_ticket.current
 
     summary = (
-        f"El negocio alcanzó una facturación de ${rev:,.2f} con un margen bruto promedio del {margin}%. "
-        + (f"Las ventas reflejan un incremento del {growth}% respecto al período anterior." if growth and growth > 0 else "El volumen de ventas se mantiene estable frente al período comparado.")
+        f"El negocio registró una facturación de ${rev:,.2f} ({kpi_data.completed_orders_count} pedidos finalizados) con un margen bruto promedio del {margin}%. "
+        + (f"Las ventas reflejan una variación de {growth}% vs. el período anterior." if growth is not None else "El volumen de ventas se mantiene estable.")
     )
 
     highlights = [
-        f"Ticket promedio situado en ${ticket:,.2f}.",
-        f"Margen bruto estimado del {margin}% sobre los productos vendidos.",
+        f"Ticket promedio situado en ${ticket:,.2f} por pedido finalizado.",
+        f"Margen bruto comercial del {margin}% sobre los productos vendidos.",
     ]
     if kpi_data.top_products:
         top_prod = kpi_data.top_products[0]
-        highlights.append(f"Producto estrella: '{top_prod.product_name}' con {top_prod.total_quantity} unidades.")
+        highlights.append(f"Plato más vendido: '{top_prod.product_name}' con {top_prod.total_quantity} unidades.")
 
-    warnings = []
+    weaknesses = []
+    if op_context.avg_wait_minutes >= 35.0 or op_context.max_wait_minutes >= 50:
+        weaknesses.append(
+            f"Demoras de preparación elevadas: promedio de {op_context.avg_wait_minutes} min (máximo de {op_context.max_wait_minutes} min), con {op_context.high_wait_count} pedidos superando los 45 minutos."
+        )
+    if op_context.peak_hour is not None and op_data.get("peak_hour_pct", 0) >= 30.0:
+        weaknesses.append(
+            f"Cuello de botella en hora pico: el {op_data.get('peak_hour_pct', 0)}% de las comandas se concentró a las {op_context.peak_hour:02d}:00 hs ({op_context.peak_hour_orders} pedidos), saturando la línea de despacho."
+        )
     if kpi_data.cancellation_rate.current > 5.0:
-        warnings.append(f"La tasa de rechazo o cancelación es del {kpi_data.cancellation_rate.current}%, por encima del umbral saludable (5%).")
-    if margin < 40.0 and rev > 0:
-        warnings.append(f"El margen bruto del {margin}% indica una alta incidencia de costos en ingredientes principales.")
+        weaknesses.append(
+            f"Tasa de rechazo o cancelación del {kpi_data.cancellation_rate.current}%, superando el umbral operativo tolerable del 5%."
+        )
+    if margin < 45.0 and rev > 0:
+        weaknesses.append(
+            f"Margen bruto comprimido ({margin}%): alto impacto del costo de insumos (${kpi_data.cogs.current:,.2f}) sobre el precio de venta."
+        )
+    if not weaknesses:
+        weaknesses.append(
+            f"Operación fluida con demora promedio de {op_context.avg_wait_minutes} min y tasa de rechazo controlada en {kpi_data.cancellation_rate.current}%."
+        )
 
-    recommendations = [
-        "Fomentar combos y promociones en productos con mayor margen de ganancia.",
-        "Monitorear los costos de insumos que componen la receta de los platos más vendidos.",
-    ]
+    recommendations = []
+    if op_context.peak_hour is not None and op_data.get("peak_hour_pct", 0) >= 25.0:
+        recommendations.append(
+            f"Reforzar personal de cocina y pre-elaborar bases (mise en place) antes de las {op_context.peak_hour:02d}:00 hs para agilizar el pico de {op_context.peak_hour_orders} pedidos."
+        )
+    if op_context.avg_wait_minutes >= 35.0:
+        recommendations.append(
+            f"Ajustar los tiempos de demora estimada informados al cliente y limitar pedidos entrantes cuando la cocina supere los 40 minutos de demora."
+        )
+    if kpi_data.top_products:
+        top_prod = kpi_data.top_products[0]
+        recommendations.append(
+            f"Crear combos de '{top_prod.product_name}' combinados con bebidas de alto margen para incrementar el ticket promedio actual de ${ticket:,.2f}."
+        )
+    if kpi_data.cancellation_rate.current > 5.0:
+        recommendations.append(
+            "Contactar a clientes con pedidos cancelados para evaluar si el motivo fue demora excesiva o falta de stock de ingredientes."
+        )
     if kpi_data.goal and kpi_data.goal.revenue_progress_pct < 80:
-        recommendations.append(f"Acelerar ventas: faltan ${kpi_data.goal.revenue_remaining:,.2f} para cumplir el objetivo del período.")
+        recommendations.append(
+            f"Impulsar promociones por canal digital: faltan ${kpi_data.goal.revenue_remaining:,.2f} para alcanzar la meta comercial del período."
+        )
+    if not recommendations:
+        recommendations.append("Mantener el ritmo de despacho actual y monitorear los costos de los insumos principales.")
 
     return StrategicInsightResponse(
         summary=summary,
         highlights=highlights,
-        warnings=warnings,
+        warnings=weaknesses,
+        operational_weaknesses=weaknesses,
         recommendations=recommendations,
+        operational_metrics=op_context,
         generated_at=now_dt,
     )

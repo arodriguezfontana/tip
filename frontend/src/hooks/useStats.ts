@@ -17,7 +17,9 @@ export function useStats({ dateFrom, dateTo }: StatsParams = {}) {
       fetchStatusDistribution(params),
       fetchTopProducts(params),
       fetchBestSellingDay(params),
-      fetchDashboardKPIs(params).catch(() => null as DashboardKPIsResponse | null),
+      Promise.resolve()
+        .then(() => fetchDashboardKPIs?.(params) ?? null)
+        .catch(() => null as DashboardKPIsResponse | null),
     ]);
     return { statusDistribution, topProducts, bestDay, kpis };
   }, [dateFrom, dateTo]);

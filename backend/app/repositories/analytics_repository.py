@@ -1,5 +1,7 @@
+import collections
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import func
 from sqlalchemy.orm import Session
@@ -132,3 +134,60 @@ def get_products_unit_cost(db: Session, product_names: list[str]) -> dict[str, f
         product_unit_cost[prod.name] = round(unit_cost, 2)
 
     return product_unit_cost
+
+
+def get_operational_flow_and_wait_times(
+    db: Session, date_from: datetime | None, date_to: datetime | None
+) -> dict[str, Any]:
+    """Calcula métricas operativas de tiempos de espera y flujo de pedidos en el período."""
+    orders = created_between(
+        db.query(
+            Order.id,
+            Order.estimated_minutes,
+            Order.delivery_method,
+            Order.source,
+            Order.created_at,
+            Order.status,
+        ),
+        date_from,
+        date_to,
+    ).all()
+
+    total_orders = len(orders)
+    wait_times = [o.estimated_minutes for o in orders if o.estimated_minutes is not None and o.estimated_minutes > 0]
+    avg_wait = round(sum(wait_times) / len(wait_times), 1) if wait_times else 0.0
+    max_wait = max(wait_times) if wait_times else 0
+    high_wait_count = sum(1 for w in wait_times if w >= 45)
+    high_wait_pct = round((high_wait_count / len(wait_times) * 100.0), 1) if wait_times else 0.0
+
+    hour_counts = collections.Counter(o.created_at.hour for o in orders if o.created_at)
+    if hour_counts:
+        peak_hour, peak_hour_orders = hour_counts.most_common(1)[0]
+        peak_hour_pct = round((peak_hour_orders / total_orders * 100.0), 1) if total_orders > 0 else 0.0
+    else:
+        peak_hour, peak_hour_orders, peak_hour_pct = None, 0, 0.0
+
+    delivery_counts = collections.Counter(o.delivery_method for o in orders if o.delivery_method)
+    delivery_count = delivery_counts.get("domicilio", 0)
+    pickup_count = delivery_counts.get("retiro", 0)
+    delivery_pct = round((delivery_count / total_orders * 100.0), 1) if total_orders > 0 else 0.0
+    pickup_pct = round((pickup_count / total_orders * 100.0), 1) if total_orders > 0 else 0.0
+
+    sources = dict(collections.Counter(o.source for o in orders if o.source))
+
+    return {
+        "total_orders": total_orders,
+        "avg_wait_minutes": avg_wait,
+        "max_wait_minutes": max_wait,
+        "high_wait_count": high_wait_count,
+        "high_wait_pct": high_wait_pct,
+        "peak_hour": peak_hour,
+        "peak_hour_orders": peak_hour_orders,
+        "peak_hour_pct": peak_hour_pct,
+        "delivery_count": delivery_count,
+        "pickup_count": pickup_count,
+        "delivery_pct": delivery_pct,
+        "pickup_pct": pickup_pct,
+        "sources": sources,
+    }
+

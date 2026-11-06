@@ -64,10 +64,23 @@ class DashboardKPIsResponse(BaseModel):
     top_products: list[TopProductKpi]
 
 
+class OperationalMetricsContext(BaseModel):
+    avg_wait_minutes: float = 0.0
+    max_wait_minutes: int = 0
+    high_wait_count: int = 0
+    high_wait_pct: float = 0.0
+    peak_hour: int | None = None
+    peak_hour_orders: int = 0
+    delivery_pct: float = 0.0
+    pickup_pct: float = 0.0
+
+
 class StrategicInsightResponse(BaseModel):
     summary: str
     highlights: list[str]
-    warnings: list[str]
+    warnings: list[str] = Field(default_factory=list, description="Puntos de atención y alertas")
+    operational_weaknesses: list[str] = Field(default_factory=list, description="Debilidades operativas detectadas")
     recommendations: list[str]
+    operational_metrics: OperationalMetricsContext | None = None
     generated_at: datetime
 

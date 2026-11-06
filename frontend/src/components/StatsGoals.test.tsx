@@ -61,12 +61,29 @@ const MOCK_GOALS_RESPONSE: BusinessGoalsResponse = {
 const MOCK_INSIGHT: StrategicInsightResponse = {
   summary: 'Rendimiento comercial excelente impulsado por alta demanda de pizzas especiales.',
   highlights: ['Margen bruto superior al 65%', 'Ticket promedio estable en $10.000'],
-  warnings: ['Costo de muzzarella en aumento'],
-  recommendations: ['Crear combos de pizzas y bebidas para subir ticket promedio'],
+  warnings: ['Demoras elevadas en la hora pico'],
+  operational_weaknesses: [
+    'Demora promedio de preparación de 38 min (máx 55 min) con 3 pedidos superando los 45 min',
+    'Cuello de botella a las 21:00 hs con el 45% de los pedidos concentrados en esa franja',
+  ],
+  recommendations: [
+    'Reforzar personal de cocina y pre-elaborar bases antes de las 21:00 hs',
+    'Crear combos de pizzas y bebidas para subir el ticket promedio actual',
+  ],
+  operational_metrics: {
+    avg_wait_minutes: 38.0,
+    max_wait_minutes: 55,
+    high_wait_count: 3,
+    high_wait_pct: 20.0,
+    peak_hour: 21,
+    peak_hour_orders: 8,
+    delivery_pct: 70.0,
+    pickup_pct: 30.0,
+  },
   generated_at: '2026-11-05T20:00:00Z',
 };
 
-describe('US-49: Dashboard de Metas de Negocio y Rendimiento Comercial', () => {
+describe('Dashboard de Métricas, Metas y Asistente IA', () => {
   beforeEach(() => {
     vi.resetAllMocks();
     stats.fetchStatusDistribution.mockResolvedValue({ Finalizado: 15, Rechazado: 1 });
@@ -83,13 +100,13 @@ describe('US-49: Dashboard de Metas de Negocio y Rendimiento Comercial', () => {
     vi.restoreAllMocks();
   });
 
-  describe('StatsSection con KPIs y Seguimiento de Metas', () => {
+  describe('US-49: Dashboard de Metas y Rendimiento', () => {
     it('renderiza las barras de progreso de metas y los 4 KPIs estratégicos con indicadores de tendencia', async () => {
       render(<StatsSection />);
 
       // Verifica los botones de acción para Metas e Inteligencia Artificial
       expect(await screen.findByRole('button', { name: /Metas Comerciales/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Diagnóstico IA/i })).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Consejos de IA/i })).toBeInTheDocument();
 
       // Verifica sección de Progreso vs Metas
       expect(screen.getByText('Seguimiento de Metas Comerciales')).toBeInTheDocument();
@@ -125,16 +142,76 @@ describe('US-49: Dashboard de Metas de Negocio y Rendimiento Comercial', () => {
       expect(await screen.findByRole('dialog', { name: /Configuración de Metas Comerciales/i })).toBeInTheDocument();
       expect(screen.getByText(/Meta Mensual/i)).toBeInTheDocument();
     });
+  });
 
-    it('abre el modal de Diagnóstico IA al hacer clic en el botón', async () => {
+  describe('US-46: Análisis del negocio y recomendaciones con Inteligencia Artificial', () => {
+    it('el análisis se genera a pedido del administrador y presenta debilidades operativas y recomendaciones concretas', async () => {
       render(<StatsSection />);
       const user = userEvent.setup();
 
-      const aiBtn = await screen.findByRole('button', { name: /Diagnóstico IA/i });
-      await user.click(aiBtn);
+      // Antes de presionar, la IA no se ejecutó automáticamente (solo a pedido)
+      expect(stats.fetchStrategicInsight).not.toHaveBeenCalled();
+      expect(await screen.findByText(/El análisis con IA se genera solo a pedido para el período seleccionado/i)).toBeInTheDocument();
 
-      expect(await screen.findByRole('dialog', { name: /Análisis Estratégico Comercial con IA/i })).toBeInTheDocument();
+      // Pedir análisis con IA
+      const pedirBtn = screen.getByRole('button', { name: /Analizar con IA/i });
+      await user.click(pedirBtn);
+
+      // Esperar que se llame con el rango seleccionado
+      await waitFor(() => expect(stats.fetchStrategicInsight).toHaveBeenCalledTimes(1));
+
+      // Verifica apartado "Consejos de IA"
       expect(await screen.findByText(MOCK_INSIGHT.summary)).toBeInTheDocument();
+
+      // Verifica métricas operativas de tiempos de espera y flujo de pedidos
+      expect(screen.getByText('38 min')).toBeInTheDocument(); // Demora promedio
+      expect(screen.getByText('21:00 hs')).toBeInTheDocument(); // Hora pico
+      expect(screen.getByText('70% Domicilio / 30% Retiro')).toBeInTheDocument(); // Modalidad de entrega
+
+      // Verifica debilidades operativas detectadas
+      expect(screen.getByText(/Debilidades Operativas Detectadas/i)).toBeInTheDocument();
+      expect(screen.getByText(/Demora promedio de preparación de 38 min/i)).toBeInTheDocument();
+      expect(screen.getByText(/Cuello de botella a las 21:00 hs/i)).toBeInTheDocument();
+
+      // Verifica recomendaciones concretas de acción
+      expect(screen.getByText(/Recomendaciones Concretas/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reforzar personal de cocina y pre-elaborar bases antes de las 21:00 hs/i)).toBeInTheDocument();
+      expect(screen.getByText(/Crear combos de pizzas y bebidas/i)).toBeInTheDocument();
+
+      // Verifica que el botón cambie a "Actualizar consejos"
+      expect(screen.getByRole('button', { name: /Actualizar consejos/i })).toBeInTheDocument();
+    });
+
+    it('si el servicio de IA falla o tarda demasiado, muestra mensaje de error con opción de reintentar y el resto de estadísticas sigue funcionando', async () => {
+      stats.fetchStrategicInsight.mockRejectedValueOnce(new Error('Timeout de API'));
+
+      render(<StatsSection />);
+      const user = userEvent.setup();
+
+      // El resto de la sección de Estadísticas funciona y está visible
+      expect(await screen.findByText('Facturación Total')).toBeInTheDocument();
+      expect(screen.getByText('Ticket Promedio')).toBeInTheDocument();
+      expect(screen.getByText('Viernes')).toBeInTheDocument(); // Mejor día
+
+      // Pedir análisis con IA que falla
+      const pedirBtn = screen.getByRole('button', { name: /Analizar con IA/i });
+      await user.click(pedirBtn);
+
+      // Muestra mensaje de error claro y botón de reintentar
+      expect(await screen.findByText(/El servicio de Inteligencia Artificial tardó demasiado o no pudo responder/i)).toBeInTheDocument();
+      const reintentarBtn = screen.getByRole('button', { name: /Reintentar/i });
+      expect(reintentarBtn).toBeInTheDocument();
+
+      // El resto de las estadísticas sigue visible y funcionando
+      expect(screen.getByText('Facturación Total')).toBeInTheDocument();
+      expect(screen.getByText('Pizza Especial')).toBeInTheDocument();
+
+      // Reintentar con éxito
+      stats.fetchStrategicInsight.mockResolvedValueOnce(MOCK_INSIGHT);
+      await user.click(reintentarBtn);
+
+      expect(await screen.findByText(MOCK_INSIGHT.summary)).toBeInTheDocument();
+      expect(screen.queryByText(/El servicio de Inteligencia Artificial tardó demasiado/i)).not.toBeInTheDocument();
     });
   });
 
@@ -179,14 +256,14 @@ describe('US-49: Dashboard de Metas de Negocio y Rendimiento Comercial', () => {
   });
 
   describe('StrategicInsightModal', () => {
-    it('muestra el diagnóstico, fortalezas, alertas y recomendaciones', async () => {
+    it('muestra el diagnóstico, fortalezas, debilidades operativas y recomendaciones', async () => {
       const handleClose = vi.fn();
       render(<StrategicInsightModal isOpen={true} onClose={handleClose} params={{}} />);
 
       expect(await screen.findByText(MOCK_INSIGHT.summary)).toBeInTheDocument();
       expect(screen.getByText('Margen bruto superior al 65%')).toBeInTheDocument();
-      expect(screen.getByText('Costo de muzzarella en aumento')).toBeInTheDocument();
-      expect(screen.getByText('Crear combos de pizzas y bebidas para subir ticket promedio')).toBeInTheDocument();
+      expect(screen.getByText(/Demora promedio de preparación de 38 min/i)).toBeInTheDocument();
+      expect(screen.getByText(/Reforzar personal de cocina y pre-elaborar bases/i)).toBeInTheDocument();
 
       const user = userEvent.setup();
       const closeBtn = screen.getByRole('button', { name: '✕' });
@@ -194,11 +271,12 @@ describe('US-49: Dashboard de Metas de Negocio y Rendimiento Comercial', () => {
       expect(handleClose).toHaveBeenCalled();
     });
 
-    it('muestra mensaje de error si falla la consulta', async () => {
+    it('muestra mensaje de error con botón de reintentar si falla la consulta', async () => {
       stats.fetchStrategicInsight.mockRejectedValueOnce(new Error('Network error'));
       render(<StrategicInsightModal isOpen={true} onClose={vi.fn()} params={{}} />);
 
-      expect(await screen.findByText('No se pudo generar el análisis estratégico en este momento.')).toBeInTheDocument();
+      expect(await screen.findByText(/El servicio de Inteligencia Artificial tardó demasiado o no pudo responder/i)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: /Reintentar/i })).toBeInTheDocument();
     });
   });
 });

@@ -114,4 +114,4 @@ def get_strategic_insight(
 ) -> StrategicInsightResponse:
     """Genera un análisis e informe ejecutivo inteligente asistido por IA / BI sobre las métricas comerciales."""
     kpis = analytics_service.calculate_dashboard_kpis(db, date_from, date_to)
-    return analytics_service.generate_strategic_insight(kpis)
+    return analytics_service.generate_strategic_insight(kpis, db=db, date_from=date_from, date_to=date_to)

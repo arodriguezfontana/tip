@@ -82,10 +82,23 @@ export interface UpdateBusinessGoalsPayload {
   goals: BusinessGoalItem[];
 }
 
+export interface OperationalMetricsContext {
+  avg_wait_minutes: number;
+  max_wait_minutes: number;
+  high_wait_count: number;
+  high_wait_pct: number;
+  peak_hour: number | null;
+  peak_hour_orders: number;
+  delivery_pct: number;
+  pickup_pct: number;
+}
+
 export interface StrategicInsightResponse {
   summary: string;
   highlights: string[];
   warnings: string[];
+  operational_weaknesses?: string[];
   recommendations: string[];
+  operational_metrics?: OperationalMetricsContext | null;
   generated_at: string;
 }

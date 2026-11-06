@@ -169,4 +169,47 @@ def test_asistente_insight_estrategico(client, db_session):
     assert "summary" in data and len(data["summary"]) > 0
     assert isinstance(data["highlights"], list) and len(data["highlights"]) > 0
     assert isinstance(data["recommendations"], list) and len(data["recommendations"]) > 0
+    assert "operational_weaknesses" in data
+    assert isinstance(data["operational_weaknesses"], list)
+
+
+def test_asistente_insight_tiempos_espera_y_flujos_operativos(client, db_session):
+    # Pedido con demora elevada (55 min) a domicilio en horario específico (21:00 hs)
+    hora_pico = datetime(2026, 9, 30, 21, 15, tzinfo=timezone.utc)
+    order1 = _order(db_session, status="Finalizado", total=12000, created_at=hora_pico)
+    order1.estimated_minutes = 55
+    order1.delivery_method = "domicilio"
+
+    order2 = _order(db_session, status="Rechazado", total=8000, created_at=hora_pico)
+    order2.estimated_minutes = 45
+    order2.delivery_method = "domicilio"
+
+    db_session.commit()
+
+    resp = client.get(
+        f"{STATS_URL}/strategic-insight",
+        params={"date_from": "2026-09-30T00:00:00Z", "date_to": "2026-09-30T23:59:59Z"},
+    )
+    assert resp.status_code == 200
+    data = resp.json()
+
+    op = data.get("operational_metrics")
+    assert op is not None
+    # 2 pedidos con demoras de 55 y 45 min -> Promedio = 50.0 min
+    assert op["avg_wait_minutes"] == 50.0
+    assert op["max_wait_minutes"] == 55
+    assert op["high_wait_count"] == 2
+    assert op["delivery_pct"] == 100.0
+    assert op["peak_hour"] == 21
+
+    # Detección de debilidades operativas claras y directas
+    weaknesses = data["operational_weaknesses"]
+    assert any("Demoras" in w or "demora" in w.lower() for w in weaknesses)
+    assert any("hora pico" in w.lower() or "cuello de botella" in w.lower() for w in weaknesses)
+
+    # Recomendaciones concretas de acción
+    recs = data["recommendations"]
+    assert len(recs) >= 2
+    assert any("cocina" in r.lower() or "despacho" in r.lower() or "personal" in r.lower() for r in recs)
+
 
