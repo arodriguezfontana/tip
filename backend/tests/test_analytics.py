@@ -4,7 +4,7 @@ from decimal import Decimal
 import pytest
 
 from app.core.config import settings
-from app.models.menu import Ingredient, Product, ProductIngredient
+from app.models.menu import Category, Ingredient, Product, ProductIngredient
 from app.models.order import Order, OrderItem
 
 STATS_URL = "/api/v1/stats"
@@ -89,6 +89,10 @@ def test_kpis_ticket_promedio_y_tasa_rechazo(client, db_session):
 
 
 def test_kpis_rentabilidad_bruta_y_costo_ingredientes(client, db_session):
+    cat = Category(name="Pizzas Test")
+    db_session.add(cat)
+    db_session.flush()
+
     # Crear insumos con costo
     queso = Ingredient(name="Queso Barra Test", unit="kg", cost=Decimal("2000"), extra_price=Decimal("500"))
     harina = Ingredient(name="Harina Test", unit="kg", cost=Decimal("500"), extra_price=Decimal("0"))
@@ -99,7 +103,7 @@ def test_kpis_rentabilidad_bruta_y_costo_ingredientes(client, db_session):
     pizza = Product(
         name="Pizza Especial Test",
         price=Decimal("5000"),
-        category_id=1,
+        category_id=cat.id,
         is_active=True,
     )
     pizza.recipe_items = [
