@@ -1,4 +1,5 @@
 from decimal import Decimal
+
 from sqlalchemy import Column, DateTime, Integer, String
 from sqlalchemy.orm import validates
 from sqlalchemy.sql import func

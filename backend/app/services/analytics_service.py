@@ -470,7 +470,7 @@ Respondé en español ÚNICAMENTE con un objeto JSON válido con este esquema ex
         )
     if op_context.avg_wait_minutes >= 35.0:
         recommendations.append(
-            f"Ajustar los tiempos de demora estimada informados al cliente y limitar pedidos entrantes cuando la cocina supere los 40 minutos de demora."
+            "Ajustar los tiempos de demora estimada informados al cliente y limitar pedidos entrantes cuando la cocina supere los 40 minutos de demora."
         )
     if kpi_data.top_products:
         top_prod = kpi_data.top_products[0]

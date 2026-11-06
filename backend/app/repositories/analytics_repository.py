@@ -12,7 +12,6 @@ from app.models.order import Order, OrderStatus
 from app.repositories.common import created_between
 from app.repositories.ingredient_repository import consumption as ingredient_consumption
 
-
 # --- Business Goals (Metas) --------------------------------------------------------------------------
 
 DEFAULT_GOALS = [
