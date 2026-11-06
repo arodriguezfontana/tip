@@ -8,7 +8,7 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
-from app.models.order import PaymentMethod
+from app.models.order import OrderStatus, PaymentMethod
 from app.models.user import User
 from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
@@ -27,7 +27,12 @@ from app.schemas.order_schemas import (
 )
 from app.services import delivery_trip_service, order_service
 from app.services.channels import enviar_mensaje
-from app.services.mercadopago_service import payment_received_message, reconcile_pending_payments, start_web_payment
+from app.services.mercadopago_service import (
+    payment_received_message,
+    reconcile_pending_payments,
+    start_chat_payment,
+    start_web_payment,
+)
 from app.services.order_notification_service import OrderSnapshot, notify_order_status_change, notify_trip_dispatched
 from app.services.store_config_service import get_or_create_store_config
 
@@ -164,7 +169,13 @@ def update_order_status(
         status_update.estimated_minutes,
         status_update.delivery_driver_id,
     )
-    background_tasks.add_task(notify_order_status_change, OrderSnapshot.of(order), status_update.status)
+    # Los pedidos del chat se pagan una vez aceptados: así nadie paga un pedido que el local después rechaza.
+    payment_instructions = None
+    if status_update.status == OrderStatus.CONFIRMED:
+        payment_instructions = start_chat_payment(db, order, get_or_create_store_config(db))
+    background_tasks.add_task(
+        notify_order_status_change, OrderSnapshot.of(order), status_update.status, payment_instructions
+    )
     return OrderResponse.from_model(order)
 
 

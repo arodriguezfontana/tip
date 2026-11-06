@@ -48,14 +48,20 @@ def _horario_programado(order: Order | OrderSnapshot) -> str:
     return f"{programado.astimezone(RESTAURANT_TZ):%H:%M}"
 
 
-def build_status_message(order: Order | OrderSnapshot, new_status: str) -> str | None:
-    if new_status == OrderStatus.CONFIRMED and order.scheduled_for is not None:
-        return f"¡Tu pedido #{order.id} fue aceptado! ✅\nLo vamos a tener listo para las {_horario_programado(order)}."
+def _mensaje_de_aceptacion(order: Order | OrderSnapshot, payment_instructions: str | None) -> str:
+    if order.scheduled_for is not None:
+        cuando = f"Lo vamos a tener listo para las {_horario_programado(order)}."
+    else:
+        cuando = f"Tiempo estimado de entrega: {order.estimated_minutes} minutos aproximadamente."
+    mensaje = f"¡Tu pedido #{order.id} fue aceptado! ✅\n{cuando}"
+    return f"{mensaje}\n\n{payment_instructions}" if payment_instructions else mensaje
+
+
+def build_status_message(
+    order: Order | OrderSnapshot, new_status: str, payment_instructions: str | None = None
+) -> str | None:
     if new_status == OrderStatus.CONFIRMED:
-        return (
-            f"¡Tu pedido #{order.id} fue aceptado! ✅\n"
-            f"Tiempo estimado de entrega: {order.estimated_minutes} minutos aproximadamente."
-        )
+        return _mensaje_de_aceptacion(order, payment_instructions)
     if new_status == OrderStatus.REJECTED:
         return "Lamentablemente tu pedido fue rechazado. Contactanos si tenés dudas."
     if new_status == OrderStatus.CANCELLED:
@@ -90,7 +96,9 @@ async def notify_trip_dispatched(orders: list[OrderSnapshot]) -> None:
             logger.exception("No se pudo avisar la salida del viaje del pedido #%s.", order.id)
 
 
-async def notify_order_status_change(order: OrderSnapshot, new_status: str) -> None:
+async def notify_order_status_change(
+    order: OrderSnapshot, new_status: str, payment_instructions: str | None = None
+) -> None:
     if new_status == OrderStatus.ON_THE_WAY:
         # Salir "En Camino" arma el viaje en silencio: el aviso con la llegada sale al iniciarlo (notify_trip_dispatched).
         return
@@ -103,7 +111,7 @@ async def notify_order_status_change(order: OrderSnapshot, new_status: str) -> N
         )
         return
 
-    mensaje = build_status_message(order, new_status)
+    mensaje = build_status_message(order, new_status, payment_instructions)
     if mensaje is None:
         return
 

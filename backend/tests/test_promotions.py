@@ -285,6 +285,21 @@ def test_orden_con_promocion_y_comanda(db_session, products):
     assert resp.promotion_products[1].sector == "barra"
 
 
+def test_la_imagen_de_promociones_se_ve_en_la_direccion_que_informa(client, db_session):
+    db_session.query(PromotionImage).delete()
+    db_session.commit()
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"promo-v1" * 20
+
+    respuesta = client.post("/api/v1/promotion-images", content=png_bytes, headers={"Content-Type": "image/png"})
+
+    assert respuesta.status_code == 201
+    [imagen] = respuesta.json()["images"]
+    # El panel le agrega adelante la URL base de la API.
+    archivo = client.get(f"/api/v1{imagen['image_url']}")
+    assert archivo.status_code == 200
+    assert (archivo.content, archivo.headers["content-type"]) == (png_bytes, "image/png")
+
+
 def test_promotion_image_upload_get_and_delete(client, db_session, products):
     p1 = products["muzza"]
     promo = promotion_service.create_promotion(
@@ -323,3 +338,20 @@ def test_promotion_image_upload_get_and_delete(client, db_session, products):
     res_get_404 = client.get(f"/api/v1/promotions/{promo.id}/image")
     assert res_get_404.status_code == 404
 
+def test_las_promociones_admiten_hasta_5_imagenes(client):
+    from app.models.promotion import MAX_PROMOTION_IMAGES
+
+    url = "/api/v1/promotion-images"
+    res_init = client.get(url)
+    assert res_init.status_code == 200
+    assert res_init.json()["max_images"] == 5
+
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 30
+    for _ in range(MAX_PROMOTION_IMAGES):
+        res = client.post(url, content=png_bytes, headers={"Content-Type": "image/png"})
+        assert res.status_code == 201
+
+    res_exceeded = client.post(url, content=png_bytes, headers={"Content-Type": "image/png"})
+    assert res_exceeded.status_code == 400
+    assert "5" in res_exceeded.json()["detail"]
+    assert len(client.get(url).json()["images"]) == 5

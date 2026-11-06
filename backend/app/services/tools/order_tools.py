@@ -38,13 +38,12 @@ from app.services.business_hours_service import (
     proxima_fecha_abierta_a_la_hora,
 )
 from app.services.catalog_service import find_available_products_by_name
-from app.services.mercadopago_service import create_payment_preference
 from app.services.modifier_nlp import (
     extraer_modificadores_de_texto,
+    filtrar_modificadores_para_producto,
     vincular_modificadores_con_db,
 )
 from app.services.order_service import OrderRequest, ScheduleTooEarlyError, create_bot_order, validate_schedule
-from app.services.store_config_service import get_or_create_store_config
 
 logger = logging.getLogger(__name__)
 
@@ -583,6 +582,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
                     resumen_lineas.append(f"- '{s2_str}' puede ser: {opciones}. ¿Cuál querés?")
                 continue
 
+            all_mitad_mods = filtrar_modificadores_para_producto(all_mitad_mods, p1, p2)
             # Regla de cobro: la pizza mitad y mitad toma el valor del gusto más caro
             base_unitario = max(p1.price, p2.price)
             extra_cost = sum(
@@ -596,8 +596,10 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
 
             nombre_unificado = format_half_and_half_name(p1.name, p2.name, size_hint)
             tags_texto = " ".join(m["tag"] for m in all_mitad_mods if m.get("tag"))
-            nombre_mostrado = f"{nombre_unificado} {tags_texto}".strip() if tags_texto else nombre_unificado
-            resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
+            if tags_texto:
+                resumen_lineas.append(f"- {nombre_unificado} (x{cantidad}) ${subtotal:,.2f}\n  {tags_texto}")
+            else:
+                resumen_lineas.append(f"- {nombre_unificado} (x{cantidad}) ${subtotal:,.2f}")
             items_validados.append({
                 "product_id": p1.id,
                 "secondary_product_id": p2.id,
@@ -699,6 +701,7 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
             resumen_lineas.append(f"- '{base_nombre}' puede ser: {opciones}. ¿Cuál querés?")
             continue
 
+        all_item_mods = filtrar_modificadores_para_producto(all_item_mods, producto)
         extra_cost = sum(
             to_money(m.get("price", 0))
             for m in all_item_mods
@@ -709,8 +712,10 @@ def _resolver_items(db: Session, items_solicitados: str) -> ItemsResueltos:
         total_general += subtotal
 
         tags_texto = " ".join(m["tag"] for m in all_item_mods if m.get("tag"))
-        nombre_mostrado = f"{producto.name} {tags_texto}".strip() if tags_texto else producto.name
-        resumen_lineas.append(f"- {nombre_mostrado} (x{cantidad}) ${subtotal:,.2f}")
+        if tags_texto:
+            resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}\n  {tags_texto}")
+        else:
+            resumen_lineas.append(f"- {producto.name} (x{cantidad}) ${subtotal:,.2f}")
         items_validados.append({
             "product_id": producto.id,
             "nombre": producto.name,
@@ -802,7 +807,11 @@ def calcular_y_preparar_pedido(
             "faltan_datos": faltan_datos or aviso_horario is not None,
         }
 
-        texto_respuesta = "Queremos confirmar tu pedido:\n" + "\n".join(resumen_lineas) + f"\n\nTotal: ${total_general:,.2f}"
+        hay_modificaciones = any(item.get("modifications") for item in items_validados)
+        bloque_productos_resumen = [*resumen_lineas]
+        if hay_modificaciones:
+            bloque_productos_resumen.extend(["", "ℹ️ Aclaración: Las modificaciones y adicionales se realizan según los ingredientes y adicionales permitidos de cada plato."])
+        texto_respuesta = "Detalle de tu pedido:\n" + "\n".join(bloque_productos_resumen) + f"\n\nTotal: ${total_general:,.2f}"
 
         if faltan_datos:
             faltantes = []
@@ -825,34 +834,36 @@ def calcular_y_preparar_pedido(
             texto_respuesta = aviso_horario
         else:
             entrega = PICKUP_ADDRESS if es_retiro else f"Envío a domicilio: {shipping_address}"
-            horario = describir_horario_programado(horario_programado, ahora_local())
+            datos_de_entrega = [f"- Nombre: {customer_name}", f"- Teléfono: {telefono}", f"- {entrega}"]
+            # El horario y las observaciones solo aparecen si hay algo que mostrar (un pedido para ahora no lleva horario).
+            if horario_programado:
+                datos_de_entrega.append(f"- Horario: {describir_horario_programado(horario_programado, ahora_local())}")
+            if notas:
+                datos_de_entrega.append(f"- Observaciones: {notas}")
 
             if pago_normalizado:
                 pago_label = "MercadoPago" if pago_normalizado == PaymentMethod.MERCADOPAGO.value else "Efectivo"
-                pago_linea = f"- Método de pago: {pago_label}"
-                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+                datos_de_entrega.append(f"- Método de pago: {pago_label}")
+                # Con todos los datos, incluido el pago: es la única vez que se le pide confirmar.
+                cierre = "¿Está todo bien para confirmar el pedido?"
             else:
-                pago_linea = '💳 Método de pago: ¿Qué método de pago preferís? Ofrecemos "Efectivo" y "MercadoPago".'
-                pregunta_final = "¿Está todo bien para confirmar el pedido?"
+                cierre = '💳 ¿Cómo preferís pagar? Ofrecemos "Efectivo" y "MercadoPago".'
+
+            bloque_productos_final = [*resumen_lineas]
+            if hay_modificaciones:
+                bloque_productos_final.extend(["", "ℹ️ Aclaración: Las modificaciones y adicionales se realizan según los ingredientes y adicionales permitidos de cada plato."])
 
             texto_respuesta = "\n".join([
                 "📝 Resumen de tu pedido",
                 "",
                 "🛒 Productos:",
-                *resumen_lineas,
+                *bloque_productos_final,
                 f"💰 Total: ${total_general:,.2f}",
                 "",
                 "🚚 Entrega:",
-                f"- Nombre: {customer_name}",
-                f"- Teléfono: {telefono}",
-                f"- {entrega}",
-                # Solo se muestran cuando aportan algo: no hace falta decir "para ahora" ni "sin observaciones".
-                *([f"- Horario: {horario}"] if horario_programado else []),
-                *([f"- Observaciones: {notas}"] if notas else []),
-                *( [pago_linea] if pago_normalizado else [] ),
+                *datos_de_entrega,
                 "",
-                *( [pago_linea, ""] if not pago_normalizado else [] ),
-                pregunta_final,
+                cierre,
             ])
         return json.dumps({"mensaje_para_usuario": texto_respuesta, "datos_temporales": resultado_json}, ensure_ascii=False)
 
@@ -925,7 +936,7 @@ def confirmar_y_guardar_pedido(
         )
         # Mismas reglas que los pedidos de la web y del mostrador (disponibilidad, máximo por producto, precios).
         try:
-            order = create_bot_order(
+            create_bot_order(
                 db,
                 pedido,
                 channel=canal,
@@ -938,31 +949,16 @@ def confirmar_y_guardar_pedido(
 
         horario_texto = f" {describir_horario_programado(scheduled_dt, ahora_local())}" if scheduled_dt else ""
 
-        if metodo_pago == PaymentMethod.MERCADOPAGO.value:
-            store_config = get_or_create_store_config(db)
-            pref = create_payment_preference(order, store_name=store_config.store_name)
-            order.mp_preference_id = pref.get("preference_id")
-            db.commit()
-
-            link_pago_texto = (
-                f"\n\n💳 Link de pago de MercadoPago por el total exacto de ${order.total_amount:,.2f}:\n"
-                f"{pref['init_point']}\n"
-                "(Ingresá al link para abonar tu pedido de forma digital)"
-            )
-            if store_config.mp_alias:
-                link_pago_texto += f"\nAlias de cobro: {store_config.mp_alias}"
-
-            return (
-                f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
-                f"Método de pago: MercadoPago.{link_pago_texto}\n\n"
-                "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
-                "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
-                "¡Muchas gracias por elegirnos!"
-            )
+        # El link de MercadoPago se manda recién cuando el local acepta el pedido (ver start_chat_payment).
+        detalle_pago = (
+            "MercadoPago (te pasamos el link de pago cuando el local acepte tu pedido)"
+            if metodo_pago == PaymentMethod.MERCADOPAGO.value
+            else "Efectivo (abonás al recibir o retirar tu pedido)"
+        )
 
         return (
             f"¡Listo, {cliente}! 🙌 {MARCA_PEDIDO_REGISTRADO}{horario_texto}.\n\n"
-            "Método de pago: Efectivo (abonás al recibir o retirar tu pedido).\n\n"
+            f"Método de pago: {detalle_pago}.\n\n"
             "⏳ Todavía no está confirmado: el local lo va a revisar y en breve te vamos a escribir "
             "por este chat para confirmártelo junto con el tiempo estimado.\n\n"
             "¡Muchas gracias por elegirnos!"

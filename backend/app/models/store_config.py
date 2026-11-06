@@ -1,4 +1,4 @@
-from sqlalchemy import Column, DateTime, Integer, String, Text
+from sqlalchemy import Boolean, Column, DateTime, Integer, String, Text
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
@@ -28,6 +28,9 @@ class StoreConfig(Base):
     menu_link = Column(Text, nullable=True)
     promotions_link = Column(Text, nullable=True)
     mp_alias = Column(String(100), nullable=True)
+    # Seguridad de caja mediante PIN (opcional)
+    cash_pin_enabled = Column(Boolean, nullable=False, default=False, server_default="false")
+    cash_pin = Column(String(10), nullable=True)
     created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     updated_at = Column(
         DateTime(timezone=True),

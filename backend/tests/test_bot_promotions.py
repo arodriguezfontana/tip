@@ -5,7 +5,7 @@ from unittest.mock import patch
 
 import pytest
 
-from app.models.menu import Product
+from app.models.menu import Ingredient, Product, ProductIngredient
 from app.models.promotion import Promotion
 from app.services.tools.order_tools import calcular_y_preparar_pedido
 from tests.conftest import TestingSessionLocal
@@ -89,7 +89,14 @@ def test_sin_los_productos_de_la_promo_completos_no_se_aplica(promo_muzza_coca):
     assert _resumen(respuesta) == [("Pizza Muzzarella", 2, 8500.0)]
 
 
-def test_un_producto_modificado_no_entra_en_la_promo(promo_muzza_coca):
+def test_un_producto_modificado_no_entra_en_la_promo(db_session, products, promo_muzza_coca):
+    # La muzzarella lleva cebolla, así que "sin cebolla" es una modificación real (un ingrediente que no lleva se ignora).
+    cebolla = Ingredient(name="Cebolla", unit="gramos", extra_price=0)
+    db_session.add(cebolla)
+    db_session.commit()
+    db_session.add(ProductIngredient(product_id=products["muzza"].id, ingredient_id=cebolla.id, quantity=50))
+    db_session.commit()
+
     respuesta = _calcular("1 Pizza Muzzarella sin cebolla, 1 Coca-Cola 500ml")
 
     assert all(item["promotion_id"] is None for item in respuesta["datos_temporales"]["items"] if "promotion_id" in item)

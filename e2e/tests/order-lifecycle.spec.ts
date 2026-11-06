@@ -49,7 +49,11 @@ test.describe('Ciclo de vida de un pedido en el panel', () => {
     await page.getByRole('button', { name: `Iniciar viaje de ${driver.name}` }).click();
     await expect(enCamino).toContainText(/En viaje · llega en ~\d+ min/);
 
+    // El pedido web está pendiente de pago: antes de finalizarlo se pide confirmar el cobro.
     await enCamino.getByRole('button', { name: 'Finalizar' }).click();
+    const cobro = page.getByRole('dialog', { name: 'El pedido aún no está pago' });
+    await cobro.getByRole('button', { name: 'Marcar como pago y finalizar' }).click();
+    await expect(cobro).toBeHidden();
     await expect(page.getByRole('button', { name: `Ver detalle del pedido #${order.id}`, exact: true })).toBeHidden();
 
     // Queda en el historial como finalizado.

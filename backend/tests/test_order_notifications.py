@@ -3,6 +3,7 @@ from unittest.mock import AsyncMock, patch
 import pytest
 
 from app.models.order import Order
+from app.services.store_config_service import get_or_create_store_config
 
 
 @pytest.fixture(autouse=True)
@@ -10,7 +11,14 @@ def _auto_open_shift(open_shift):
     pass
 
 
-def _create_order(db_session, status="Pendiente", delivery_method="domicilio", channel="telegram", chat_id="12345"):
+def _create_order(
+    db_session,
+    status="Pendiente",
+    delivery_method="domicilio",
+    channel="telegram",
+    chat_id="12345",
+    payment_method=None,
+):
     order = Order(
         customer_name="Juan Perez",
         shipping_address="Av. Siempreviva 742",
@@ -19,6 +27,7 @@ def _create_order(db_session, status="Pendiente", delivery_method="domicilio", c
         delivery_method=delivery_method,
         channel=channel,
         chat_id=chat_id,
+        payment_method=payment_method,
     )
     db_session.add(order)
     db_session.commit()
@@ -203,3 +212,88 @@ def test_el_pago_de_la_diferencia_por_mercadopago_se_avisa_al_cliente(client, db
     canal, chat_id, mensaje = aviso.call_args[0]
     assert (canal, chat_id) == ("whatsapp", "5491155551234")
     assert "pago de la diferencia" in mensaje
+
+
+# --- Link de pago al aceptar ---
+
+
+def _aceptar(client, order):
+    return client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Confirmado", "estimated_minutes": 30})
+
+
+def test_aceptar_un_pedido_de_mercadopago_manda_el_link_de_pago(client, db_session, mock_send_message):
+    order = _create_order(db_session, payment_method="mercadopago")
+
+    assert _aceptar(client, order).status_code == 200
+
+    mensaje = mock_send_message.await_args.args[2]
+    assert "fue aceptado" in mensaje and "30 minutos" in mensaje
+    assert "Link de pago de MercadoPago por el total exacto de $1,000.00" in mensaje
+    assert "mercadopago.com.ar" in mensaje
+    db_session.refresh(order)
+    assert order.mp_preference_id == f"mp-pref-{order.id}"
+
+
+def test_el_link_al_aceptar_incluye_el_alias_de_cobro(client, db_session, mock_send_message):
+    get_or_create_store_config(db_session).mp_alias = "mipizzeria.mp"
+    db_session.commit()
+    order = _create_order(db_session, payment_method="mercadopago")
+
+    _aceptar(client, order)
+
+    assert "Alias de cobro: mipizzeria.mp" in mock_send_message.await_args.args[2]
+
+
+def test_con_pago_parcial_el_link_al_aceptar_es_por_la_diferencia(client, db_session, mock_send_message):
+    order = _create_order(db_session, payment_method="mercadopago")
+    order.paid_amount = 600
+    order.balance_payment_method = "mercadopago"
+    db_session.commit()
+
+    _aceptar(client, order)
+
+    assert "por la diferencia de $400.00" in mock_send_message.await_args.args[2]
+    db_session.refresh(order)
+    assert order.mp_preference_id == f"mp-pref-{order.id}-extra"
+
+
+@pytest.mark.parametrize("payment_method", ["efectivo", None])
+def test_aceptar_sin_mercadopago_no_manda_link(client, db_session, mock_send_message, payment_method):
+    order = _create_order(db_session, payment_method=payment_method)
+
+    _aceptar(client, order)
+
+    assert "Link de pago" not in mock_send_message.await_args.args[2]
+    db_session.refresh(order)
+    assert order.mp_preference_id is None
+
+
+def test_aceptar_un_pedido_ya_abonado_no_manda_link(client, db_session, mock_send_message):
+    order = _create_order(db_session, payment_method="mercadopago")
+    order.is_paid = True
+    db_session.commit()
+
+    _aceptar(client, order)
+
+    assert "Link de pago" not in mock_send_message.await_args.args[2]
+
+
+def test_aceptar_un_pedido_de_la_web_no_genera_otro_cobro(client, db_session, mock_send_message):
+    order = _create_order(db_session, channel=None, chat_id=None, payment_method="mercadopago")
+    order.mp_preference_id = "pref-de-la-web"
+    db_session.commit()
+
+    _aceptar(client, order)
+
+    db_session.refresh(order)
+    assert order.mp_preference_id == "pref-de-la-web"
+
+
+def test_rechazar_un_pedido_de_mercadopago_no_genera_cobro(client, db_session, mock_send_message):
+    order = _create_order(db_session, payment_method="mercadopago")
+
+    client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "Rechazado"})
+
+    assert "Link de pago" not in mock_send_message.await_args.args[2]
+    db_session.refresh(order)
+    assert order.mp_preference_id is None

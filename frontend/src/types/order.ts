@@ -5,6 +5,12 @@ export interface ProductCategory {
   name: string;
 }
 
+export interface IngredientExtra {
+  id: number;
+  name: string;
+  extra_price: number;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -14,18 +20,22 @@ export interface Product {
   dietary_restrictions: string[];
   /** Ruta de la imagen relativa a la API (ver productImageSrc), o null si no tiene. */
   image_url: string | null;
+  recipe_ingredients?: string[];
+  allowed_extras?: IngredientExtra[];
 }
 
 /** Debe coincidir con MAX_QUANTITY_PER_ITEM del backend. */
 export const MAX_QUANTITY_PER_ITEM = 20;
 
 export interface CartItem {
+  id?: string;
   product: Product;
   promotion?: Promotion;
   quantity: number;
   secondary_product?: Product;
   custom_name?: string;
   unit_price?: number;
+  modifications?: OrderItemModification[];
 }
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
@@ -61,6 +71,7 @@ export interface WebOrderItemPayload {
   quantity: number;
   secondary_product_id?: number;
   custom_name?: string;
+  modifications?: OrderItemModification[];
 }
 
 export interface WebOrderPayload {

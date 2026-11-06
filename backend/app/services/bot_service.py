@@ -16,12 +16,20 @@ from app.services.chat_memory import SesionChat
 from app.services.chat_service import ChatService
 from app.services.human_handoff import MensajeDerivacion, derivaciones
 from app.services.message_batcher import AgrupadorDeMensajes
+from app.services.speech_to_text import transcribir_audio
 
 logger = logging.getLogger(__name__)
 
 MENSAJE_FALLBACK = (
     "Disculpá, tuve un problema para responderte. ¿Podés intentar de nuevo en un momento?"
 )
+
+# Marca con la que la transcripción de un audio entra a la conversación: el bot sabe que puede tener errores.
+PREFIJO_AUDIO = "[Mensaje de voz transcripto]"
+MENSAJE_AUDIO_NO_ENTENDIDO = "🎤 No pude entender tu mensaje de voz. ¿Me lo podés escribir o mandar de nuevo?"
+AVISO_AUDIO_SIN_TRANSCRIBIR = "🎤 Mensaje de voz que no se pudo transcribir."
+# Un audio ya esperó lo que tarda en transcribirse: se responde casi enseguida, sin la espera completa del agrupador.
+ESPERA_TRAS_AUDIO_SEGUNDOS = 1.5
 
 
 async def _mantener_escribiendo(canal: CanalDeMensajeria, chat_id: str) -> None:
@@ -35,6 +43,8 @@ class BotService:
         self.chat_service = ChatService()
         # Chats a los que se les descartó la última respuesta por quedar vieja (ver _respuesta_quedo_vieja).
         self._descartadas: set[str] = set()
+        # Transcripciones de audios en curso (sin la referencia el intérprete podría descartarlas a mitad de camino).
+        self._transcripciones: set[asyncio.Task] = set()
         # Los mensajes seguidos de un mismo chat se responden una sola vez (ver message_batcher).
         self.agrupador = AgrupadorDeMensajes(
             procesar=self.procesar_y_enviar,
@@ -60,14 +70,42 @@ class BotService:
         sesion = self.chat_service.sesiones.setdefault(session_key(canal, chat_id), SesionChat())
         sesion.perfil = {clave: valor for clave, valor in perfil.items() if valor}
 
-    def recibir_mensaje(self, canal: Channel, chat_id: str, mensaje: str) -> None:
+    def recibir_mensaje(self, canal: Channel, chat_id: str, mensaje: str, espera_segundos: float | None = None) -> None:
         """Punto de entrada de los webhooks: encola el mensaje; la respuesta sale cuando el cliente deja de escribir."""
         clave = session_key(canal, chat_id)
         if derivaciones.esta_derivado(clave):
             # Lo atiende una persona: el mensaje le llega al empleado en el panel y el bot no responde.
             derivaciones.registrar_mensaje_del_cliente(clave, mensaje)
             return
-        self.agrupador.recibir(clave, mensaje)
+        self.agrupador.recibir(clave, mensaje, espera_segundos)
+
+    def recibir_audio(self, canal: Channel, chat_id: str, media_id: str) -> None:
+        """Punto de entrada de un mensaje de voz: se transcribe en segundo plano y después sigue como un texto más."""
+        tarea = asyncio.ensure_future(self.transcribir_y_recibir(canal, chat_id, media_id))
+        self._transcripciones.add(tarea)
+        tarea.add_done_callback(self._transcripciones.discard)
+
+    async def transcribir_y_recibir(self, canal: Channel, chat_id: str, media_id: str) -> None:
+        clave = session_key(canal, chat_id)
+        canal_de_mensajeria = obtener_canal(canal)
+        texto = None
+        try:
+            if not derivaciones.esta_derivado(clave):
+                await canal_de_mensajeria.enviar_escribiendo(chat_id)
+            audio = await canal_de_mensajeria.descargar_audio(media_id)
+            if audio is not None:
+                texto = await transcribir_audio(audio.datos, audio.mime_type)
+        except Exception:
+            logger.exception("Error procesando el mensaje de voz de %s", clave)
+
+        if texto:
+            # El texto entra al mismo pipeline que los mensajes escritos (agrupador, IA y herramientas).
+            logger.info("Mensaje de voz de %s transcripto: %r", clave, texto)
+            self.recibir_mensaje(canal, chat_id, f"{PREFIJO_AUDIO} {texto}", espera_segundos=ESPERA_TRAS_AUDIO_SEGUNDOS)
+        elif derivaciones.esta_derivado(clave):
+            derivaciones.registrar_mensaje_del_cliente(clave, AVISO_AUDIO_SIN_TRANSCRIBIR)
+        else:
+            await canal_de_mensajeria.enviar_mensaje(chat_id, MENSAJE_AUDIO_NO_ENTENDIDO)
 
     def transcripcion(self, clave: str) -> list[MensajeDerivacion]:
         """Lo que el cliente y el bot se dijeron hasta ahora en el chat (vacío si el bot no lo tiene en memoria)."""

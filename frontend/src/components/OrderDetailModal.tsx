@@ -63,16 +63,46 @@ function Row({ label, children }: { label: string; children: ReactNode }) {
   );
 }
 
+interface ModificationVariant {
+  quantity: number;
+  modifications: NonNullable<WebOrderItem['modifications']>;
+}
+
 interface SectorRowItem {
   id: string | number;
-  quantity: number;
+  product_id?: number | null;
+  total_quantity: number;
+  normal_quantity: number;
+  promo_quantity: number;
   product_name: string;
-  is_promo: boolean;
-  promo_name?: string;
+  has_normal_units: boolean;
+  has_promo_units: boolean;
+  normal_subtotal: number;
   added_later?: boolean;
-  modifications?: WebOrderItem['modifications'];
-  is_promo_price: boolean;
-  price_display: string;
+  variants: ModificationVariant[];
+  promo_names: string[];
+}
+
+function normalizeProductName(name: string): string {
+  return (name || '')
+    .toLowerCase()
+    .normalize('NFD')
+    .replace(/[\u0300-\u036f]/g, '')
+    .replace(/\s+/g, ' ')
+    .trim();
+}
+
+function cleanModTag(mod: { type: string; name: string; tag?: string }): string {
+  const label = mod.tag || (mod.type === 'negative' ? `SIN ${mod.name.toUpperCase()}` : `EXTRA ${mod.name.toUpperCase()}`);
+  return label.split('[').join('').split(']').join('').trim();
+}
+
+function getModificationsKey(mods?: WebOrderItem['modifications']): string {
+  if (!mods || mods.length === 0) return '';
+  return [...mods]
+    .map((m) => `${m.type}:${(m.name || '').trim().toLowerCase()}:${(m.tag || '').trim()}`)
+    .sort()
+    .join('|');
 }
 
 interface OrderDetailModalProps {
@@ -196,6 +226,19 @@ export function OrderDetailModal({
     const sectorMap = new Map<string, SectorRowItem[]>();
     const promos: WebOrderItem[] = [];
 
+    // Mapeo para alinear sectores entre productos regulares y promociones
+    const productSectorMap = new Map<string, string>();
+    for (const item of detailItems) {
+      if (!item.promotion_id && !item.is_promotion) {
+        const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+        const norm = normalizeProductName(item.product_name);
+        productSectorMap.set(norm, sec);
+        if (item.product_id) {
+          productSectorMap.set(`id:${item.product_id}`, sec);
+        }
+      }
+    }
+
     for (const [itemIdx, item] of detailItems.entries()) {
       const isPromo = Boolean(item.promotion_id || item.is_promotion);
 
@@ -203,54 +246,137 @@ export function OrderDetailModal({
         promos.push(item);
         if (item.promotion_products && item.promotion_products.length > 0) {
           for (const p of item.promotion_products) {
-            const sec = (p.sector?.toLowerCase() as PreparationSector) || 'cocina';
+            const pNorm = normalizeProductName(p.product_name);
+            const sec = (productSectorMap.get(pNorm) ?? (p.product_id ? productSectorMap.get(`id:${p.product_id}`) : null) ?? p.sector?.toLowerCase() ?? 'cocina') as PreparationSector;
             if (!sectorMap.has(sec)) {
               sectorMap.set(sec, []);
             }
-            sectorMap.get(sec)!.push({
-              id: `promo-${item.id ?? item.promotion_id}-${p.product_id}`,
-              quantity: p.quantity,
-              product_name: p.product_name,
-              is_promo: true,
-              promo_name: item.product_name,
-              added_later: item.added_later,
-              modifications: [],
-              is_promo_price: true,
-              price_display: 'Precio de promo',
+            const secList = sectorMap.get(sec)!;
+            const existing = secList.find((it) => {
+              if (p.product_id && it.product_id && it.product_id === p.product_id) return true;
+              return normalizeProductName(it.product_name) === pNorm;
             });
+
+            if (existing) {
+              existing.total_quantity += p.quantity;
+              existing.promo_quantity += p.quantity;
+              existing.has_promo_units = true;
+              if (item.added_later) existing.added_later = true;
+              if (item.product_name && !existing.promo_names.includes(item.product_name)) {
+                existing.promo_names.push(item.product_name);
+              }
+              const emptyVariant = existing.variants.find((v) => !v.modifications || v.modifications.length === 0);
+              if (emptyVariant) {
+                emptyVariant.quantity += p.quantity;
+              } else {
+                existing.variants.push({ quantity: p.quantity, modifications: [] });
+              }
+            } else {
+              secList.push({
+                id: `promo-${item.id ?? item.promotion_id}-${p.product_id}-${itemIdx}`,
+                product_id: p.product_id,
+                total_quantity: p.quantity,
+                normal_quantity: 0,
+                promo_quantity: p.quantity,
+                product_name: p.product_name,
+                has_normal_units: false,
+                has_promo_units: true,
+                normal_subtotal: 0,
+                added_later: item.added_later,
+                variants: [{ quantity: p.quantity, modifications: [] }],
+                promo_names: item.product_name ? [item.product_name] : [],
+              });
+            }
           }
         } else {
-          const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
+          const pNorm = normalizeProductName(item.product_name);
+          const sec = (productSectorMap.get(pNorm) ?? (item.product_id ? productSectorMap.get(`id:${item.product_id}`) : null) ?? item.sector?.toLowerCase() ?? 'cocina') as PreparationSector;
           if (!sectorMap.has(sec)) {
             sectorMap.set(sec, []);
           }
-          sectorMap.get(sec)!.push({
-            id: item.id ?? `promo-${item.promotion_id}`,
-            quantity: item.quantity,
-            product_name: item.product_name,
-            is_promo: true,
-            promo_name: item.product_name,
-            added_later: item.added_later,
-            modifications: item.modifications,
-            is_promo_price: true,
-            price_display: 'Precio de promo',
+          const secList = sectorMap.get(sec)!;
+          const existing = secList.find((it) => {
+            if (item.product_id && it.product_id && it.product_id === item.product_id) return true;
+            return normalizeProductName(it.product_name) === pNorm;
           });
+
+          const mods = item.modifications || [];
+          if (existing) {
+            existing.total_quantity += item.quantity;
+            existing.promo_quantity += item.quantity;
+            existing.has_promo_units = true;
+            if (item.added_later) existing.added_later = true;
+            if (item.product_name && !existing.promo_names.includes(item.product_name)) {
+              existing.promo_names.push(item.product_name);
+            }
+            const modsKey = getModificationsKey(mods);
+            const existingVariant = existing.variants.find((v) => getModificationsKey(v.modifications) === modsKey);
+            if (existingVariant) {
+              existingVariant.quantity += item.quantity;
+            } else {
+              existing.variants.push({ quantity: item.quantity, modifications: mods });
+            }
+          } else {
+            secList.push({
+              id: item.id ?? `promo-${item.promotion_id}-${itemIdx}`,
+              product_id: item.product_id,
+              total_quantity: item.quantity,
+              normal_quantity: 0,
+              promo_quantity: item.quantity,
+              product_name: item.product_name,
+              has_normal_units: false,
+              has_promo_units: true,
+              normal_subtotal: 0,
+              added_later: item.added_later,
+              variants: [{ quantity: item.quantity, modifications: mods }],
+              promo_names: item.product_name ? [item.product_name] : [],
+            });
+          }
         }
       } else {
+        const pNorm = normalizeProductName(item.product_name);
         const sec = (item.sector?.toLowerCase() as PreparationSector) || 'cocina';
         if (!sectorMap.has(sec)) {
           sectorMap.set(sec, []);
         }
-        sectorMap.get(sec)!.push({
-          id: item.id ?? item.product_id ?? `item-${itemIdx}`,
-          quantity: item.quantity,
-          product_name: item.product_name,
-          is_promo: false,
-          added_later: item.added_later,
-          modifications: item.modifications,
-          is_promo_price: false,
-          price_display: formatCurrency(item.subtotal),
+        const secList = sectorMap.get(sec)!;
+        const existing = secList.find((it) => {
+          if (item.product_id && it.product_id && it.product_id === item.product_id) return true;
+          return normalizeProductName(it.product_name) === pNorm;
         });
+
+        const mods = item.modifications || [];
+        if (existing) {
+          existing.total_quantity += item.quantity;
+          existing.normal_quantity += item.quantity;
+          existing.has_normal_units = true;
+          existing.normal_subtotal += item.subtotal;
+          if (!existing.product_id && item.product_id) existing.product_id = item.product_id;
+          if (item.added_later) existing.added_later = true;
+
+          const modsKey = getModificationsKey(mods);
+          const existingVariant = existing.variants.find((v) => getModificationsKey(v.modifications) === modsKey);
+          if (existingVariant) {
+            existingVariant.quantity += item.quantity;
+          } else {
+            existing.variants.push({ quantity: item.quantity, modifications: mods });
+          }
+        } else {
+          secList.push({
+            id: item.id ?? item.product_id ?? `item-${itemIdx}`,
+            product_id: item.product_id,
+            total_quantity: item.quantity,
+            normal_quantity: item.quantity,
+            promo_quantity: 0,
+            product_name: item.product_name,
+            has_normal_units: true,
+            has_promo_units: false,
+            normal_subtotal: item.subtotal,
+            added_later: item.added_later,
+            variants: [{ quantity: item.quantity, modifications: mods }],
+            promo_names: [],
+          });
+        }
       }
     }
 
@@ -421,6 +547,8 @@ export function OrderDetailModal({
                       activeTabClass: '',
                     };
 
+                    const totalSectorItems = items.reduce((acc, i) => acc + i.total_quantity, 0);
+
                     return (
                       <div key={sector} className="rounded-xl border border-gray-200/80 overflow-hidden bg-white">
                         <div className="flex items-center justify-between px-3 py-1.5 bg-gray-50/90 border-b border-gray-100 text-xs font-bold text-gray-800">
@@ -429,21 +557,30 @@ export function OrderDetailModal({
                             <span>{meta.label}</span>
                           </span>
                           <span className="text-[11px] font-medium text-gray-500">
-                            {items.reduce((acc, i) => acc + i.quantity, 0)} {items.reduce((acc, i) => acc + i.quantity, 0) === 1 ? 'ítem' : 'ítems'}
+                            {totalSectorItems} {totalSectorItems === 1 ? 'ítem' : 'ítems'}
                           </span>
                         </div>
                         <table className="w-full text-xs">
+                          <thead>
+                            <tr className="border-b border-gray-100 text-[10px] font-bold text-gray-500 uppercase tracking-wider bg-gray-50/40">
+                              <th scope="col" className="py-1 px-3 text-left w-14">Cant.</th>
+                              <th scope="col" className="py-1 pr-2 text-left">Producto</th>
+                              <th scope="col" className="py-1 pr-3 text-right w-36">Total</th>
+                            </tr>
+                          </thead>
                           <tbody className="divide-y divide-gray-100">
                             {items.map((item) => (
                               <tr key={item.id} className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
-                                <td className="py-1.5 px-3 font-semibold text-gray-700 w-8">{item.quantity}</td>
-                                <td className="py-1.5 pr-2 text-gray-900 font-medium">
+                                <td className="py-2 px-3 align-top font-semibold text-gray-800">
+                                  <div className="text-sm font-bold">{item.total_quantity}</div>
+                                  {item.has_promo_units && (
+                                    <div className="text-[10px] text-amber-700 font-semibold whitespace-nowrap">
+                                      ({item.promo_quantity} en promo)
+                                    </div>
+                                  )}
+                                </td>
+                                <td className="py-2 pr-2 text-gray-900 font-medium">
                                   <div className="flex items-center gap-1.5 flex-wrap">
-                                    {item.is_promo && (
-                                      <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-100 text-amber-900 border border-amber-200">
-                                        Promo
-                                      </span>
-                                    )}
                                     <span>{item.product_name}</span>
                                     {item.added_later && (
                                       <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
@@ -451,30 +588,51 @@ export function OrderDetailModal({
                                       </span>
                                     )}
                                   </div>
-                                  {item.modifications && item.modifications.length > 0 && (
-                                    <div className="text-[11px] font-bold uppercase mt-0.5 flex flex-wrap gap-1.5">
-                                      {item.modifications.map((mod, idx) => (
-                                        <span
-                                          key={idx}
-                                          className={`font-bold px-1.5 py-0.5 rounded ${
-                                            mod.type === 'negative'
-                                              ? 'bg-rose-100 text-rose-800'
-                                              : 'bg-emerald-100 text-emerald-800'
-                                          }`}
-                                        >
-                                          {mod.tag || (mod.type === 'negative' ? `[SIN ${mod.name.toUpperCase()}]` : `[EXTRA ${mod.name.toUpperCase()}]`)}
-                                        </span>
-                                      ))}
+                                  {item.variants && item.variants.some((v) => v.modifications && v.modifications.length > 0) && (
+                                    <div className="mt-1 space-y-1">
+                                      {item.variants
+                                        .filter((v) => v.modifications && v.modifications.length > 0)
+                                        .map((variant, vIdx) => {
+                                          const hasMultipleVariants = item.variants.length > 1;
+                                          return (
+                                            <div key={vIdx} className="flex items-center gap-1.5 flex-wrap text-[10px]">
+                                              {hasMultipleVariants && (
+                                                <span className="font-bold text-gray-500 whitespace-nowrap">
+                                                  {variant.quantity}x
+                                                </span>
+                                              )}
+                                              {variant.modifications.map((mod, mIdx) => (
+                                                <span
+                                                  key={mIdx}
+                                                  className={`font-semibold text-[10px] px-1.5 py-0.2 rounded ${
+                                                    mod.type === 'negative'
+                                                      ? 'bg-rose-100 text-rose-800'
+                                                      : 'bg-emerald-100 text-emerald-800'
+                                                  }`}
+                                                >
+                                                  {cleanModTag(mod)}
+                                                </span>
+                                              ))}
+                                            </div>
+                                          );
+                                        })}
                                     </div>
                                   )}
                                 </td>
-                                <td className="py-1.5 pr-3 text-right font-semibold whitespace-nowrap text-gray-900">
-                                  {item.is_promo_price ? (
-                                    <span className="text-amber-800 font-medium italic text-xs">
-                                      {item.price_display}
-                                    </span>
+                                <td className="py-2 pr-3 text-right align-top font-semibold whitespace-nowrap text-gray-900">
+                                  {item.has_normal_units ? (
+                                    <div>
+                                      <span>{formatCurrency(item.normal_subtotal)}</span>
+                                      {item.has_promo_units && (
+                                        <div className="text-[10px] text-amber-800 font-normal italic">
+                                          No incluye precios de promo
+                                        </div>
+                                      )}
+                                    </div>
                                   ) : (
-                                    item.price_display
+                                    <span className="text-amber-800 font-medium italic text-xs">
+                                      Precio de promo
+                                    </span>
                                   )}
                                 </td>
                               </tr>
@@ -496,19 +654,24 @@ export function OrderDetailModal({
                           {promoItems.reduce((acc, p) => acc + p.quantity, 0) === 1 ? 'promo' : 'promos'}
                         </span>
                       </div>
-                      <div className="divide-y divide-amber-100">
-                        {promoItems.map((promo, idx) => (
-                          <div
-                            key={promo.id ?? promo.promotion_id ?? idx}
-                            className={`p-3 space-y-1.5 ${promo.added_later ? 'bg-amber-50/70' : ''}`}
-                          >
-                            <div className="flex items-start justify-between gap-3">
-                              <div>
-                                <div className="flex items-center gap-2 flex-wrap">
-                                  <span className="font-bold text-xs text-gray-900">
-                                    {promo.quantity > 1 ? `${promo.quantity}x ` : ''}
-                                    {promo.product_name}
-                                  </span>
+                      <table className="w-full text-xs">
+                        <thead>
+                          <tr className="border-b border-amber-200/70 text-[10px] font-bold text-amber-900/70 uppercase tracking-wider bg-amber-50/50">
+                            <th scope="col" className="py-1 px-3 text-left w-14">Cant.</th>
+                            <th scope="col" className="py-1 pr-2 text-left">Promoción</th>
+                            <th scope="col" className="py-1 pr-3 text-right w-36">Total</th>
+                          </tr>
+                        </thead>
+                        <tbody className="divide-y divide-amber-100">
+                          {promoItems.map((promo, idx) => (
+                            <tr
+                              key={promo.id ?? promo.promotion_id ?? idx}
+                              className={`transition ${promo.added_later ? 'bg-amber-100/60' : 'hover:bg-amber-50/40'}`}
+                            >
+                              <td className="py-2 px-3 align-top font-semibold text-gray-800">{promo.quantity}</td>
+                              <td className="py-2 pr-2 text-gray-900 font-medium">
+                                <div className="flex items-center gap-1.5 flex-wrap">
+                                  <span className="font-bold text-xs">{promo.product_name}</span>
                                   {promo.added_later && (
                                     <span className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded-md bg-amber-200 text-amber-900">
                                       Nuevo
@@ -520,39 +683,14 @@ export function OrderDetailModal({
                                     {promo.promotion_description}
                                   </p>
                                 )}
-                              </div>
-                              <div className="text-right shrink-0">
-                                <span className="text-sm font-black text-gray-900">
-                                  {formatCurrency(promo.subtotal)}
-                                </span>
-                                {promo.quantity > 1 && (
-                                  <div className="text-[10px] text-gray-500 font-medium">
-                                    {formatCurrency(promo.unit_price)} c/u
-                                  </div>
-                                )}
-                              </div>
-                            </div>
-                            {promo.promotion_products && promo.promotion_products.length > 0 && (
-                              <div className="pt-0.5">
-                                <span className="text-[10px] font-bold text-gray-500 uppercase tracking-wider block mb-1">
-                                  Incluye:
-                                </span>
-                                <div className="flex flex-wrap gap-1.5">
-                                  {promo.promotion_products.map((p, pIdx) => (
-                                    <span
-                                      key={pIdx}
-                                      className="bg-white border border-amber-200/80 text-gray-800 text-[11px] px-2 py-0.5 rounded-md font-medium shadow-2xs"
-                                    >
-                                      <span className="font-bold text-amber-700">{p.quantity}x</span>{' '}
-                                      {p.product_name}
-                                    </span>
-                                  ))}
-                                </div>
-                              </div>
-                            )}
-                          </div>
-                        ))}
-                      </div>
+                              </td>
+                              <td className="py-2 pr-3 text-right align-top font-bold text-gray-900 whitespace-nowrap">
+                                {formatCurrency(promo.subtotal)}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
                     </div>
                   )}
                 </div>

@@ -17,12 +17,36 @@ export const api = axios.create({
   timeout: 10000,
 });
 
+let adminPrivilegedToken: string | null = null;
+let cashPrivilegedToken: string | null = null;
+
+export function setAdminPrivilegedToken(token: string | null): void {
+  adminPrivilegedToken = token;
+}
+
+export function setCashPrivilegedToken(token: string | null): void {
+  cashPrivilegedToken = token;
+}
+
+export function getAdminPrivilegedToken(): string | null {
+  return adminPrivilegedToken;
+}
+
+export function getCashPrivilegedToken(): string | null {
+  return cashPrivilegedToken;
+}
 
 api.interceptors.request.use(
   (config: InternalAxiosRequestConfig) => {
     const token = localStorage.getItem('token');
     if (token && config.headers) {
       config.headers.Authorization = `Bearer ${token}`;
+    }
+    if (adminPrivilegedToken && config.headers) {
+      config.headers['X-Privileged-Token'] = adminPrivilegedToken;
+    }
+    if (cashPrivilegedToken && config.headers) {
+      config.headers['X-Cash-Privileged-Token'] = cashPrivilegedToken;
     }
     return config;
   },
@@ -61,6 +85,12 @@ api.interceptors.response.use(
         break;
 
       case 403:
+        if (serverMessage?.toLowerCase().includes('pin de administración')) {
+          adminPrivilegedToken = null;
+        }
+        if (serverMessage?.toLowerCase().includes('pin de caja')) {
+          cashPrivilegedToken = null;
+        }
         errorResponse.message = serverMessage || 'No tienes permisos necesarios para realizar esta acción.';
         break;
 

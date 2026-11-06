@@ -5,16 +5,33 @@ import { createIngredient, deleteIngredient, fetchIngredients, updateIngredient 
 import { INPUT_CLASS } from '@/styles/forms';
 import type { Ingredient, IngredientPayload } from '@/types/ingredient';
 import { getErrorMessage } from '@/utils/errors';
+import { formatCurrency } from '@/utils/currency';
 import { SUGGESTED_UNITS } from '@/utils/ingredients';
 
 function validate(payload: IngredientPayload): string | null {
   if (!payload.name.trim()) return 'Ingresá el nombre del ingrediente.';
   if (!payload.unit.trim()) return 'Ingresá la unidad de medida (ej. gramos o unidades).';
+  if (payload.cost !== undefined && (isNaN(payload.cost) || payload.cost < 0)) {
+    return 'El costo unitario debe ser mayor o igual a cero.';
+  }
+  if (payload.extra_price !== undefined && (isNaN(payload.extra_price) || payload.extra_price < 0)) {
+    return 'El precio extra debe ser mayor o igual a cero.';
+  }
   return null;
 }
 
 function trimmed(payload: IngredientPayload): IngredientPayload {
-  return { name: payload.name.trim(), unit: payload.unit.trim() };
+  const res: IngredientPayload = {
+    name: payload.name.trim(),
+    unit: payload.unit.trim(),
+  };
+  if (payload.cost !== undefined && !isNaN(payload.cost) && payload.cost > 0) {
+    res.cost = Number(payload.cost);
+  }
+  if (payload.extra_price !== undefined && !isNaN(payload.extra_price) && payload.extra_price > 0) {
+    res.extra_price = Number(payload.extra_price);
+  }
+  return res;
 }
 
 export function IngredientesView() {
@@ -27,11 +44,11 @@ export function IngredientesView() {
   } = useAsyncData(fetchIngredients, 'No se pudo cargar la lista de ingredientes.');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [newIngredient, setNewIngredient] = useState<IngredientPayload>({ name: '', unit: '' });
+  const [newIngredient, setNewIngredient] = useState<IngredientPayload>({ name: '', unit: '', cost: 0, extra_price: 0 });
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<IngredientPayload>({ name: '', unit: '' });
+  const [editDraft, setEditDraft] = useState<IngredientPayload>({ name: '', unit: '', cost: 0, extra_price: 0 });
   const [savingEdit, setSavingEdit] = useState(false);
 
   const handleCreate = async (event: FormEvent) => {
@@ -44,7 +61,7 @@ export function IngredientesView() {
     setCreating(true);
     try {
       await createIngredient(trimmed(newIngredient));
-      setNewIngredient({ name: '', unit: newIngredient.unit });
+      setNewIngredient({ name: '', unit: newIngredient.unit, cost: 0, extra_price: 0 });
       reload();
     } catch (err) {
       setActionError(getErrorMessage(err, 'No se pudo agregar el ingrediente.'));
@@ -55,7 +72,12 @@ export function IngredientesView() {
 
   const startEditing = (ingredient: Ingredient) => {
     setEditingId(ingredient.id);
-    setEditDraft({ name: ingredient.name, unit: ingredient.unit });
+    setEditDraft({
+      name: ingredient.name,
+      unit: ingredient.unit,
+      cost: ingredient.cost ?? 0,
+      extra_price: ingredient.extra_price ?? 0,
+    });
     setActionError(null);
   };
 
@@ -123,7 +145,37 @@ export function IngredientesView() {
             value={newIngredient.unit}
             onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
             maxLength={30}
-            className={`${INPUT_CLASS} sm:w-44`}
+            className={`${INPUT_CLASS} sm:w-32`}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            aria-label="Costo unitario del nuevo ingrediente"
+            placeholder="Costo ($)"
+            value={newIngredient.cost || ''}
+            onChange={(e) =>
+              setNewIngredient({
+                ...newIngredient,
+                cost: e.target.value === '' ? 0 : Number(e.target.value),
+              })
+            }
+            className={`${INPUT_CLASS} sm:w-28`}
+          />
+          <input
+            type="number"
+            min="0"
+            step="0.01"
+            aria-label="Precio extra del nuevo ingrediente"
+            placeholder="Precio extra ($)"
+            value={newIngredient.extra_price || ''}
+            onChange={(e) =>
+              setNewIngredient({
+                ...newIngredient,
+                extra_price: e.target.value === '' ? 0 : Number(e.target.value),
+              })
+            }
+            className={`${INPUT_CLASS} sm:w-28`}
           />
           <button
             type="submit"
@@ -153,6 +205,8 @@ export function IngredientesView() {
                 <tr>
                   <th className="py-3 px-5">Ingrediente</th>
                   <th className="py-3 px-5">Unidad</th>
+                  <th className="py-3 px-5">Costo unitario</th>
+                  <th className="py-3 px-5">Precio extra</th>
                   <th className="py-3 px-5">Usado en</th>
                   <th className="py-3 px-5 text-right">Acciones</th>
                 </tr>
@@ -182,6 +236,38 @@ export function IngredientesView() {
                           className={`${INPUT_CLASS} w-full`}
                         />
                       </td>
+                      <td className="py-2 px-5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          aria-label="Costo unitario del ingrediente"
+                          value={editDraft.cost || ''}
+                          onChange={(e) =>
+                            setEditDraft({
+                              ...editDraft,
+                              cost: e.target.value === '' ? 0 : Number(e.target.value),
+                            })
+                          }
+                          className={`${INPUT_CLASS} w-full`}
+                        />
+                      </td>
+                      <td className="py-2 px-5">
+                        <input
+                          type="number"
+                          min="0"
+                          step="0.01"
+                          aria-label="Precio extra del ingrediente"
+                          value={editDraft.extra_price || ''}
+                          onChange={(e) =>
+                            setEditDraft({
+                              ...editDraft,
+                              extra_price: e.target.value === '' ? 0 : Number(e.target.value),
+                            })
+                          }
+                          className={`${INPUT_CLASS} w-full`}
+                        />
+                      </td>
                       <td className="py-2 px-5 text-gray-500">{ingredient.products_count} productos</td>
                       <td className="py-2 px-5 text-right whitespace-nowrap space-x-2">
                         <button
@@ -205,6 +291,12 @@ export function IngredientesView() {
                     <tr key={ingredient.id} className="hover:bg-gray-50/50">
                       <td className="py-3 px-5 font-semibold text-gray-900">{ingredient.name}</td>
                       <td className="py-3 px-5 text-gray-600">{ingredient.unit}</td>
+                      <td className="py-3 px-5 text-gray-600 font-medium">
+                        {ingredient.cost ? formatCurrency(ingredient.cost) : '—'}
+                      </td>
+                      <td className="py-3 px-5 text-gray-600">
+                        {ingredient.extra_price ? formatCurrency(ingredient.extra_price) : '—'}
+                      </td>
                       <td className="py-3 px-5 text-gray-500">
                         {ingredient.products_count === 1 ? '1 producto' : `${ingredient.products_count} productos`}
                       </td>

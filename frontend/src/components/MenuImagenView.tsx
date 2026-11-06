@@ -261,7 +261,7 @@ export function MenuImagenView() {
   };
 
   const currentImages = activeTab === 'menu' ? (menu?.images ?? []) : (promoImages?.images ?? []);
-  const maxImages = activeTab === 'menu' ? (menu?.max_images ?? 3) : (promoImages?.max_images ?? 3);
+  const maxImages = activeTab === 'menu' ? (menu?.max_images ?? 5) : (promoImages?.max_images ?? 5);
   const isFull = currentImages.length >= maxImages;
   const currentLink = activeTab === 'menu' ? menuLink : promoLink;
   const savedLink = activeTab === 'menu' ? savedMenuLink : savedPromoLink;
@@ -469,7 +469,9 @@ export function MenuImagenView() {
 
             {isFull ? (
               <p className="text-xs text-gray-500">
-                El menú ya tiene el máximo de {maxImages} imágenes. Quitá alguna para sumar otra.
+                {activeTab === 'menu'
+                  ? `El menú ya tiene el máximo de ${maxImages} imágenes. Quitá alguna para sumar otra.`
+                  : `La sección de promociones ya tiene el máximo de ${maxImages} imágenes. Quitá alguna para sumar otra.`}
               </p>
             ) : selectedFile && previewUrl ? (
               <>

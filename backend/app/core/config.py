@@ -1,4 +1,5 @@
 import hashlib
+import re
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
@@ -39,6 +40,7 @@ class Settings(BaseSettings):
 
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str
+    ADMIN_PIN: str = "1234"
 
     # WhatsApp Business Platform (Cloud API oficial de Meta). Ver backend/docs/whatsapp.md.
     WHATSAPP_ACCESS_TOKEN: str = ""
@@ -51,8 +53,16 @@ class Settings(BaseSettings):
 
     # Los mensajes que un cliente manda seguidos al bot se esperan este tiempo y se responden juntos, de una vez.
     # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
-    BOT_BATCH_WINDOW_SECONDS: float = 2.0
-    BOT_BATCH_MAX_WAIT_SECONDS: float = 6.0
+    # Los tiempos de espera de mensajes seguidos de dev (5 s y 15 s), más los modelos de Gemini del bot.
+    BOT_BATCH_WINDOW_SECONDS: float = 5.0
+    BOT_BATCH_MAX_WAIT_SECONDS: float = 15.0
+
+    # Modelos de Gemini del bot (chat y transcripción de mensajes de voz, con la misma GOOGLE_API_KEY), todos del
+    # plan gratuito. Si el principal no responde a tiempo o falla, se prueban los de respaldo en orden (separados
+    # por coma; vacío: sin respaldo). Cada modelo tiene su propia cuota gratuita. Ver gemini_models.py.
+    BOT_LLM_MODEL: str = "gemini-3.5-flash-lite"
+    BOT_LLM_FALLBACK_MODELS: str = "gemini-flash-lite-latest,gemini-3.1-flash-lite"
+
     # Google Maps (Routes API) para calcular la ruta y los tiempos de llegada de los viajes de los repartidores.
     GOOGLE_MAPS_API_KEY: str = ""
     # Dirección de la API de rutas; solo se cambia en los tests e2e, que usan un servidor falso.
@@ -106,6 +116,8 @@ class Settings(BaseSettings):
             faltan = [nombre for nombre in requeridas[canal] if not getattr(self, nombre)]
             if faltan:
                 raise ValueError(f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}.")
+        if not re.match(r"^\d{4}$", self.ADMIN_PIN):
+            raise ValueError("ADMIN_PIN debe ser un código numérico de 4 dígitos (ej. '1234').")
         return self
 
     @property

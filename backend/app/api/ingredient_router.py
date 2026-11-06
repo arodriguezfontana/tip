@@ -26,7 +26,9 @@ def post_ingredient(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> IngredientResponse:
-    return IngredientResponse.from_usage(ingredient_service.create_ingredient(db, payload.name, payload.unit))
+    return IngredientResponse.from_usage(
+        ingredient_service.create_ingredient(db, payload.name, payload.unit, payload.extra_price, payload.cost)
+    )
 
 
 @router.put("/{ingredient_id}", response_model=IngredientResponse)
@@ -36,7 +38,9 @@ def put_ingredient(
     db: Session = Depends(get_db),
     current_user: User = Depends(get_current_admin),
 ) -> IngredientResponse:
-    usage = ingredient_service.update_ingredient(db, ingredient_id, payload.name, payload.unit)
+    usage = ingredient_service.update_ingredient(
+        db, ingredient_id, payload.name, payload.unit, payload.extra_price, payload.cost
+    )
     return IngredientResponse.from_usage(usage)
 
 

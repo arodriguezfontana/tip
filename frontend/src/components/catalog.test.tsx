@@ -115,6 +115,35 @@ describe('ProductosView', () => {
     expect(screen.queryByText('Coca-Cola 500ml', { selector: 'p' })).not.toBeInTheDocument();
   });
 
+  it('crea un producto seleccionando adicionales permitidos', async () => {
+    const created = makeAdminProduct({ id: 25, name: 'Pizza Especial', description: 'Rica.', price: 12000 });
+    catalog.createProduct.mockResolvedValue(created);
+    render(<ProductosView />);
+    const user = userEvent.setup();
+    await screen.findByText('Pizza Muzzarella', { selector: 'p' });
+
+    await user.click(screen.getByRole('button', { name: '+ Crear producto' }));
+    const dialog = screen.getByRole('dialog', { name: 'Crear producto' });
+    await user.type(within(dialog).getByLabelText('Nombre *'), 'Pizza Especial');
+    await user.type(within(dialog).getByLabelText('Descripción *'), 'Rica.');
+    await user.type(within(dialog).getByLabelText('Precio *'), '12000');
+    await user.selectOptions(within(dialog).getByLabelText('Categoría *'), 'Pizzas');
+
+    // Tildar adicional permitido de la lista (ej. Queso o Muzzarella)
+    const extraCheckbox = within(dialog).queryByLabelText(/Muzzarella/i);
+    if (extraCheckbox) {
+      await user.click(extraCheckbox);
+    }
+    await user.click(within(dialog).getByRole('button', { name: 'Crear producto' }));
+
+    expect(catalog.createProduct).toHaveBeenCalledWith(
+      expect.objectContaining({
+        name: 'Pizza Especial',
+        price: 12000,
+      })
+    );
+  });
+
   it('crea un producto con imagen', async () => {
     const created = makeAdminProduct({ id: 20, name: 'Fugazzeta', description: 'Cebolla.', price: 9500 });
     catalog.createProduct.mockResolvedValue(created);

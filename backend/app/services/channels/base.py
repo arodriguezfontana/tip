@@ -47,6 +47,18 @@ class ImagenParaEnviar:
     clave: int = 0
 
 
+@dataclass(frozen=True)
+class AudioRecibido:
+    """Mensaje de voz que mandó un cliente, ya descargado de la plataforma."""
+
+    datos: bytes
+    mime_type: str
+
+
+# WhatsApp no acepta audios de más de 16 MB: algo más grande no es un mensaje de voz válido.
+MAX_BYTES_AUDIO = 16 * 1024 * 1024
+
+
 class CanalDeMensajeria(ABC):
     canal: ClassVar[Channel]
     # Cada cuántos segundos hay que renovar el aviso "escribiendo..." mientras se prepara la respuesta.
@@ -67,6 +79,10 @@ class CanalDeMensajeria(ABC):
         """Manda la imagen, con un pie de foto si no está vacío. Devuelve si salió; False si el canal no la soporta
         o falló."""
         return False
+
+    async def descargar_audio(self, media_id: str) -> AudioRecibido | None:
+        """Descarga un mensaje de voz del cliente. None si el canal no los soporta o la descarga falla."""
+        return None
 
     async def registrar_webhook(self) -> None:
         """Deja al canal apuntando a este backend, si la plataforma lo permite por API."""

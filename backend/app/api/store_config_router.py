@@ -1,7 +1,7 @@
 from fastapi import APIRouter, Depends
 from sqlalchemy.orm import Session
 
-from app.api.deps import get_current_admin
+from app.api.deps import get_current_admin, get_optional_current_user
 from app.db.session import get_db
 from app.models.user import User
 from app.schemas.store_config_schemas import StoreConfigResponse, StoreConfigUpdate
@@ -11,9 +11,16 @@ router = APIRouter()
 
 
 @router.get("", response_model=StoreConfigResponse)
-def get_store_config_endpoint(db: Session = Depends(get_db)) -> StoreConfigResponse:
+def get_store_config_endpoint(
+    db: Session = Depends(get_db),
+    current_user: User | None = Depends(get_optional_current_user),
+) -> StoreConfigResponse:
     """Configuración pública del local (identidad visual y datos de contacto)."""
-    return StoreConfigResponse.model_validate(get_or_create_store_config(db))
+    config = get_or_create_store_config(db)
+    res = StoreConfigResponse.model_validate(config)
+    if not (current_user and current_user.is_admin):
+        res.cash_pin = None
+    return res
 
 
 @router.put("", response_model=StoreConfigResponse)
@@ -24,4 +31,3 @@ def update_store_config_endpoint(
 ) -> StoreConfigResponse:
     """Actualiza la identidad y diseño del local (exclusivo para administradores)."""
     return StoreConfigResponse.model_validate(update_store_config(db, payload))
-

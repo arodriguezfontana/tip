@@ -262,6 +262,7 @@ export function ProductosView() {
         <ProductFormModal
           product={productForm.product}
           categories={categories}
+          availableIngredients={ingredients}
           onClose={() => setProductForm(null)}
           onSave={handleSaveProduct}
         />
