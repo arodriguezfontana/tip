@@ -112,12 +112,13 @@ class Ingredient(Base):
     id = Column(Integer, primary_key=True, index=True)
     name = Column(String(100), unique=True, index=True, nullable=False)
     unit = Column(String(30), nullable=False, server_default="unidades")
+    cost = Column(MoneyColumn, nullable=False, default=0, server_default="0")
     extra_price = Column(MoneyColumn, nullable=False, default=0, server_default="0")
 
     used_in_products = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
     allowed_in_products = relationship("ProductAllowedExtra", back_populates="ingredient", cascade="all, delete-orphan")
 
-    @validates("extra_price")
+    @validates("cost", "extra_price")
     def _as_money(self, _key: str, value) -> Decimal:
         return to_money(value)
 
