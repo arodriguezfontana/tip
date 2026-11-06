@@ -53,6 +53,18 @@ class Settings(BaseSettings):
     # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
     BOT_BATCH_WINDOW_SECONDS: float = 2.0
     BOT_BATCH_MAX_WAIT_SECONDS: float = 6.0
+    # Google Maps (Routes API) para calcular la ruta y los tiempos de llegada de los viajes de los repartidores.
+    GOOGLE_MAPS_API_KEY: str = ""
+    # Dirección de la API de rutas; solo se cambia en los tests e2e, que usan un servidor falso.
+    GOOGLE_MAPS_ROUTES_URL: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
+    # API que ubica las direcciones de los pedidos (también se reemplaza en los e2e).
+    GOOGLE_MAPS_GEOCODE_URL: str = "https://maps.googleapis.com/maps/api/geocode/json"
+    # Una dirección que, aun la más cercana al local, queda más lejos que esto se rechaza (0 = sin límite).
+    DELIVERY_MAX_DISTANCE_KM: float = 50.0
+    # Sesgo regional de las direcciones (código de país).
+    GOOGLE_MAPS_REGION: str = "ar"
+    # Minutos que el repartidor tarda en entregar a cada cliente: se suman a la llegada de las paradas siguientes.
+    DELIVERY_STOP_TOLERANCE_MINUTES: int = 3
     # Sin mensajes durante este tiempo, un chat intervenido por una persona vuelve al bot (10 minutos).
     MANUAL_MODE_TIMEOUT_SECONDS: float = 600.0
 

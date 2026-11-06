@@ -1,5 +1,5 @@
 import { expect, test } from '@playwright/test';
-import { clearBoard, column, createWebOrder, goToSection, loginAsAdmin, money, orderCard, unique } from './helpers';
+import { clearBoard, column, createDriver, createWebOrder, goToSection, loginAsAdmin, money, orderCard, unique } from './helpers';
 
 test.describe('Ciclo de vida de un pedido en el panel', () => {
   test.beforeEach(async ({ request }) => {
@@ -16,6 +16,7 @@ test.describe('Ciclo de vida de un pedido en el panel', () => {
       ],
     });
 
+    const driver = await createDriver(request, unique('Nico'));
     await loginAsAdmin(page);
 
     // Los pedidos web se aceptan solos: entran confirmados, con la demora automática y sus datos.
@@ -37,9 +38,16 @@ test.describe('Ciclo de vida de un pedido en el panel', () => {
     await page.keyboard.press('Escape');
     await expect(detalle).toBeHidden();
 
+    // Pasar a "En Camino" solo arma el viaje: hasta iniciarlo no se puede finalizar ni sale ningún aviso.
     await confirmado.getByRole('button', { name: 'Marcar En Camino' }).click();
     const enCamino = orderCard(column(page, 'En Camino'), order.id);
-    await expect(enCamino).toBeVisible();
+    await expect(enCamino).toContainText('Armando viaje');
+    await expect(enCamino.getByRole('button', { name: 'Finalizar' })).toHaveCount(0);
+
+    // Con repartidor asignado se inicia el viaje: la ruta se calcula y el pedido sale con su llegada estimada.
+    await enCamino.getByRole('combobox', { name: 'Asignar repartidor' }).selectOption({ label: `${driver.name} (${driver.phone})` });
+    await page.getByRole('button', { name: `Iniciar viaje de ${driver.name}` }).click();
+    await expect(enCamino).toContainText(/En viaje · llega en ~\d+ min/);
 
     await enCamino.getByRole('button', { name: 'Finalizar' }).click();
     await expect(page.getByRole('button', { name: `Ver detalle del pedido #${order.id}`, exact: true })).toBeHidden();

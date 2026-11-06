@@ -1,6 +1,6 @@
 import re
 
-from sqlalchemy import Boolean, Column, DateTime, Integer, String
+from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
 from sqlalchemy.orm import relationship, validates
 from sqlalchemy.sql import func
 
@@ -42,3 +42,24 @@ class DeliveryDriver(Base):
         if not cleaned:
             raise ValueError("El nombre del repartidor no puede estar vacío.")
         return cleaned
+
+
+class DeliveryTrip(Base):
+    """Recorrido de un repartidor con varios pedidos, despachado de una sola vez.
+
+    Se crea al iniciar el viaje: la ruta se calcula sobre todos los pedidos del lote y cada uno queda con su parada y
+    su tiempo estimado de llegada. Los pedidos que se sumen después al mismo repartidor forman otro viaje."""
+
+    __tablename__ = "delivery_trips"
+
+    id = Column(Integer, primary_key=True, index=True)
+    delivery_driver_id = Column(
+        Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True
+    )
+    dispatched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    # Duración total de la ida (hasta la última entrega, con la tolerancia de cada parada), en minutos.
+    # Vacía si el viaje salió sin poder calcular la ruta.
+    total_minutes = Column(Integer, nullable=True)
+
+    driver = relationship("DeliveryDriver")
+    orders = relationship("Order", back_populates="trip", order_by="Order.trip_stop")

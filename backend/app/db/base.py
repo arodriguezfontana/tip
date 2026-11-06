@@ -8,7 +8,7 @@ from app.db.base_class import Base
 from app.models.business_hours import BusinessHours
 from app.models.cash_shift import CashMovement, CashShift
 from app.models.client import Client
-from app.models.delivery_driver import DeliveryDriver
+from app.models.delivery_driver import DeliveryDriver, DeliveryTrip
 from app.models.menu import Category, Ingredient, Product, ProductImage, ProductIngredient
 from app.models.menu_image import MenuImage
 from app.models.order import Order, OrderItem, OrderStatusEvent
@@ -24,6 +24,7 @@ __all__ = [
     "Category",
     "Client",
     "DeliveryDriver",
+    "DeliveryTrip",
     "Ingredient",
     "MenuImage",
     "Order",

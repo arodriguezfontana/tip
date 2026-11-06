@@ -257,12 +257,46 @@ describe('ComandaCard', () => {
     expect(onStatusChange).toHaveBeenCalledWith(101, next, undefined);
   });
 
-  it.each(['En Camino', 'Listo para Retirar'] as const)('un pedido %s se finaliza', async (status) => {
-    const { onStatusChange, user } = renderCard({ status });
+  it.each([
+    ['En Camino', { status: 'En Camino', trip_id: 7, eta_minutes: 18 }],
+    ['Listo para Retirar', { status: 'Listo para Retirar' }],
+  ] as const)('un pedido %s se finaliza', async (_nombre, overrides) => {
+    const { onStatusChange, user } = renderCard(overrides);
 
     await user.click(screen.getByRole('button', { name: 'Finalizar' }));
 
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Finalizado', undefined);
+  });
+
+  it('un pedido En Camino sin viaje iniciado está armando viaje: no se finaliza hasta que salga', () => {
+    renderCard({ status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: 1, delivery_driver_name: 'Nico' });
+
+    expect(screen.getByText('Armando viaje')).toBeInTheDocument();
+    expect(screen.getByText('Esperando que inicies el viaje del repartidor.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
+  });
+
+  it('un pedido armando viaje sin repartidor pide asignarlo', () => {
+    renderCard({ status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: null });
+
+    expect(screen.getByText('Asignale un repartidor para armar el viaje.')).toBeInTheDocument();
+  });
+
+  it('un pedido de un viaje despachado muestra su llegada estimada y ya no deja cambiar el repartidor', () => {
+    renderCard({
+      status: 'En Camino',
+      delivery_method: 'domicilio',
+      delivery_driver_id: 1,
+      delivery_driver_name: 'Nico',
+      trip_id: 7,
+      trip_stop: 2,
+      eta_minutes: 18,
+    });
+
+    expect(screen.getByText('En viaje · llega en ~18 min')).toBeInTheDocument();
+    expect(screen.queryByText('Armando viaje')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Finalizar' })).toBeInTheDocument();
   });
 
   it('deshabilita las acciones mientras se actualiza el estado', async () => {

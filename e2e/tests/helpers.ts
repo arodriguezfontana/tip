@@ -141,3 +141,14 @@ export function money(amount: number): RegExp {
   const formatted = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
   return new RegExp(formatted.replace(/\s/g, '\\s').replace(/\$/g, '\\$').replace(/\./g, '\\.'));
 }
+
+/** Crea un repartidor activo directo contra la API. */
+export async function createDriver(request: APIRequestContext, name: string): Promise<{ id: number; name: string; phone: string }> {
+  const token = await adminToken(request);
+  const response = await request.post(`${API_URL}/delivery-drivers`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name, phone: uniquePhone(), is_active: true },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
+}

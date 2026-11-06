@@ -98,29 +98,42 @@ def count_with_status(db: Session, status: OrderStatus) -> int:
     return db.query(func.count(Order.id)).filter(Order.status == status.value).scalar() or 0
 
 
-def delivered_intervals(
-    db: Session, delivery_method: str, end_status: OrderStatus, queue_size: int, limit: int
-) -> list[tuple[datetime, datetime]]:
-    """(aceptado, entregado) de los últimos pedidos para ahora con ese método de entrega que se aceptaron con
-    esa cantidad de pedidos en cola y llegaron a `end_status`. Los más recientes primero."""
+def undispatched_for_driver(db: Session, delivery_driver_id: int) -> list[Order]:
+    """Pedidos a domicilio en camino de un repartidor que todavía no salieron de viaje, del más viejo al más nuevo."""
+    return (
+        db.query(Order)
+        .options(*_order_item_options())
+        .filter(
+            Order.status == OrderStatus.ON_THE_WAY.value,
+            Order.delivery_method == "domicilio",
+            Order.delivery_driver_id == delivery_driver_id,
+            Order.trip_id.is_(None),
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+
+
+def finished_durations(db: Session, delivery_method: str, queue_size: int, limit: int) -> list[int]:
+    """Demora real (minutos desde que ingresó hasta que se finalizó) de los últimos pedidos para ahora con ese método de
+    entrega que se aceptaron con esa cantidad de pedidos en cola. Los más recientes primero."""
     accepted = aliased(OrderStatusEvent)
-    finished = aliased(OrderStatusEvent)
     rows = (
-        db.query(accepted.occurred_at, finished.occurred_at)
-        .join(finished, finished.order_id == accepted.order_id)
-        .join(Order, Order.id == accepted.order_id)
+        db.query(Order.actual_minutes)
+        .join(accepted, accepted.order_id == Order.id)
         .filter(
             accepted.status == OrderStatus.CONFIRMED.value,
             accepted.queue_size == queue_size,
-            finished.status == end_status.value,
+            Order.status == OrderStatus.COMPLETED.value,
+            Order.actual_minutes.isnot(None),
             Order.delivery_method == delivery_method,
             Order.scheduled_for.is_(None),
         )
-        .order_by(finished.occurred_at.desc())
+        .order_by(Order.id.desc())
         .limit(limit)
         .all()
     )
-    return [(start, end) for start, end in rows]
+    return [minutes for (minutes,) in rows]
 
 
 # --- Agregados para las estadísticas ------------------------------------------------------------------

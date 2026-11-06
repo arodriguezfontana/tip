@@ -27,7 +27,7 @@ const ORDERS = [
   makeOrder({ id: 1, customer_name: 'Pendiente Ahora', status: 'Pendiente' }),
   makeOrder({ id: 2, customer_name: 'Pendiente Programado', status: 'Pendiente', scheduled_for: '2026-10-04T00:30:00Z' }),
   makeOrder({ id: 3, customer_name: 'Ya Confirmado', status: 'Confirmado', estimated_minutes: 20 }),
-  makeOrder({ id: 4, customer_name: 'Viajando', status: 'En Camino' }),
+  makeOrder({ id: 4, customer_name: 'Viajando', status: 'En Camino', trip_id: 9, trip_stop: 1, eta_minutes: 12 }),
   makeOrder({ id: 5, customer_name: 'Para Retirar', status: 'Listo para Retirar', delivery_method: 'retiro' }),
 ];
 
@@ -118,6 +118,109 @@ describe('ComandasBoard', () => {
     await user.click(within(column('En Camino')).getByRole('button', { name: 'Finalizar' }));
 
     await waitFor(() => expect(screen.queryByText('Viajando')).not.toBeInTheDocument());
+  });
+
+  describe('viajes de los repartidores', () => {
+    const armando = (id: number, name: string, driverId: number | null, driverName: string | null) =>
+      makeOrder({
+        id,
+        customer_name: name,
+        status: 'En Camino',
+        delivery_method: 'domicilio',
+        delivery_driver_id: driverId,
+        delivery_driver_name: driverName,
+      });
+
+    it('agrupa por repartidor los pedidos que arman viaje y ofrece iniciarlo', async () => {
+      service.fetchOrders.mockResolvedValue([
+        armando(11, 'Ana', 1, 'Nico'),
+        armando(12, 'Beto', 1, 'Nico'),
+        armando(13, 'Caro', 2, 'Marcos'),
+        armando(14, 'Dani', null, null),
+      ]);
+      render(<ComandasBoard />);
+      await screen.findByText('Ana');
+
+      const viajes = within(screen.getByRole('region', { name: 'Viajes por armar' }));
+      expect(viajes.getByText('2 pedidos armando viaje')).toBeInTheDocument();
+      expect(viajes.getByText('1 pedido armando viaje')).toBeInTheDocument();
+      expect(viajes.getByText(/1 pedido sin repartidor/)).toBeInTheDocument();
+      expect(viajes.getByRole('button', { name: 'Iniciar viaje de Nico' })).toBeInTheDocument();
+      expect(viajes.getByRole('button', { name: 'Iniciar viaje de Marcos' })).toBeInTheDocument();
+    });
+
+    it('al iniciar el viaje se despachan los pedidos del repartidor y quedan con su llegada estimada', async () => {
+      service.fetchOrders.mockResolvedValue([armando(11, 'Ana', 1, 'Nico'), armando(12, 'Beto', 1, 'Nico')]);
+      service.dispatchTrip.mockResolvedValue({
+        id: 5,
+        delivery_driver_id: 1,
+        delivery_driver_name: 'Nico',
+        dispatched_at: '2026-11-06T20:00:00Z',
+        total_minutes: 22,
+        stops: [
+          { order_id: 12, stop: 1, address: 'Calle B 2', customer_name: 'Beto', eta_minutes: 9 },
+          { order_id: 11, stop: 2, address: 'Calle A 1', customer_name: 'Ana', eta_minutes: 22 },
+        ],
+      });
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+      await screen.findByText('Ana');
+
+      await user.click(screen.getByRole('button', { name: 'Iniciar viaje de Nico' }));
+
+      expect(service.dispatchTrip).toHaveBeenCalledWith(1);
+      expect(await screen.findByText('En viaje · llega en ~9 min')).toBeInTheDocument();
+      expect(screen.getByText('En viaje · llega en ~22 min')).toBeInTheDocument();
+      // Ya no queda nada por armar para Nico.
+      expect(screen.queryByRole('region', { name: 'Viajes por armar' })).not.toBeInTheDocument();
+    });
+
+    it('un pedido nuevo del mismo repartidor forma otro viaje, aparte del que ya salió', async () => {
+      service.fetchOrders.mockResolvedValue([
+        { ...armando(11, 'Ana', 1, 'Nico'), trip_id: 5, trip_stop: 1, eta_minutes: 10 },
+        armando(12, 'Beto', 1, 'Nico'),
+      ]);
+      render(<ComandasBoard />);
+      await screen.findByText('Ana');
+
+      const viajes = within(screen.getByRole('region', { name: 'Viajes por armar' }));
+      expect(viajes.getByText('1 pedido armando viaje')).toBeInTheDocument();
+    });
+
+    it('si no se pudo calcular la ruta el viaje sale igual, sin tiempo, y se avisa el motivo', async () => {
+      service.fetchOrders.mockResolvedValue([armando(11, 'Ana', 1, 'Nico')]);
+      service.dispatchTrip.mockResolvedValue({
+        id: 6,
+        delivery_driver_id: 1,
+        delivery_driver_name: 'Nico',
+        dispatched_at: '2026-11-06T20:00:00Z',
+        total_minutes: null,
+        warning: 'No se pudo consultar Google Maps.',
+        stops: [{ order_id: 11, stop: 1, address: 'Calle A 1', customer_name: 'Ana', eta_minutes: null }],
+      });
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+      await screen.findByText('Ana');
+
+      await user.click(screen.getByRole('button', { name: 'Iniciar viaje de Nico' }));
+
+      expect(await screen.findByText(/salió sin tiempo estimado. No se pudo consultar Google Maps/)).toBeInTheDocument();
+      expect(screen.getByText('En viaje')).toBeInTheDocument();
+      expect(screen.queryByRole('region', { name: 'Viajes por armar' })).not.toBeInTheDocument();
+    });
+
+    it('si el servidor rechaza iniciar el viaje muestra el motivo y los pedidos siguen armando viaje', async () => {
+      service.fetchOrders.mockResolvedValue([armando(11, 'Ana', 1, 'Nico')]);
+      service.dispatchTrip.mockRejectedValue({ message: 'Nico no tiene pedidos armando viaje.' });
+      render(<ComandasBoard />);
+      const user = userEvent.setup();
+      await screen.findByText('Ana');
+
+      await user.click(screen.getByRole('button', { name: 'Iniciar viaje de Nico' }));
+
+      expect(await screen.findByText(/no tiene pedidos armando viaje/)).toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Iniciar viaje de Nico' })).toBeEnabled();
+    });
   });
 
   it('muestra el error si el cambio de estado falla y deja el pedido donde estaba', async () => {

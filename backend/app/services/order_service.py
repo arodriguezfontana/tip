@@ -389,6 +389,12 @@ def get_order(db: Session, order_id: int) -> Order:
     return order
 
 
+def _require_trip_not_started(order: Order) -> None:
+    """El repartidor de un pedido cuyo viaje ya salió no se puede cambiar: la ruta y los avisos ya están en curso."""
+    if order.is_dispatched:
+        raise BusinessRuleError("El viaje de este pedido ya salió: no se puede cambiar el repartidor.")
+
+
 def change_order_status(
     db: Session,
     order_id: int,
@@ -401,6 +407,7 @@ def change_order_status(
     if delivery_driver_id is not None:
         if order.delivery_method != DeliveryMethod.DELIVERY.value:
             raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+        _require_trip_not_started(order)
         driver = delivery_driver_repository.get(db, delivery_driver_id)
         if driver is None:
             raise NotFoundError("Repartidor no encontrado.")
@@ -439,6 +446,7 @@ def assign_delivery_driver(
     order = get_order(db, order_id)
     if order.delivery_method != DeliveryMethod.DELIVERY.value:
         raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+    _require_trip_not_started(order)
 
     if delivery_driver_id is not None:
         driver = delivery_driver_repository.get(db, delivery_driver_id)

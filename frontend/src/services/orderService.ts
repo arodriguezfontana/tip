@@ -2,6 +2,7 @@ import { api } from './api';
 import type {
   AdminOrder,
   CounterOrderPayload,
+  DeliveryTrip,
   OrderDelayEstimate,
   OrderDetail,
   OrderStatus,
@@ -51,6 +52,18 @@ export async function updateOrderStatus(
   const { data } = await api.patch<AdminOrder>(`/orders/${orderId}/status`, {
     status,
     ...(estimatedMinutes !== undefined ? { estimated_minutes: estimatedMinutes } : {}),
+  });
+  return data;
+}
+
+/**
+ * Inicia el viaje de un repartidor: el servidor calcula una sola ruta con todos sus pedidos armados y avisa a cada
+ * cliente su llegada estimada. Sin `orderIds` salen todos los pedidos que tiene armados.
+ */
+export async function dispatchTrip(deliveryDriverId: number, orderIds?: number[]): Promise<DeliveryTrip> {
+  const { data } = await api.post<DeliveryTrip>('/orders/trips/dispatch', {
+    delivery_driver_id: deliveryDriverId,
+    ...(orderIds ? { order_ids: orderIds } : {}),
   });
   return data;
 }

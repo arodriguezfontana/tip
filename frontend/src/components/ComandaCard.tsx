@@ -75,6 +75,10 @@ export function ComandaCard({
   const [changingDelay, setChangingDelay] = useState(false);
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
+  // Un pedido a domicilio "En Camino" primero arma su viaje (en silencio) y recién sale cuando se inicia el viaje.
+  const isDeliveryOnTheWay = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !simulated;
+  const isDispatched = isDeliveryOnTheWay && order.trip_id != null;
+  const isBuildingTrip = isDeliveryOnTheWay && order.trip_id == null;
   // Al aceptar un pedido para ahora, la demora sale del historial del local o, si todavía no hay datos, la indica el empleado.
   const needsEstimate = order.status === 'Pendiente' && !isScheduled && !simulated;
   const loadEstimate = useMemo(
@@ -99,7 +103,8 @@ export function ComandaCard({
   // Pago mixto: ya se cobró una parte y el resto (la diferencia) se cobra aparte, ej. en efectivo al repartidor.
   const hasPartialPayment = !order.is_paid && (order.paid_amount ?? 0) > 0;
   // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
-  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
+  // Con el viaje ya despachado el repartidor no se cambia (la ruta y los avisos ya salieron).
+  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !isDispatched;
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
   const delayLevel = getDelayLevel(order, new Date(order.created_at).getTime() + elapsedMs);
@@ -275,6 +280,17 @@ export function ComandaCard({
                 Estimado: {order.estimated_minutes} min
               </span>
             )
+          )}
+
+          {isBuildingTrip && (
+            <span className="bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-xl font-semibold">
+              Armando viaje
+            </span>
+          )}
+          {isDispatched && (
+            <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-xl font-semibold">
+              En viaje{order.eta_minutes != null ? ` · llega en ~${order.eta_minutes} min` : ''}
+            </span>
           )}
 
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
@@ -453,7 +469,15 @@ export function ComandaCard({
           </div>
         )}
 
-        {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
+        {isBuildingTrip && (
+          <p className="cursor-default pt-2 border-t border-gray-50 text-xs text-gray-500" onClick={stopPropagation}>
+            {order.delivery_driver_id != null
+              ? 'Esperando que inicies el viaje del repartidor.'
+              : 'Asignale un repartidor para armar el viaje.'}
+          </p>
+        )}
+
+        {(order.status === 'Listo para Retirar' || (order.status === 'En Camino' && !isBuildingTrip)) && (
           <div className="cursor-default pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"

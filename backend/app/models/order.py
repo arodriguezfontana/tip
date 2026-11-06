@@ -207,6 +207,13 @@ class Order(Base):
     estimated_minutes = Column(Integer, nullable=True)
     # De dónde salió la demora estimada: del historial del local, la cargó el personal o es la estándar.
     estimate_source = Column(String(10), nullable=True)
+    # Viaje en el que salió el pedido (None mientras el viaje se está armando), su parada y la llegada estimada.
+    trip_id = Column(Integer, ForeignKey("delivery_trips.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_stop = Column(Integer, nullable=True)
+    eta_minutes = Column(Integer, nullable=True)
+    # Demora real: minutos desde que el pedido ingresó al sistema hasta que se finalizó. Se guarda al finalizarlo y es
+    # la medida con la que se calcula la demora automática (ver delivery_time_service).
+    actual_minutes = Column(Integer, nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     mp_preference_id = Column(String(100), nullable=True)
     mp_payment_id = Column(String(100), nullable=True)
@@ -214,6 +221,7 @@ class Order(Base):
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery_driver = relationship("DeliveryDriver", back_populates="orders")
+    trip = relationship("DeliveryTrip", back_populates="orders")
     cash_shift = relationship("CashShift", back_populates="orders", foreign_keys=[cash_shift_id])
     status_events = relationship(
         "OrderStatusEvent", back_populates="order", cascade="all, delete-orphan", passive_deletes=True
@@ -388,6 +396,11 @@ class Order(Base):
             self.payment_method = method.value
 
     # --- Modificación por el cliente ----------------------------------------------------------------
+
+    @property
+    def is_dispatched(self) -> bool:
+        """El pedido salió de viaje: su repartidor ya recorre la ruta (si no, el viaje todavía se está armando)."""
+        return self.trip_id is not None
 
     @property
     def is_shift_closed(self) -> bool:
@@ -566,9 +579,18 @@ class Order(Base):
             estimate_source = EstimateSource.DEFAULT
 
         self.status = new_status.value
+        if new_status == OrderStatus.COMPLETED:
+            self.actual_minutes = self._minutes_since_created()
         if estimated_minutes is not None:
             self.estimated_minutes = estimated_minutes
             self.estimate_source = (estimate_source or EstimateSource.MANUAL).value
+
+    def _minutes_since_created(self) -> int | None:
+        """Minutos que pasaron desde que el pedido ingresó al sistema (None si todavía no se guardó)."""
+        if self.created_at is None:
+            return None
+        created = self.created_at if self.created_at.tzinfo else self.created_at.replace(tzinfo=timezone.utc)
+        return max(0, round((datetime.now(timezone.utc) - created).total_seconds() / 60))
 
     @property
     def is_all_prepared(self) -> bool:

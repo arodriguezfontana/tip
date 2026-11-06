@@ -59,9 +59,19 @@ def test_rechazar_notifica_rechazo(client, db_session, mock_send_message):
     assert "rechazado" in mensaje.lower()
 
 
+def test_pasar_a_en_camino_no_avisa_al_cliente(client, db_session, mock_send_message):
+    # El aviso con la llegada estimada sale recién al iniciar el viaje (ver test_delivery_trips.py).
+    order = _create_order(db_session, status="Confirmado", delivery_method="domicilio")
+
+    response = client.patch(f"/api/v1/orders/{order.id}/status", json={"status": "En Camino"})
+
+    assert response.status_code == 200
+    mock_send_message.assert_not_called()
+
+
 @pytest.mark.parametrize(
     "delivery_method,terminal_status,texto_esperado",
-    [("domicilio", "En Camino", "camino"), ("retiro", "Listo para Retirar", "retirar")],
+    [("retiro", "Listo para Retirar", "retirar")],
 )
 def test_despacho_notifica_segun_metodo_entrega(
     client, db_session, mock_send_message, delivery_method, terminal_status, texto_esperado
