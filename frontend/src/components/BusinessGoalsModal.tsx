@@ -106,7 +106,7 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
               id="monthly-rev-input"
               type="number"
               min="0"
-              step="1000"
+              step="any"
               value={monthlyRev}
               onChange={(e) => setMonthlyRev(e.target.value)}
               className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
@@ -154,7 +154,7 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
               id="weekly-rev-input"
               type="number"
               min="0"
-              step="1000"
+              step="any"
               value={weeklyRev}
               onChange={(e) => setWeeklyRev(e.target.value)}
               className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
@@ -192,7 +192,7 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
               id="daily-rev-input"
               type="number"
               min="0"
-              step="500"
+              step="any"
               value={dailyRev}
               onChange={(e) => setDailyRev(e.target.value)}
               className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
