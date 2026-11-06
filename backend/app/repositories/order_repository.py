@@ -1,10 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models.menu import Category, Product
-from app.models.order import Order, OrderItem, OrderStatus
+from app.models.order import Order, OrderItem, OrderStatus, OrderStatusEvent
 from app.models.promotion import Promotion, PromotionProduct
 from app.repositories.common import created_between
 
@@ -96,6 +96,31 @@ def list_orders(
 
 def count_with_status(db: Session, status: OrderStatus) -> int:
     return db.query(func.count(Order.id)).filter(Order.status == status.value).scalar() or 0
+
+
+def delivered_intervals(
+    db: Session, delivery_method: str, end_status: OrderStatus, queue_size: int, limit: int
+) -> list[tuple[datetime, datetime]]:
+    """(aceptado, entregado) de los últimos pedidos para ahora con ese método de entrega que se aceptaron con
+    esa cantidad de pedidos en cola y llegaron a `end_status`. Los más recientes primero."""
+    accepted = aliased(OrderStatusEvent)
+    finished = aliased(OrderStatusEvent)
+    rows = (
+        db.query(accepted.occurred_at, finished.occurred_at)
+        .join(finished, finished.order_id == accepted.order_id)
+        .join(Order, Order.id == accepted.order_id)
+        .filter(
+            accepted.status == OrderStatus.CONFIRMED.value,
+            accepted.queue_size == queue_size,
+            finished.status == end_status.value,
+            Order.delivery_method == delivery_method,
+            Order.scheduled_for.is_(None),
+        )
+        .order_by(finished.occurred_at.desc())
+        .limit(limit)
+        .all()
+    )
+    return [(start, end) for start, end in rows]
 
 
 # --- Agregados para las estadísticas ------------------------------------------------------------------

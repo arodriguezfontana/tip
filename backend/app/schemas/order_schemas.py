@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -25,6 +26,8 @@ class OrderResponse(BaseModel):
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
+    # De dónde salió la demora: "smart" (historial del local), "manual" (la indicó el personal) o "default".
+    estimate_source: str | None = None
     scheduled_for: datetime | None = None
     created_at: datetime
     item_count: int
@@ -63,6 +66,7 @@ class OrderResponse(BaseModel):
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,
+            estimate_source=order.estimate_source,
             scheduled_for=order.scheduled_for,
             created_at=order.created_at,
             item_count=len(order.items),
@@ -79,6 +83,21 @@ class OrderResponse(BaseModel):
             is_all_prepared=order.is_all_prepared,
             sectors=order.sectors,
         )
+
+
+class OrderDelayEstimateResponse(BaseModel):
+    """Cómo se estimará la demora al aceptar un pedido."""
+
+    # "smart": la calcula el sistema con el historial; "manual": la tiene que indicar el empleado.
+    mode: Literal["smart", "manual"]
+    # Demora calculada (solo en modo inteligente).
+    estimated_minutes: int | None = None
+    # Pedidos parecidos con los que se calculó, o los que hay hasta ahora, y los que se necesitan.
+    samples: int
+    min_samples: int
+    queue_size: int
+    # Demora estándar del local, para sugerirla al cargarla a mano.
+    suggested_minutes: int
 
 
 class OrderStatusUpdate(BaseModel):

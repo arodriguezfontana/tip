@@ -1,4 +1,4 @@
-import { render, screen, waitFor, within } from '@testing-library/react';
+import { act, render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ComandasBoard } from '@/components/ComandasBoard';
@@ -36,6 +36,15 @@ beforeEach(() => {
   localStorage.clear();
   service.fetchOrders.mockResolvedValue(ORDERS);
   service.fetchOrderDetail.mockResolvedValue(makeOrderDetail());
+  // Con historial suficiente la demora se calcula sola: confirmar no pide minutos.
+  service.fetchOrderDelayEstimate.mockResolvedValue({
+    mode: 'smart',
+    estimated_minutes: 25,
+    samples: 40,
+    min_samples: 30,
+    queue_size: 1,
+    suggested_minutes: 18,
+  });
 });
 
 describe('ComandasBoard', () => {
@@ -49,6 +58,27 @@ describe('ComandasBoard', () => {
     expect(within(column('Confirmados')).getByText('Ya Confirmado')).toBeInTheDocument();
     expect(within(column('En Camino')).getByText('Viajando')).toBeInTheDocument();
     expect(within(column('Listo para Retirar')).getByText('Para Retirar')).toBeInTheDocument();
+  });
+
+  it('sin pedidos activos, los refrescos periódicos no reemplazan el tablero por "Cargando" (parpadeo)', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      service.fetchOrders.mockResolvedValue([]);
+      render(<ComandasBoard />);
+      await screen.findAllByText('Sin pedidos');
+      // El próximo refresco tarda en responder: mientras espera, el tablero sigue a la vista.
+      service.fetchOrders.mockReturnValue(new Promise(() => undefined));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(10500);
+      });
+
+      expect(service.fetchOrders).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText('Cargando comandas...')).not.toBeInTheDocument();
+      expect(screen.getAllByText('Sin pedidos').length).toBeGreaterThan(0);
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('separa los pendientes para ahora de los programados, pero el contador los incluye a todos', async () => {

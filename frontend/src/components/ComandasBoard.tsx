@@ -62,6 +62,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);
+  // "Cargando..." solo en la primera carga: los refrescos periódicos no tienen que reemplazar el tablero (parpadeo).
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
 
@@ -109,7 +111,10 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       } catch {
         if (!cancelled) setError('No se pudieron cargar las comandas.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setHasLoaded(true);
+        }
       }
     };
 
@@ -557,7 +562,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
-      {loading && orders.length === 0 ? (
+      {loading && !hasLoaded && orders.length === 0 ? (
         <PanelNote>Cargando comandas...</PanelNote>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
@@ -608,6 +613,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                       onItemPreparedChange={handleItemPreparedChange}
                       onSectorPrepared={handleSectorPrepared}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
+                      simulated={isSimulating}
                     />
                   ))
                 )}

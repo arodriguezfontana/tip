@@ -9,6 +9,29 @@
   --primary-color: #18181b;
 }
 
+/*
+ * Tailwind 4 deja el cursor de los botones en la flecha: los controles que se pueden usar muestran la manito y los
+ * deshabilitados, el cursor de "no permitido". Está en la capa base para que clases como `cursor-default` lo pisen.
+ */
+@layer base {
+  button:not(:disabled),
+  [role='button']:not([aria-disabled='true']),
+  summary,
+  select:not(:disabled),
+  input[type='checkbox']:not(:disabled),
+  input[type='radio']:not(:disabled),
+  input[type='file']:not(:disabled),
+  label[for] {
+    cursor: pointer;
+  }
+
+  button:disabled,
+  select:disabled,
+  input:disabled {
+    cursor: not-allowed;
+  }
+}
+
 /* Barras de scroll finas y siempre visibles. */
 ::-webkit-scrollbar {
   width: 6px;

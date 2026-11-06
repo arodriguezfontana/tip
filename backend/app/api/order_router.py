@@ -13,6 +13,7 @@ from app.models.user import User
 from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
     CounterOrderCreate,
+    OrderDelayEstimateResponse,
     OrderDetailResponse,
     OrderItemPreparedUpdate,
     OrderPaymentUpdate,
@@ -109,6 +110,26 @@ def get_order_detail(
 ) -> OrderDetailResponse:
     """Detalle completo de un pedido: productos, datos del cliente y de la entrega, y facturación."""
     return OrderDetailResponse.from_model(order_service.get_order(db, order_id))
+
+
+@router.get("/{order_id}/estimate", response_model=OrderDelayEstimateResponse)
+def get_order_delay_estimate(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderDelayEstimateResponse:
+    """Cómo se va a estimar la demora si se acepta el pedido ahora: automática (con el historial del local) o
+    manual, si todavía no hay datos suficientes para esa situación."""
+    order = order_service.get_order(db, order_id)
+    estimate = order_service.estimate_acceptance_delay(db, order)
+    return OrderDelayEstimateResponse(
+        mode=estimate.mode.value,
+        estimated_minutes=estimate.minutes,
+        samples=estimate.samples,
+        min_samples=estimate.min_samples,
+        queue_size=estimate.queue_size,
+        suggested_minutes=order_service.estimate_delay_minutes(db),
+    )
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)

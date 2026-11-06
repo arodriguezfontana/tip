@@ -2,6 +2,7 @@ import { api } from './api';
 import type {
   AdminOrder,
   CounterOrderPayload,
+  OrderDelayEstimate,
   OrderDetail,
   OrderStatus,
   PreparationSector,
@@ -33,6 +34,12 @@ export async function fetchOrders(params: FetchOrdersParams = {}): Promise<Admin
 
 export async function fetchOrderDetail(orderId: number, signal?: AbortSignal): Promise<OrderDetail> {
   const { data } = await api.get<OrderDetail>(`/orders/${orderId}`, { signal });
+  return data;
+}
+
+/** Cómo se va a estimar la demora si se acepta el pedido ahora (automática o manual). */
+export async function fetchOrderDelayEstimate(orderId: number, signal?: AbortSignal): Promise<OrderDelayEstimate> {
+  const { data } = await api.get<OrderDelayEstimate>(`/orders/${orderId}/estimate`, { signal });
   return data;
 }
 
