@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -20,14 +21,24 @@ class OrderResponse(BaseModel):
     source: str
     # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
     channel: str | None = None
+    # El pedido salió de un chat del bot y se puede hablar con el cliente desde el panel.
+    has_chat: bool = False
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
+    # De dónde salió la demora: "smart" (historial del local), "manual" (la indicó el personal) o "default".
+    estimate_source: str | None = None
+    # Demora real en minutos (desde que ingresó hasta que se finalizó); vacía mientras el pedido no terminó.
+    actual_minutes: int | None = None
     scheduled_for: datetime | None = None
     created_at: datetime
     item_count: int
     delivery_driver_id: int | None = None
     delivery_driver_name: str | None = None
+    # Viaje en el que salió el pedido, su parada y la llegada estimada; vacíos mientras el viaje se está armando.
+    trip_id: int | None = None
+    trip_stop: int | None = None
+    eta_minutes: int | None = None
     payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
     # Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda.
@@ -57,14 +68,20 @@ class OrderResponse(BaseModel):
             delivery_method=order.delivery_method,
             source=order.source,
             channel=order.channel,
+            has_chat=bool(order.channel and order.chat_id),
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,
+            estimate_source=order.estimate_source,
+            actual_minutes=order.actual_minutes,
             scheduled_for=order.scheduled_for,
             created_at=order.created_at,
             item_count=len(order.items),
             delivery_driver_id=order.delivery_driver_id,
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
+            trip_id=order.trip_id,
+            trip_stop=order.trip_stop,
+            eta_minutes=order.eta_minutes,
             payment_method=order.payment_method,
             is_paid=bool(order.is_paid),
             paid_amount=order.amount_paid,
@@ -75,6 +92,67 @@ class OrderResponse(BaseModel):
             items_prepared_count=order.items_prepared_count,
             is_all_prepared=order.is_all_prepared,
             sectors=order.sectors,
+        )
+
+
+class OrderDelayEstimateResponse(BaseModel):
+    """Cómo se estimará la demora al aceptar un pedido."""
+
+    # "smart": la calcula el sistema con el historial; "manual": la tiene que indicar el empleado.
+    mode: Literal["smart", "manual"]
+    # Demora calculada (solo en modo inteligente).
+    estimated_minutes: int | None = None
+    # Pedidos parecidos con los que se calculó, o los que hay hasta ahora, y los que se necesitan.
+    samples: int
+    min_samples: int
+    queue_size: int
+    # Demora estándar del local, para sugerirla al cargarla a mano.
+    suggested_minutes: int
+
+
+class TripDispatchPayload(BaseModel):
+    delivery_driver_id: int = Field(..., gt=0)
+    # Pedidos que salen en el viaje; si no se indican, salen todos los que el repartidor tiene armados.
+    order_ids: list[int] | None = Field(None, min_length=1)
+
+
+class TripStopResponse(BaseModel):
+    order_id: int
+    stop: int
+    address: str
+    customer_name: str
+    eta_minutes: int | None = None
+
+
+class TripResponse(BaseModel):
+    id: int
+    delivery_driver_id: int | None
+    delivery_driver_name: str | None
+    dispatched_at: datetime
+    total_minutes: int | None = None
+    # Por qué el viaje salió sin tiempos estimados (solo si no se pudo calcular la ruta).
+    warning: str | None = None
+    stops: list[TripStopResponse]
+
+    @classmethod
+    def from_model(cls, trip, warning: str | None = None) -> "TripResponse":
+        return cls(
+            id=trip.id,
+            delivery_driver_id=trip.delivery_driver_id,
+            delivery_driver_name=trip.driver.name if trip.driver else None,
+            dispatched_at=trip.dispatched_at,
+            total_minutes=trip.total_minutes,
+            warning=warning,
+            stops=[
+                TripStopResponse(
+                    order_id=o.id,
+                    stop=o.trip_stop,
+                    address=o.shipping_address,
+                    customer_name=o.customer_name,
+                    eta_minutes=o.eta_minutes,
+                )
+                for o in trip.orders
+            ],
         )
 
 

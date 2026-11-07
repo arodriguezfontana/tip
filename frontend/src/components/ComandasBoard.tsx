@@ -5,6 +5,7 @@ import type { DeliveryDriver } from '@/types/deliveryDriver';
 import {
   acknowledgeKitchenUpdate,
   assignDeliveryDriver,
+  dispatchTrip,
   fetchOrders,
   updateOrderItemPrepared,
   updateOrderPayment,
@@ -64,8 +65,12 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const [orders, setOrders] = useState<AdminOrder[]>([]);
   const [activeDrivers, setActiveDrivers] = useState<DeliveryDriver[]>([]);
   const [loading, setLoading] = useState(false);
+  // "Cargando..." solo en la primera carga: los refrescos periódicos no tienen que reemplazar el tablero (parpadeo).
+  const [hasLoaded, setHasLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [isSimulating, setIsSimulating] = useState(false);
+  // Repartidor cuyo viaje se está iniciando (la ruta tarda unos segundos en calcularse).
+  const [dispatchingDriverId, setDispatchingDriverId] = useState<number | null>(null);
 
   const [pageSize, setPageSize] = useState<number>(5);
   const [pages, setPages] = useState<Record<string, number>>({
@@ -115,7 +120,10 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       } catch {
         if (!cancelled) setError('No se pudieron cargar las comandas.');
       } finally {
-        if (!cancelled) setLoading(false);
+        if (!cancelled) {
+          setLoading(false);
+          setHasLoaded(true);
+        }
       }
     };
 
@@ -341,6 +349,51 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
       setError(message || 'No se pudo asignar el repartidor.');
+    }
+  };
+
+  // Viajes por armar: pedidos a domicilio "En Camino" que todavía no salieron, agrupados por repartidor.
+  const tripsToStart = useMemo(() => {
+    if (isSimulating) return { groups: [], withoutDriver: 0 };
+    const building = orders.filter(
+      (o) => o.status === 'En Camino' && o.delivery_method === 'domicilio' && o.trip_id == null
+    );
+    const byDriver = new Map<number, { driverId: number; driverName: string; count: number }>();
+    for (const order of building) {
+      if (order.delivery_driver_id == null) continue;
+      const group = byDriver.get(order.delivery_driver_id) ?? {
+        driverId: order.delivery_driver_id,
+        driverName: order.delivery_driver_name ?? 'Repartidor',
+        count: 0,
+      };
+      group.count += 1;
+      byDriver.set(order.delivery_driver_id, group);
+    }
+    return {
+      groups: [...byDriver.values()].sort((a, b) => a.driverName.localeCompare(b.driverName)),
+      withoutDriver: building.filter((o) => o.delivery_driver_id == null).length,
+    };
+  }, [orders, isSimulating]);
+
+  const handleStartTrip = async (driverId: number) => {
+    setDispatchingDriverId(driverId);
+    try {
+      const trip = await dispatchTrip(driverId);
+      // El viaje sale con todos sus pedidos: cada uno queda con su parada y su llegada estimada.
+      const stops = new Map(trip.stops.map((stop) => [stop.order_id, stop]));
+      setOrders((prev) =>
+        prev.map((order) => {
+          const stop = stops.get(order.id);
+          return stop ? { ...order, trip_id: trip.id, trip_stop: stop.stop, eta_minutes: stop.eta_minutes } : order;
+        })
+      );
+      // Si no se pudo calcular la ruta el viaje salió igual (sin tiempos): se le avisa al empleado por qué.
+      setError(trip.warning ? `El viaje salió sin tiempo estimado. ${trip.warning}` : null);
+    } catch (err) {
+      const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
+      setError(message || 'No se pudo iniciar el viaje.');
+    } finally {
+      setDispatchingDriverId(null);
     }
   };
 
@@ -596,7 +649,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
 
-      {loading && orders.length === 0 ? (
+      {loading && !hasLoaded && orders.length === 0 ? (
         <PanelNote>Cargando comandas...</PanelNote>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
@@ -619,6 +672,40 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                   {column.totalCount}
                 </span>
               </div>
+
+              {column.status === 'En Camino' && (tripsToStart.groups.length > 0 || tripsToStart.withoutDriver > 0) && (
+                <section aria-label="Viajes por armar" className="shrink-0 mb-3 space-y-2">
+                  {tripsToStart.groups.map((group) => (
+                    <div
+                      key={group.driverId}
+                      className="flex items-center justify-between gap-2 rounded-xl border border-blue-200 bg-blue-50 px-3 py-2"
+                    >
+                      <div className="min-w-0 leading-tight">
+                        <p className="truncate text-xs font-bold text-blue-900">{group.driverName}</p>
+                        <p className="text-[11px] text-blue-700">
+                          {group.count} {group.count === 1 ? 'pedido armando viaje' : 'pedidos armando viaje'}
+                        </p>
+                      </div>
+                      <button
+                        type="button"
+                        disabled={dispatchingDriverId !== null}
+                        onClick={() => handleStartTrip(group.driverId)}
+                        aria-label={`Iniciar viaje de ${group.driverName}`}
+                        className="shrink-0 whitespace-nowrap rounded-lg bg-blue-600 px-3 py-1.5 text-xs font-bold text-white transition hover:bg-blue-700 disabled:opacity-60"
+                      >
+                        {dispatchingDriverId === group.driverId ? 'Calculando ruta...' : 'Iniciar viaje'}
+                      </button>
+                    </div>
+                  ))}
+                  {tripsToStart.withoutDriver > 0 && (
+                    <p className="rounded-xl bg-amber-50 px-3 py-2 text-[11px] text-amber-800">
+                      {tripsToStart.withoutDriver}{' '}
+                      {tripsToStart.withoutDriver === 1 ? 'pedido sin repartidor' : 'pedidos sin repartidor'}: asignale uno
+                      desde su tarjeta para armar el viaje.
+                    </p>
+                  )}
+                </section>
+              )}
 
               {column.status === 'Pendiente' && (
                 <div className="shrink-0 flex bg-gray-200/70 p-0.5 rounded-xl mb-3 text-[11px] font-medium">
@@ -658,6 +745,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
                       onItemPreparedChange={handleItemPreparedChange}
                       onSectorPrepared={handleSectorPrepared}
                       onOpenDetail={(selected) => setDetailOrderId(selected.id)}
+                      simulated={isSimulating}
                     />
                   ))
                 )}

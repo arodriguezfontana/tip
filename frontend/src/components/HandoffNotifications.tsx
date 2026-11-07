@@ -4,6 +4,7 @@ import { useAuth } from '@/hooks/useAuth';
 import { useHandoffs } from '@/hooks/useHandoffs';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { playHandoffAlertSound } from '@/utils/alertSound';
+import { onOpenOrderChat } from '@/utils/orderChat';
 import { handoffAvatarColor, handoffDetails, handoffName } from '@/utils/handoff';
 import { BellIcon } from '@/components/Icons';
 
@@ -28,15 +29,39 @@ export function HandoffNotifications({ onVisibleChange }: HandoffNotificationsPr
   const { user } = useAuth();
   const handoffs = useHandoffs();
   const [openId, setOpenId] = useState<number | null>(null);
+  // Chat abierto desde el detalle de un pedido (el bot sigue activo hasta que el empleado escriba).
+  const [orderChatId, setOrderChatId] = useState<number | null>(null);
+
+  useEffect(
+    () =>
+      onOpenOrderChat((orderId) => {
+        setOpenId(null);
+        setOrderChatId(orderId);
+      }),
+    []
+  );
+
+  const openHandoff = (id: number) => {
+    setOrderChatId(null);
+    setOpenId(id);
+  };
+  const closeChat = () => {
+    setOpenId(null);
+    setOrderChatId(null);
+  };
 
   const waiting = handoffs.filter((h) => h.status === 'waiting');
   // El servidor identifica al empleado por su nombre o, si no tiene, por su email.
   const me = user?.full_name || user?.email;
   const mine = handoffs.filter((h) => h.status === 'in_progress' && h.handled_by === me);
+  // Chats con el bot pausado que atiende otra persona (u otra app de Meta): se ven para no responderle dos veces al cliente.
+  const others = handoffs.filter((h) => h.status === 'in_progress' && h.handled_by !== me);
+  const chats = [...mine, ...others];
+  const chatOpen = openId !== null || orderChatId !== null;
 
   const otherUnread = mine.reduce((total, h) => total + (h.id === openId ? 0 : (h.unread_count ?? 0)), 0);
 
-  const visible = waiting.length > 0 || mine.length > 0 || openId !== null;
+  const visible = waiting.length > 0 || chats.length > 0 || chatOpen;
   useEffect(() => {
     onVisibleChange?.(visible);
   }, [visible, onVisibleChange]);
@@ -66,7 +91,7 @@ export function HandoffNotifications({ onVisibleChange }: HandoffNotificationsPr
             {handoff.reason && <p className="mt-1 text-xs opacity-80">{handoff.reason}</p>}
             <button
               type="button"
-              onClick={() => setOpenId(handoff.id)}
+              onClick={() => openHandoff(handoff.id)}
               className="mt-2 rounded-xl bg-black px-3 py-1.5 text-xs font-semibold text-white hover:bg-gray-800 transition"
             >
               Atender
@@ -74,32 +99,39 @@ export function HandoffNotifications({ onVisibleChange }: HandoffNotificationsPr
           </div>
         ))}
 
+        {orderChatId !== null && (
+          <HandoffChatPanel key={`order-${orderChatId}`} orderId={orderChatId} onBack={closeChat} otherUnread={otherUnread} />
+        )}
         {openId !== null && (
-          <HandoffChatPanel handoffId={openId} onBack={() => setOpenId(null)} otherUnread={otherUnread} />
+          <HandoffChatPanel key={`handoff-${openId}`} handoffId={openId} onBack={closeChat} otherUnread={otherUnread} />
         )}
 
-        {openId === null && mine.length > 0 && (
+        {!chatOpen && chats.length > 0 && (
           <section
             aria-label="Chats en curso"
             className="overflow-hidden rounded-2xl border border-gray-200 bg-white shadow-lg"
           >
             <h2 className="border-b border-gray-100 bg-gray-50 px-4 py-2 text-xs font-bold uppercase tracking-wide text-gray-500">
-              Chats en curso ({mine.length})
+              Chats en curso ({chats.length})
             </h2>
             <ul className="max-h-80 divide-y divide-gray-100 overflow-y-auto">
-              {mine.map((handoff) => {
+              {chats.map((handoff) => {
                 const name = handoffName(handoff);
                 const details = handoffDetails(handoff);
                 const last = handoff.last_message;
                 // El chat abierto se lee en vivo: no se marca como pendiente.
                 const unread = openId === handoff.id ? 0 : (handoff.unread_count ?? 0);
+                const isMine = handoff.handled_by === me;
+                // Lo que atiende otro empleado no se puede abrir; lo que atiende Meta Business Suite sí se puede tomar.
+                const canOpen = isMine || Boolean(handoff.external);
                 return (
                   <li key={handoff.id}>
                     <button
                       type="button"
-                      onClick={() => setOpenId(handoff.id)}
+                      onClick={() => openHandoff(handoff.id)}
+                      disabled={!canOpen}
                       aria-label={`Chat con ${name} #${handoff.id}`}
-                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition"
+                      className="flex w-full items-center gap-3 px-4 py-3 text-left hover:bg-gray-50 transition disabled:cursor-not-allowed disabled:hover:bg-transparent"
                     >
                       <span
                         aria-hidden="true"
@@ -119,6 +151,10 @@ export function HandoffNotifications({ onVisibleChange }: HandoffNotificationsPr
                           )}
                         </span>
                         {details && <span className="block truncate text-[11px] text-gray-400">{details}</span>}
+                        <span className="block truncate text-[11px] font-semibold text-amber-700">
+                          ⏸ Bot pausado ·{' '}
+                          {isMine ? 'lo atendés vos' : handoff.external ? 'atiende el local desde Meta' : `atiende ${handoff.handled_by}`}
+                        </span>
                         <span className="flex items-center justify-between gap-2">
                           <span className={`truncate text-xs ${unread ? 'font-semibold text-gray-800' : 'text-gray-500'}`}>
                             {last ? `${last.author === 'employee' ? 'Vos: ' : ''}${last.text}` : 'Sin mensajes todavía'}

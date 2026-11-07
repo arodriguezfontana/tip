@@ -16,7 +16,11 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    event,
     false,
+    insert,
+    inspect,
+    select,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
 from sqlalchemy.orm import relationship, validates
@@ -66,6 +70,15 @@ class PaymentMethod(_StrEnum):
     TRANSFER = "transferencia"
     CARD = "tarjeta"
     MERCADOPAGO = "mercadopago"
+
+
+class EstimateSource(_StrEnum):
+    # Promedio de pedidos parecidos ya entregados (modo inteligente).
+    SMART = "smart"
+    # La indicó el personal al aceptar el pedido.
+    MANUAL = "manual"
+    # Demora estándar del local, cuando no hay quien la indique (pedidos que entran ya aceptados).
+    DEFAULT = "default"
 
 
 # Estados en los que el pedido no se llegó a vender: no suman a las ventas ni a las estadísticas.
@@ -147,6 +160,7 @@ class Order(Base):
         CheckConstraint(f"channel IN {_values(Channel)}", name="ck_orders_channel"),
         CheckConstraint(f"balance_payment_method IN {_values(PaymentMethod)}", name="ck_orders_balance_payment_method"),
         CheckConstraint(f"payment_method IN {_values(PaymentMethod)}", name="ck_orders_payment_method"),
+        CheckConstraint(f"estimate_source IN {_values(EstimateSource)}", name="ck_orders_estimate_source"),
     )
 
     # Ciclo de vida del pedido: a qué estados puede pasar desde cada uno.
@@ -191,6 +205,15 @@ class Order(Base):
     customer_phone = Column(String(30), nullable=True)
     notes = Column(Text, nullable=True)
     estimated_minutes = Column(Integer, nullable=True)
+    # De dónde salió la demora estimada: del historial del local, la cargó el personal o es la estándar.
+    estimate_source = Column(String(10), nullable=True)
+    # Viaje en el que salió el pedido (None mientras el viaje se está armando), su parada y la llegada estimada.
+    trip_id = Column(Integer, ForeignKey("delivery_trips.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_stop = Column(Integer, nullable=True)
+    eta_minutes = Column(Integer, nullable=True)
+    # Demora real: minutos desde que el pedido ingresó al sistema hasta que se finalizó. Se guarda al finalizarlo y es
+    # la medida con la que se calcula la demora automática (ver delivery_time_service).
+    actual_minutes = Column(Integer, nullable=True)
     scheduled_for = Column(DateTime(timezone=True), nullable=True)
     mp_preference_id = Column(String(100), nullable=True)
     mp_payment_id = Column(String(100), nullable=True)
@@ -198,7 +221,11 @@ class Order(Base):
 
     items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
     delivery_driver = relationship("DeliveryDriver", back_populates="orders")
+    trip = relationship("DeliveryTrip", back_populates="orders")
     cash_shift = relationship("CashShift", back_populates="orders", foreign_keys=[cash_shift_id])
+    status_events = relationship(
+        "OrderStatusEvent", back_populates="order", cascade="all, delete-orphan", passive_deletes=True
+    )
 
     @validates("customer_phone")
     def _normalize_phone(self, _key: str, phone: str | None) -> str | None:
@@ -398,6 +425,11 @@ class Order(Base):
     # --- Modificación por el cliente ----------------------------------------------------------------
 
     @property
+    def is_dispatched(self) -> bool:
+        """El pedido salió de viaje: su repartidor ya recorre la ruta (si no, el viaje todavía se está armando)."""
+        return self.trip_id is not None
+
+    @property
     def is_shift_closed(self) -> bool:
         """Indica si el turno de caja al que pertenece este pedido ya fue cerrado (sellado)."""
         return bool(self.cash_shift and not self.cash_shift.is_open)
@@ -546,17 +578,23 @@ class Order(Base):
         return OrderStatus(new_status) in self.ALLOWED_TRANSITIONS[OrderStatus(self.status)]
 
     def transition_to(
-        self, new_status: OrderStatus | str, estimated_minutes: int | None, current_delay_minutes: int
+        self,
+        new_status: OrderStatus | str,
+        estimated_minutes: int | None,
+        current_delay_minutes: int,
+        estimate_source: "EstimateSource | None" = None,
     ) -> None:
         """Avanza el pedido en su ciclo de vida.
 
         Al confirmar un pedido para ahora se registra la demora estimada: la indicada o, si no se indica,
         la demora actual del local. Los pedidos programados se entregan en su horario y no llevan demora.
         """
-        if self.is_shift_closed:
+        new_status = OrderStatus(new_status)
+        # Un pedido que quedó abierto al cerrar la caja se puede seguir entregando (el reparto no toca el dinero del
+        # turno), pero no cancelarlo ni rechazarlo: eso lo sacaría de las ventas de un turno que ya está sellado.
+        if self.is_shift_closed and new_status in _NOT_BILLABLE_STATUSES:
             raise BusinessRuleError("El turno de caja de este pedido ya está cerrado.")
 
-        new_status = OrderStatus(new_status)
         if not self.can_transition_to(new_status):
             raise InvalidTransitionError(self.status, new_status.value)
 
@@ -565,10 +603,21 @@ class Order(Base):
                 raise ScheduledOrderEstimateError()
         elif new_status == OrderStatus.CONFIRMED and estimated_minutes is None:
             estimated_minutes = current_delay_minutes
+            estimate_source = EstimateSource.DEFAULT
 
         self.status = new_status.value
+        if new_status == OrderStatus.COMPLETED:
+            self.actual_minutes = self._minutes_since_created()
         if estimated_minutes is not None:
             self.estimated_minutes = estimated_minutes
+            self.estimate_source = (estimate_source or EstimateSource.MANUAL).value
+
+    def _minutes_since_created(self) -> int | None:
+        """Minutos que pasaron desde que el pedido ingresó al sistema (None si todavía no se guardó)."""
+        if self.created_at is None:
+            return None
+        created = self.created_at if self.created_at.tzinfo else self.created_at.replace(tzinfo=timezone.utc)
+        return max(0, round((datetime.now(timezone.utc) - created).total_seconds() / 60))
 
     @property
     def is_all_prepared(self) -> bool:
@@ -662,3 +711,48 @@ class OrderItem(Base):
         if self.product:
             return self.product.effective_sector
         return "cocina"
+
+
+class OrderStatusEvent(Base):
+    """Cada cambio de estado de un pedido, con el momento exacto y cuántos pedidos había en cola (aceptados y
+    todavía sin despachar). Es el historial real del local con el que se estiman las demoras (ver
+    delivery_time_service)."""
+
+    __tablename__ = "order_status_events"
+
+    id = Column(Integer, primary_key=True)
+    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    status = Column(String(50), nullable=False)
+    occurred_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    # Otros pedidos en cola (estado Confirmado) en el momento del cambio, sin contar a este.
+    queue_size = Column(Integer, nullable=False, default=0)
+
+    order = relationship("Order", back_populates="status_events")
+
+
+def _record_status_event(connection, order: "Order") -> None:
+    queue_size = connection.execute(
+        select(func.count())
+        .select_from(Order.__table__)
+        .where(Order.__table__.c.status == OrderStatus.CONFIRMED.value, Order.__table__.c.id != order.id)
+    ).scalar()
+    connection.execute(
+        insert(OrderStatusEvent.__table__).values(
+            order_id=order.id,
+            status=order.status,
+            occurred_at=datetime.now(timezone.utc),
+            queue_size=queue_size or 0,
+        )
+    )
+
+
+@event.listens_for(Order, "after_insert")
+def _record_initial_status(_mapper, connection, order: "Order") -> None:
+    _record_status_event(connection, order)
+
+
+@event.listens_for(Order, "after_update")
+def _record_status_change(_mapper, connection, order: "Order") -> None:
+    # Cualquier cambio de estado queda registrado, sin importar desde dónde se haga.
+    if inspect(order).attrs.status.history.has_changes():
+        _record_status_event(connection, order)

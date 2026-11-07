@@ -6,7 +6,8 @@ import { ACTIVE_ORDER_STATUSES, PAYMENT_METHOD_LABEL, SECTOR_CONFIG } from '@/ty
 import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector, WebOrderItem } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
-import { BellIcon, SectorIcon } from '@/components/Icons';
+import { openOrderChat } from '@/utils/orderChat';
+import { BellIcon, BotIcon, SectorIcon } from '@/components/Icons';
 
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
@@ -421,6 +422,19 @@ export function OrderDetailModal({
             <p className="text-sm text-gray-500">
               Recibido el {formatDate(current.created_at)} a las {formatTime(current.created_at)} hs
             </p>
+            {current.has_chat && !simulated && (
+              <button
+                type="button"
+                onClick={() => {
+                  openOrderChat(current.id);
+                  onClose();
+                }}
+                className="inline-flex items-center gap-1.5 rounded-lg border border-gray-300 px-3 py-1.5 text-xs font-semibold text-gray-700 hover:bg-gray-100 transition"
+              >
+                <BotIcon className="w-3.5 h-3.5 shrink-0" />
+                <span>Abrir chat con el cliente</span>
+              </button>
+            )}
           </div>
           <div className="shrink-0 flex items-center gap-2">
             {/* Cualquier pedido en curso se puede cancelar (al cliente del bot se le avisa por Telegram). */}

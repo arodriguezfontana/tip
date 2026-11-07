@@ -10,9 +10,10 @@ solo proceso del servidor y se pierde al reiniciarlo.
 import itertools
 import threading
 from dataclasses import dataclass, field
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from enum import Enum
 
+from app.core.config import settings
 from app.core.errors import ConflictError, NotFoundError
 
 # Tope de mensajes guardados por derivación, para que una charla larga no crezca sin límite.
@@ -25,8 +26,17 @@ MENSAJE_FIN_DERIVACION = (
 )
 
 
+# Quién figura como responsable cuando el local escribe desde la app de Meta Business Suite (no desde el panel).
+EMPLEADO_EXTERNO = "Meta Business Suite"
+
+
 def _ahora() -> datetime:
     return datetime.now(timezone.utc)
+
+
+def _timeout() -> timedelta:
+    """Sin mensajes (del cliente o del local) durante este tiempo, el chat vuelve al bot."""
+    return timedelta(seconds=settings.MANUAL_MODE_TIMEOUT_SECONDS)
 
 
 class AutorMensaje(str, Enum):
@@ -39,6 +49,8 @@ class AutorMensaje(str, Enum):
 class EstadoDerivacion(str, Enum):
     ESPERANDO = "waiting"
     EN_CURSO = "in_progress"
+    # Chat que todavía atiende el bot (nadie lo intervino): solo se usa para mostrar el historial de un pedido.
+    BOT = "bot"
 
 
 class DerivacionInexistenteError(NotFoundError):
@@ -72,13 +84,29 @@ class Derivacion:
     # Mensajes del cliente que el empleado todavía no vio (para el puntito de la lista de chats).
     sin_leer: int = 0
     historial_adjunto: bool = False
+    # Último mensaje del cliente o del local: desde acá corre el tiempo para que el bot retome el chat.
+    ultima_actividad: datetime = field(default_factory=_ahora)
+    # Chat no registrado (id 0): el bot sigue atendiendo y se muestra solo su historial.
+    transitoria: bool = False
 
     @property
     def estado(self) -> EstadoDerivacion:
+        if self.transitoria:
+            return EstadoDerivacion.BOT
         return EstadoDerivacion.EN_CURSO if self.atendida_por else EstadoDerivacion.ESPERANDO
+
+    @property
+    def externa(self) -> bool:
+        return self.atendida_por == EMPLEADO_EXTERNO
+
+    @property
+    def vence_en(self) -> datetime:
+        return self.ultima_actividad + _timeout()
 
     def agregar(self, autor: AutorMensaje, texto: str) -> MensajeDerivacion:
         mensaje = MensajeDerivacion(autor, texto)
+        if autor != AutorMensaje.SISTEMA:
+            self.ultima_actividad = mensaje.enviado_en
         self.mensajes.append(mensaje)
         del self.mensajes[:-MAX_MENSAJES_POR_DERIVACION]
         return mensaje
@@ -92,6 +120,12 @@ class RegistroDerivaciones:
         self._ids = itertools.count(1)
         self._lock = threading.RLock()
 
+    def _vencer_inactivas(self) -> None:
+        """Devuelve al bot los chats sin actividad durante el tiempo límite (reactivación automática)."""
+        limite = _ahora() - _timeout()
+        for chat_id in [c for c, d in self._por_chat.items() if d.ultima_actividad <= limite]:
+            del self._por_chat[chat_id]
+
     def solicitar(
         self,
         chat_id: str,
@@ -102,6 +136,7 @@ class RegistroDerivaciones:
     ) -> Derivacion:
         """Abre la derivación del chat. Si ya había una activa, la devuelve sin duplicarla."""
         with self._lock:
+            self._vencer_inactivas()
             existente = self._por_chat.get(chat_id)
             if existente is not None:
                 return existente
@@ -113,16 +148,63 @@ class RegistroDerivaciones:
 
     def esta_derivado(self, chat_id: str) -> bool:
         with self._lock:
+            self._vencer_inactivas()
             return chat_id in self._por_chat
+
+    def del_chat(self, chat_id: str) -> Derivacion | None:
+        with self._lock:
+            self._vencer_inactivas()
+            return self._por_chat.get(chat_id)
+
+    def intervenir(
+        self,
+        chat_id: str,
+        empleado: str,
+        cliente: str | None = None,
+        usuario: str | None = None,
+        telefono: str | None = None,
+        historial: list[MensajeDerivacion] | None = None,
+    ) -> Derivacion:
+        """Un empleado interviene un chat que atendía el bot: el bot se pausa y el empleado queda a cargo.
+
+        Si el chat ya estaba derivado, lo toma (o falla si lo atiende otro empleado).
+        """
+        with self._lock:
+            derivacion = self.solicitar(chat_id, cliente=cliente, usuario=usuario, telefono=telefono)
+            if historial:
+                self.adjuntar_historial(chat_id, historial, aviso=None)
+            return self.tomar(derivacion.id, empleado)
+
+    def registrar_mensaje_externo(
+        self, chat_id: str, texto: str, historial: list[MensajeDerivacion] | None = None
+    ) -> Derivacion:
+        """El local le escribió al cliente desde la app de Meta: el bot se pausa (o sigue pausado) y el mensaje
+        queda en el historial."""
+        with self._lock:
+            nueva = not self.esta_derivado(chat_id)
+            derivacion = self.solicitar(chat_id, motivo="El local escribió desde Meta Business Suite")
+            if nueva:
+                if historial:
+                    self.adjuntar_historial(chat_id, historial, aviso=None)
+                derivacion.atendida_por = EMPLEADO_EXTERNO
+                derivacion.agregar(AutorMensaje.SISTEMA, "El local tomó la conversación desde Meta Business Suite.")
+            derivacion.agregar(AutorMensaje.EMPLEADO, texto)
+            return derivacion
 
     def registrar_mensaje_del_cliente(self, chat_id: str, texto: str) -> None:
         with self._lock:
+            self._vencer_inactivas()
             derivacion = self._por_chat.get(chat_id)
             if derivacion is not None:
                 derivacion.agregar(AutorMensaje.CLIENTE, texto)
                 derivacion.sin_leer += 1
 
-    def adjuntar_historial(self, chat_id: str, historial: list[MensajeDerivacion]) -> None:
+    def adjuntar_historial(
+        self,
+        chat_id: str,
+        historial: list[MensajeDerivacion],
+        aviso: str | None = "El cliente pidió hablar con una persona.",
+    ) -> None:
         """Antepone la charla que el cliente tuvo con el bot, para que el empleado llegue con todo el contexto.
 
         Se hace una sola vez por derivación. Los mensajes que llegaron mientras tanto quedan a continuación.
@@ -132,8 +214,8 @@ class RegistroDerivaciones:
             if derivacion is None or derivacion.historial_adjunto:
                 return
             derivacion.historial_adjunto = True
-            aviso = MensajeDerivacion(AutorMensaje.SISTEMA, "El cliente pidió hablar con una persona.")
-            derivacion.mensajes[:0] = [*historial, aviso]
+            cierre = [MensajeDerivacion(AutorMensaje.SISTEMA, aviso)] if aviso else []
+            derivacion.mensajes[:0] = [*historial, *cierre]
             del derivacion.mensajes[:-MAX_MENSAJES_POR_DERIVACION]
 
     def marcar_leida(self, derivacion_id: int) -> None:
@@ -142,10 +224,12 @@ class RegistroDerivaciones:
 
     def listar(self) -> list[Derivacion]:
         with self._lock:
+            self._vencer_inactivas()
             return sorted(self._por_chat.values(), key=lambda d: d.solicitada_en)
 
     def obtener(self, derivacion_id: int) -> Derivacion:
         with self._lock:
+            self._vencer_inactivas()
             for derivacion in self._por_chat.values():
                 if derivacion.id == derivacion_id:
                     return derivacion
@@ -155,9 +239,10 @@ class RegistroDerivaciones:
         """El empleado toma el control. Si ya lo tiene otro empleado, no se le quita."""
         with self._lock:
             derivacion = self.obtener(derivacion_id)
-            if derivacion.atendida_por and derivacion.atendida_por != empleado:
+            # Lo que atiende el local desde la app de Meta no tiene un empleado del panel a cargo: se puede tomar.
+            if derivacion.atendida_por and derivacion.atendida_por != empleado and not derivacion.externa:
                 raise DerivacionTomadaError("Otro empleado ya está atendiendo esta conversación.")
-            if not derivacion.atendida_por:
+            if derivacion.atendida_por != empleado:
                 derivacion.atendida_por = empleado
                 derivacion.agregar(AutorMensaje.SISTEMA, f"{empleado} tomó la conversación.")
             derivacion.sin_leer = 0
@@ -175,7 +260,7 @@ class RegistroDerivaciones:
         """Cierra la derivación: el chat vuelve al bot."""
         with self._lock:
             derivacion = self.obtener(derivacion_id)
-            if derivacion.atendida_por and derivacion.atendida_por != empleado:
+            if derivacion.atendida_por and derivacion.atendida_por != empleado and not derivacion.externa:
                 raise DerivacionTomadaError("Otro empleado ya está atendiendo esta conversación.")
             del self._por_chat[derivacion.chat_id]
             return derivacion

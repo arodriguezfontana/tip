@@ -13,16 +13,19 @@ from app.models.user import User
 from app.schemas.delivery_driver_schemas import OrderAssignDriverPayload
 from app.schemas.order_schemas import (
     CounterOrderCreate,
+    OrderDelayEstimateResponse,
     OrderDetailResponse,
     OrderItemPreparedUpdate,
     OrderPaymentUpdate,
     OrderResponse,
     OrderSectorPreparedUpdate,
     OrderStatusUpdate,
+    TripDispatchPayload,
+    TripResponse,
     WebOrderCreate,
     WebOrderCreatedResponse,
 )
-from app.services import order_service
+from app.services import delivery_trip_service, order_service
 from app.services.channels import enviar_mensaje
 from app.services.mercadopago_service import (
     payment_received_message,
@@ -30,7 +33,7 @@ from app.services.mercadopago_service import (
     start_chat_payment,
     start_web_payment,
 )
-from app.services.order_notification_service import OrderSnapshot, notify_order_status_change
+from app.services.order_notification_service import OrderSnapshot, notify_order_status_change, notify_trip_dispatched
 from app.services.store_config_service import get_or_create_store_config
 
 logger = logging.getLogger(__name__)
@@ -114,6 +117,40 @@ def get_order_detail(
 ) -> OrderDetailResponse:
     """Detalle completo de un pedido: productos, datos del cliente y de la entrega, y facturación."""
     return OrderDetailResponse.from_model(order_service.get_order(db, order_id))
+
+
+@router.post("/trips/dispatch", response_model=TripResponse, status_code=http_status.HTTP_201_CREATED)
+def dispatch_delivery_trip(
+    payload: TripDispatchPayload,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> TripResponse:
+    """Inicia el viaje de un repartidor: calcula una sola ruta con Google Maps para todos sus pedidos armados y avisa
+    a cada cliente cuánto va a tardar en llegar (si no se puede calcular, sale igual y el aviso va sin tiempo). Los pedidos que se sumen después forman el viaje siguiente."""
+    trip, warning = delivery_trip_service.dispatch_trip(db, payload.delivery_driver_id, payload.order_ids)
+    background_tasks.add_task(notify_trip_dispatched, [OrderSnapshot.of(order) for order in trip.orders])
+    return TripResponse.from_model(trip, warning)
+
+
+@router.get("/{order_id}/estimate", response_model=OrderDelayEstimateResponse)
+def get_order_delay_estimate(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> OrderDelayEstimateResponse:
+    """Cómo se va a estimar la demora si se acepta el pedido ahora: automática (con el historial del local) o
+    manual, si todavía no hay datos suficientes para esa situación."""
+    order = order_service.get_order(db, order_id)
+    estimate = order_service.estimate_acceptance_delay(db, order)
+    return OrderDelayEstimateResponse(
+        mode=estimate.mode.value,
+        estimated_minutes=estimate.minutes,
+        samples=estimate.samples,
+        min_samples=estimate.min_samples,
+        queue_size=estimate.queue_size,
+        suggested_minutes=order_service.estimate_delay_minutes(db),
+    )
 
 
 @router.patch("/{order_id}/status", response_model=OrderResponse)

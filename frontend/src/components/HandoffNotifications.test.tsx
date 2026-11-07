@@ -1,10 +1,11 @@
-import { cleanup, screen, within } from '@testing-library/react';
+import { act, cleanup, screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import * as handoffService from '@/services/handoffService';
 import { playHandoffAlertSound } from '@/utils/alertSound';
+import { openOrderChat } from '@/utils/orderChat';
 import type { HandoffDetail, HandoffSummary } from '@/types/handoff';
 import { ADMIN, fakeAuth, renderWithProviders } from '@/test/utils';
 
@@ -85,7 +86,7 @@ describe('HandoffNotifications', () => {
     expect(handoffService.sendHandoffMessage).toHaveBeenCalledWith(1, 'Sí, hay lugar');
     expect(await screen.findByText('Sí, hay lugar')).toBeInTheDocument();
 
-    await userEvent.click(screen.getByRole('button', { name: /Finalizar atención/ }));
+    await userEvent.click(screen.getByRole('button', { name: /Reactivar Bot/ }));
 
     expect(handoffService.finishHandoff).toHaveBeenCalledWith(1);
     expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
@@ -112,12 +113,61 @@ describe('HandoffNotifications', () => {
 
     const historial = await screen.findByRole('region', { name: 'Chats en curso' });
     expect(within(historial).getByText('Ana')).toBeInTheDocument();
-    expect(within(historial).getByText('Vos: Sí, hay lugar')).toBeInTheDocument();
-    expect(within(historial).queryByText('Beto')).not.toBeInTheDocument();
+    expect(within(historial).getByText(/lo atendés vos/)).toBeInTheDocument();
     expect(screen.queryByRole('alert')).not.toBeInTheDocument();
 
     await userEvent.click(within(historial).getByRole('button', { name: /Ana/ }));
     expect(await screen.findByRole('dialog')).toBeInTheDocument();
+  });
+
+  it('muestra pausado el chat que atiende otro empleado, sin dejar abrirlo', async () => {
+    vi.mocked(handoffService.fetchHandoffs).mockResolvedValue([
+      { ...EN_CURSO, id: 2, customer_name: 'Beto', handled_by: 'otro@test.com' },
+    ]);
+    renderHandoffs();
+
+    const historial = await screen.findByRole('region', { name: 'Chats en curso' });
+    expect(within(historial).getByText(/Bot pausado · atiende otro@test.com/)).toBeInTheDocument();
+    expect(within(historial).getByRole('button', { name: /Beto/ })).toBeDisabled();
+  });
+
+  it('el chat atendido desde Meta Business Suite se puede tomar', async () => {
+    vi.mocked(handoffService.fetchHandoffs).mockResolvedValue([
+      { ...EN_CURSO, id: 3, customer_name: 'Caro', handled_by: 'Meta Business Suite', external: true },
+    ]);
+    renderHandoffs();
+
+    const historial = await screen.findByRole('region', { name: 'Chats en curso' });
+    expect(within(historial).getByText(/atiende el local desde Meta/)).toBeInTheDocument();
+    await userEvent.click(within(historial).getByRole('button', { name: /Caro/ }));
+    expect(handoffService.takeHandoff).toHaveBeenCalledWith(3);
+  });
+
+  it('desde el detalle de un pedido abre el chat sin pausar al bot hasta que el empleado escribe', async () => {
+    vi.mocked(handoffService.fetchHandoffs).mockResolvedValue([]);
+    const chatDelPedido: HandoffDetail = { ...DETAIL, id: 0, status: 'bot', handled_by: null };
+    vi.mocked(handoffService.fetchOrderChat).mockResolvedValue(chatDelPedido);
+    vi.mocked(handoffService.sendOrderChatMessage).mockResolvedValue({
+      ...DETAIL,
+      id: 7,
+      messages: [...DETAIL.messages, { author: 'employee', text: 'Hola Ana', sent_at: '2026-10-23T12:02:00Z' }],
+    });
+    renderHandoffs();
+
+    act(() => openOrderChat(55));
+
+    expect(await screen.findByRole('dialog')).toBeInTheDocument();
+    expect(handoffService.fetchOrderChat).toHaveBeenCalledWith(55);
+    expect(handoffService.takeHandoff).not.toHaveBeenCalled();
+    expect(await screen.findByText(/El bot está atendiendo este chat/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reactivar Bot/ })).toBeDisabled();
+
+    await userEvent.type(screen.getByLabelText('Mensaje'), 'Hola Ana');
+    await userEvent.click(screen.getByRole('button', { name: 'Enviar' }));
+
+    expect(handoffService.sendOrderChatMessage).toHaveBeenCalledWith(55, 'Hola Ana');
+    expect(await screen.findByText(/Bot pausado: atención manual/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: /Reactivar Bot/ })).toBeEnabled();
   });
 
   it('sin chats en curso el historial no aparece', async () => {

@@ -25,6 +25,8 @@ class OrderSnapshot:
     estimated_minutes: int | None
     scheduled_for: datetime | None
     is_paid: bool = False
+    # Llegada estimada a la parada del viaje (solo pedidos despachados).
+    eta_minutes: int | None = None
 
     @classmethod
     def of(cls, order: Order) -> "OrderSnapshot":
@@ -35,6 +37,7 @@ class OrderSnapshot:
             estimated_minutes=order.estimated_minutes,
             scheduled_for=order.scheduled_for,
             is_paid=bool(order.is_paid),
+            eta_minutes=order.eta_minutes,
         )
 
 
@@ -68,16 +71,38 @@ def build_status_message(
         else:
             mensaje += "\nSi tenés dudas, contactanos."
         return mensaje
-    if new_status == OrderStatus.ON_THE_WAY:
-        return "¡Tu pedido ya está en camino! 🛵 En breve lo vas a recibir."
     if new_status == OrderStatus.READY_FOR_PICKUP:
         return "¡Tu pedido está listo para retirar! 🎉 Ya podés pasar a buscarlo."
     return None
 
 
+def build_trip_message(order: Order | OrderSnapshot) -> str:
+    if order.eta_minutes is None:
+        # No se pudo calcular el tiempo de viaje: se avisa igual que salió, sin prometer una hora.
+        return "¡Tu pedido está en camino! 🛵"
+    return f"¡Tu pedido está en camino! 🛵 Llegará a tu domicilio en aproximadamente {order.eta_minutes} minutos."
+
+
+async def notify_trip_dispatched(orders: list[OrderSnapshot]) -> None:
+    """Avisa a todos los clientes del viaje, cada uno con su llegada estimada si se pudo calcular (los pedidos sin chat
+    se saltean)."""
+    for order in orders:
+        if not order.channel or not order.chat_id:
+            continue
+        try:
+            await enviar_mensaje(order.channel, order.chat_id, build_trip_message(order))
+        except Exception:
+            # Un aviso que falla no tiene que cortar los de los demás clientes del viaje.
+            logger.exception("No se pudo avisar la salida del viaje del pedido #%s.", order.id)
+
+
 async def notify_order_status_change(
     order: OrderSnapshot, new_status: str, payment_instructions: str | None = None
 ) -> None:
+    if new_status == OrderStatus.ON_THE_WAY:
+        # Salir "En Camino" arma el viaje en silencio: el aviso con la llegada sale al iniciarlo (notify_trip_dispatched).
+        return
+
     if not order.channel or not order.chat_id:
         logger.warning(
             "Orden #%s no tiene canal ni chat, no se puede notificar el cambio a '%s'.",

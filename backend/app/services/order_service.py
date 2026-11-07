@@ -13,12 +13,21 @@ from sqlalchemy.orm import Session
 from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
-from app.models.order import DeliveryMethod, InvalidOrderError, Order, OrderSource, OrderStatus, PaymentMethod
+from app.models.order import (
+    DeliveryMethod,
+    EstimateSource,
+    InvalidOrderError,
+    Order,
+    OrderSource,
+    OrderStatus,
+    PaymentMethod,
+)
 from app.models.user import User
 from app.repositories import delivery_driver_repository, order_repository, product_repository, promotion_repository
 from app.services import cash_shift_service
 from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
+from app.services.delivery_time_service import DelayEstimate, estimate_delay
 
 logger = logging.getLogger(__name__)
 
@@ -46,6 +55,15 @@ class CounterPayment:
     is_paid: bool
 
 
+class ManualEstimateRequiredError(BusinessRuleError):
+    """Todavía no hay historial suficiente para estimar la demora de este pedido: la tiene que indicar el personal."""
+
+    def __init__(self):
+        super().__init__(
+            "Todavía no hay datos suficientes para estimar la demora de este pedido: indicá el tiempo estimado en minutos."
+        )
+
+
 class ScheduleTooEarlyError(BusinessRuleError):
     """El horario pedido es anterior al primero en el que el local puede tener listo el pedido."""
 
@@ -63,6 +81,25 @@ def estimate_delay_minutes(db: Session) -> int:
     despachados ni listos para retirar)."""
     in_progress = order_repository.count_with_status(db, OrderStatus.CONFIRMED)
     return BASE_DELAY_MINUTES + in_progress * MINUTES_PER_ORDER_IN_PROGRESS
+
+
+def current_queue_size(db: Session) -> int:
+    """Pedidos en cola: aceptados y todavía sin despachar ni listos para retirar."""
+    return order_repository.count_with_status(db, OrderStatus.CONFIRMED)
+
+
+def estimate_acceptance_delay(db: Session, order: Order) -> DelayEstimate:
+    """Cómo se va a estimar la demora de este pedido si se acepta ahora (inteligente o manual)."""
+    return estimate_delay(db, order.delivery_method, current_queue_size(db))
+
+
+def _delay_for_new_confirmed_order(db: Session, delivery_method: DeliveryMethod | str) -> tuple[int, EstimateSource]:
+    """Demora de un pedido que entra ya aceptado (web y mostrador), sin personal que la indique: la del historial
+    si alcanza y, si no, la estándar."""
+    estimate = estimate_delay(db, delivery_method, current_queue_size(db))
+    if estimate.minutes is not None:
+        return estimate.minutes, EstimateSource.SMART
+    return estimate_delay_minutes(db), EstimateSource.DEFAULT
 
 
 def _round_up_to_minute(moment: datetime) -> datetime:
@@ -273,7 +310,8 @@ def create_web_order(
     order = _new_order(db, request, OrderSource.WEB)
     order.customer_id = user.id if user is not None and user.is_customer else None
     order.status = OrderStatus.CONFIRMED.value
-    order.estimated_minutes = estimate_delay_minutes(db)
+    order.estimated_minutes, source = _delay_for_new_confirmed_order(db, order.delivery_method)
+    order.estimate_source = source.value
     order.payment_method = PaymentMethod(payment_method).value
     order.is_paid = False
     shift = cash_shift_service.get_current_open_shift(db)
@@ -297,7 +335,8 @@ def create_counter_order(db: Session, request: OrderRequest, payment: CounterPay
     order = _new_order(db, request, OrderSource.COUNTER)
     order.cash_shift_id = shift.id
     order.status = OrderStatus.CONFIRMED.value
-    order.estimated_minutes = estimate_delay_minutes(db)
+    order.estimated_minutes, source = _delay_for_new_confirmed_order(db, order.delivery_method)
+    order.estimate_source = source.value
     order.payment_method = payment.method
     order.is_paid = payment.is_paid
     order = _save(db, order)
@@ -365,6 +404,12 @@ def get_order(db: Session, order_id: int) -> Order:
     return order
 
 
+def _require_trip_not_started(order: Order) -> None:
+    """El repartidor de un pedido cuyo viaje ya salió no se puede cambiar: la ruta y los avisos ya están en curso."""
+    if order.is_dispatched:
+        raise BusinessRuleError("El viaje de este pedido ya salió: no se puede cambiar el repartidor.")
+
+
 def change_order_status(
     db: Session,
     order_id: int,
@@ -377,6 +422,7 @@ def change_order_status(
     if delivery_driver_id is not None:
         if order.delivery_method != DeliveryMethod.DELIVERY.value:
             raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+        _require_trip_not_started(order)
         driver = delivery_driver_repository.get(db, delivery_driver_id)
         if driver is None:
             raise NotFoundError("Repartidor no encontrado.")
@@ -384,8 +430,26 @@ def change_order_status(
             raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
         order.delivery_driver_id = driver.id
 
+    estimate_source = None
+    if (
+        OrderStatus(new_status) == OrderStatus.CONFIRMED
+        and order.status == OrderStatus.PENDING.value
+        and order.scheduled_for is None
+        and estimated_minutes is None
+    ):
+        # Al aceptar el pedido la demora sale del historial del local; si todavía no alcanza, la indica el personal.
+        estimate = estimate_acceptance_delay(db, order)
+        if not estimate.is_smart:
+            raise ManualEstimateRequiredError()
+        estimated_minutes, estimate_source = estimate.minutes, EstimateSource.SMART
+
     with transaction(db):
-        order.transition_to(new_status, estimated_minutes, current_delay_minutes=estimate_delay_minutes(db))
+        order.transition_to(
+            new_status,
+            estimated_minutes,
+            current_delay_minutes=estimate_delay_minutes(db),
+            estimate_source=estimate_source,
+        )
         if order.status == OrderStatus.COMPLETED.value and order.awaits_cash_payment:
             _collect_cash_payment(db, order)
     db.refresh(order)
@@ -408,6 +472,7 @@ def assign_delivery_driver(
     order = get_order(db, order_id)
     if order.delivery_method != DeliveryMethod.DELIVERY.value:
         raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
+    _require_trip_not_started(order)
 
     if delivery_driver_id is not None:
         driver = delivery_driver_repository.get(db, delivery_driver_id)
@@ -429,7 +494,11 @@ def update_order_payment(db: Session, order_id: int, is_paid: bool) -> Order:
     """Actualiza manualmente el estado de cobro de un pedido."""
     order = get_order(db, order_id)
     if order.is_shift_closed:
-        raise BusinessRuleError("No se puede modificar el pago de un pedido con turno de caja cerrado.")
+        # Lo que ya se cobró en un turno cerrado no se toca. Pero un pedido que quedó abierto sin cobrar al cerrar la
+        # caja se cobra recién ahora: ese dinero entra en el turno que está abierto.
+        if not is_paid or order.is_paid or order.amount_paid > 0:
+            raise BusinessRuleError("No se puede modificar el pago de un pedido con turno de caja cerrado.")
+        order.cash_shift_id = None
     if is_paid and not order.cash_shift_id:
         shift = cash_shift_service.get_current_open_shift(db)
         if not shift:

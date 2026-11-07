@@ -1,10 +1,10 @@
 from datetime import datetime
 
 from sqlalchemy import and_, func, or_
-from sqlalchemy.orm import Session, joinedload
+from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models.menu import Category, Product
-from app.models.order import Order, OrderItem, OrderStatus
+from app.models.order import Order, OrderItem, OrderStatus, OrderStatusEvent
 from app.models.promotion import Promotion, PromotionProduct
 from app.repositories.common import created_between
 
@@ -96,6 +96,44 @@ def list_orders(
 
 def count_with_status(db: Session, status: OrderStatus) -> int:
     return db.query(func.count(Order.id)).filter(Order.status == status.value).scalar() or 0
+
+
+def undispatched_for_driver(db: Session, delivery_driver_id: int) -> list[Order]:
+    """Pedidos a domicilio en camino de un repartidor que todavía no salieron de viaje, del más viejo al más nuevo."""
+    return (
+        db.query(Order)
+        .options(*_order_item_options())
+        .filter(
+            Order.status == OrderStatus.ON_THE_WAY.value,
+            Order.delivery_method == "domicilio",
+            Order.delivery_driver_id == delivery_driver_id,
+            Order.trip_id.is_(None),
+        )
+        .order_by(Order.created_at.asc(), Order.id.asc())
+        .all()
+    )
+
+
+def finished_durations(db: Session, delivery_method: str, queue_size: int, limit: int) -> list[int]:
+    """Demora real (minutos desde que ingresó hasta que se finalizó) de los últimos pedidos para ahora con ese método de
+    entrega que se aceptaron con esa cantidad de pedidos en cola. Los más recientes primero."""
+    accepted = aliased(OrderStatusEvent)
+    rows = (
+        db.query(Order.actual_minutes)
+        .join(accepted, accepted.order_id == Order.id)
+        .filter(
+            accepted.status == OrderStatus.CONFIRMED.value,
+            accepted.queue_size == queue_size,
+            Order.status == OrderStatus.COMPLETED.value,
+            Order.actual_minutes.isnot(None),
+            Order.delivery_method == delivery_method,
+            Order.scheduled_for.is_(None),
+        )
+        .order_by(Order.id.desc())
+        .limit(limit)
+        .all()
+    )
+    return [minutes for (minutes,) in rows]
 
 
 # --- Agregados para las estadísticas ------------------------------------------------------------------

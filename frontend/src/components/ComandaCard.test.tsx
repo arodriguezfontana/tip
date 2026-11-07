@@ -1,10 +1,36 @@
-import { render, screen } from '@testing-library/react';
+import { act, render, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it, vi } from 'vitest';
-import { ComandaCard } from '@/components/ComandaCard';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { ComandaCard, ESTIMATE_REFRESH_INTERVAL_MS } from '@/components/ComandaCard';
+import * as orderService from '@/services/orderService';
+import type { OrderDelayEstimate } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
 import type { AdminOrder, SectorFilter } from '@/types/order';
 import { makeOrder } from '@/test/utils';
+
+vi.mock('@/services/orderService');
+
+const SMART: OrderDelayEstimate = {
+  mode: 'smart',
+  estimated_minutes: 25,
+  samples: 40,
+  min_samples: 30,
+  queue_size: 1,
+  suggested_minutes: 18,
+};
+const MANUAL: OrderDelayEstimate = {
+  mode: 'manual',
+  estimated_minutes: null,
+  samples: 12,
+  min_samples: 30,
+  queue_size: 1,
+  suggested_minutes: 18,
+};
+
+beforeEach(() => {
+  vi.resetAllMocks();
+  vi.mocked(orderService.fetchOrderDelayEstimate).mockResolvedValue(SMART);
+});
 
 function renderCard(
   overrides: Partial<AdminOrder> = {},
@@ -90,27 +116,106 @@ describe('ComandaCard', () => {
     expect(screen.getByText('Mostrador')).toBeInTheDocument();
   });
 
-  it('confirmar sin demora manual deja que el backend la calcule', async () => {
+  it('con historial suficiente muestra la demora automática y confirma sin pedir minutos', async () => {
     const { onStatusChange, user } = renderCard();
+
+    expect(await screen.findByText('25 min')).toBeInTheDocument();
+    expect(screen.queryByLabelText('Demora estimada en minutos')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
 
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Confirmado', undefined);
   });
 
-  it('confirmar con demora manual la envía', async () => {
+  it('no explica de dónde sale la demora automática', async () => {
+    renderCard();
+
+    await screen.findByText('25 min');
+    expect(screen.queryByText(/historial|automática/i)).not.toBeInTheDocument();
+  });
+
+  it('con demora automática el empleado puede cambiarla y se envía la que cargó', async () => {
     const { onStatusChange, user } = renderCard();
 
-    await user.type(screen.getByPlaceholderText(/Automática/), '35');
+    await user.click(await screen.findByRole('button', { name: 'Cambiar demora' }));
+    expect(screen.queryByText('25 min')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+
+    await user.type(screen.getByLabelText('Demora estimada en minutos'), '50');
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+
+    expect(onStatusChange).toHaveBeenCalledWith(101, 'Confirmado', 50);
+  });
+
+  it('después de querer cambiarla puede volver a la demora automática', async () => {
+    const { onStatusChange, user } = renderCard();
+
+    await user.click(await screen.findByRole('button', { name: 'Cambiar demora' }));
+    await user.type(screen.getByLabelText('Demora estimada en minutos'), '50');
+    await user.click(screen.getByRole('button', { name: 'Volver a la automática' }));
+
+    expect(screen.getByText('25 min')).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Confirmar' }));
+    expect(onStatusChange).toHaveBeenCalledWith(101, 'Confirmado', undefined);
+  });
+
+  it('mientras calcula la demora no deja confirmar', () => {
+    vi.mocked(orderService.fetchOrderDelayEstimate).mockReturnValue(new Promise(() => undefined));
+    renderCard();
+
+    expect(screen.getByText(/Calculando demora estimada/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+  });
+
+  it('sin historial suficiente el empleado tiene que cargar la demora y se envía', async () => {
+    vi.mocked(orderService.fetchOrderDelayEstimate).mockResolvedValue(MANUAL);
+    const { onStatusChange, user } = renderCard();
+
+    const input = await screen.findByLabelText('Demora estimada en minutos');
+    expect(screen.getByText(/12 de 30 pedidos similares/)).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+
+    await user.type(input, '35');
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
 
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Confirmado', 35);
   });
 
+  it('al refrescar la estimación en segundo plano no parpadea ni pierde lo que escribió el empleado', async () => {
+    vi.useFakeTimers({ shouldAdvanceTime: true });
+    try {
+      vi.mocked(orderService.fetchOrderDelayEstimate).mockResolvedValue(MANUAL);
+      const { user } = renderCard();
+      await user.type(await screen.findByLabelText('Demora estimada en minutos'), '35');
+      // La próxima consulta tarda: mientras espera, la tarjeta sigue mostrando lo anterior.
+      vi.mocked(orderService.fetchOrderDelayEstimate).mockReturnValue(new Promise(() => undefined));
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(ESTIMATE_REFRESH_INTERVAL_MS + 100);
+      });
+
+      expect(orderService.fetchOrderDelayEstimate).toHaveBeenCalledTimes(2);
+      expect(screen.queryByText(/Calculando demora estimada/)).not.toBeInTheDocument();
+      expect(screen.getByLabelText('Demora estimada en minutos')).toHaveValue(35);
+      expect(screen.getByRole('button', { name: 'Confirmar' })).toBeEnabled();
+    } finally {
+      vi.useRealTimers();
+    }
+  });
+
+  it('si no se pudo consultar la estimación también pide la demora a mano', async () => {
+    vi.mocked(orderService.fetchOrderDelayEstimate).mockRejectedValue(new Error('sin conexión'));
+    renderCard();
+
+    expect(await screen.findByLabelText('Demora estimada en minutos')).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
+  });
+
   it.each(['0', '2.5'])('no deja confirmar con una demora inválida (%s)', async (value) => {
+    vi.mocked(orderService.fetchOrderDelayEstimate).mockResolvedValue(MANUAL);
     const { user } = renderCard();
 
-    await user.type(screen.getByPlaceholderText(/Automática/), value);
+    await user.type(await screen.findByLabelText('Demora estimada en minutos'), value);
 
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();
   });
@@ -133,7 +238,8 @@ describe('ComandaCard', () => {
     const { onStatusChange, user } = renderCard({ scheduled_for: '2026-10-04T00:30:00Z' }); // 21:30 en Argentina
 
     expect(screen.getByText('21:30')).toBeInTheDocument();
-    expect(screen.queryByPlaceholderText(/Automática/)).not.toBeInTheDocument();
+    expect(screen.queryByLabelText('Demora estimada en minutos')).not.toBeInTheDocument();
+    expect(orderService.fetchOrderDelayEstimate).not.toHaveBeenCalled();
 
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Confirmado', undefined);
@@ -151,12 +257,46 @@ describe('ComandaCard', () => {
     expect(onStatusChange).toHaveBeenCalledWith(101, next, undefined);
   });
 
-  it.each(['En Camino', 'Listo para Retirar'] as const)('un pedido %s se finaliza', async (status) => {
-    const { onStatusChange, user } = renderCard({ status });
+  it.each([
+    ['En Camino', { status: 'En Camino', trip_id: 7, eta_minutes: 18 }],
+    ['Listo para Retirar', { status: 'Listo para Retirar' }],
+  ] as const)('un pedido %s se finaliza', async (_nombre, overrides) => {
+    const { onStatusChange, user } = renderCard(overrides);
 
     await user.click(screen.getByRole('button', { name: 'Finalizar' }));
 
     expect(onStatusChange).toHaveBeenCalledWith(101, 'Finalizado', undefined);
+  });
+
+  it('un pedido En Camino sin viaje iniciado está armando viaje: no se finaliza hasta que salga', () => {
+    renderCard({ status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: 1, delivery_driver_name: 'Nico' });
+
+    expect(screen.getByText('Armando viaje')).toBeInTheDocument();
+    expect(screen.getByText('Esperando que inicies el viaje del repartidor.')).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Finalizar' })).not.toBeInTheDocument();
+  });
+
+  it('un pedido armando viaje sin repartidor pide asignarlo', () => {
+    renderCard({ status: 'En Camino', delivery_method: 'domicilio', delivery_driver_id: null });
+
+    expect(screen.getByText('Asignale un repartidor para armar el viaje.')).toBeInTheDocument();
+  });
+
+  it('un pedido de un viaje despachado muestra su llegada estimada y ya no deja cambiar el repartidor', () => {
+    renderCard({
+      status: 'En Camino',
+      delivery_method: 'domicilio',
+      delivery_driver_id: 1,
+      delivery_driver_name: 'Nico',
+      trip_id: 7,
+      trip_stop: 2,
+      eta_minutes: 18,
+    });
+
+    expect(screen.getByText('En viaje · llega en ~18 min')).toBeInTheDocument();
+    expect(screen.queryByText('Armando viaje')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Finalizar' })).toBeInTheDocument();
   });
 
   it('deshabilita las acciones mientras se actualiza el estado', async () => {
@@ -164,6 +304,7 @@ describe('ComandaCard', () => {
     const { onStatusChange, user } = renderCard();
     onStatusChange.mockReturnValue(new Promise<void>((r) => (resolve = r)));
 
+    await screen.findByText('25 min');
     await user.click(screen.getByRole('button', { name: 'Confirmar' }));
 
     expect(screen.getByRole('button', { name: 'Confirmar' })).toBeDisabled();

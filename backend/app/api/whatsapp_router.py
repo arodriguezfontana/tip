@@ -74,6 +74,29 @@ def _mensajes_recibidos(data: dict):
                     yield _MensajeRecibido(**datos, audio_id=audio_id)
 
 
+def _chat_del_destinatario(telefono: str) -> str:
+    """Inverso de lo que hace el canal al enviar: Meta registra los celulares argentinos como 54... (sin el 9),
+    pero el chat del cliente llega como 549..."""
+    if telefono.startswith("54") and not telefono.startswith("549") and len(telefono) == 12:
+        return "549" + telefono[2:]
+    return telefono
+
+
+def _mensajes_salientes(data: dict):
+    """(teléfono del cliente, texto) de cada mensaje que el local envió desde la app de Meta Business Suite.
+
+    Meta los notifica como "message echoes" (campo `smb_message_echoes`) cuando el número también se usa en la app.
+    """
+    for entrada in data.get("entry") or []:
+        for cambio in entrada.get("changes") or []:
+            if cambio.get("field") != "smb_message_echoes":
+                continue
+            for mensaje in (cambio.get("value") or {}).get("message_echoes") or []:
+                texto = (mensaje.get("text") or {}).get("body")
+                if mensaje.get("type", "text") == "text" and texto and mensaje.get("to"):
+                    yield _chat_del_destinatario(mensaje["to"]), texto
+
+
 @router.post("/webhook")
 async def recibir_mensaje(request: Request, x_hub_signature_256: str | None = Header(default=None)):
     _exigir_canal_habilitado()
@@ -97,6 +120,10 @@ async def recibir_mensaje(request: Request, x_hub_signature_256: str | None = He
         elif mensaje.audio_id:
             # Se transcribe en segundo plano: Meta espera la confirmación enseguida.
             bot_service.recibir_audio(Channel.WHATSAPP, mensaje.telefono, mensaje.audio_id)
+
+    for telefono, texto in _mensajes_salientes(data):
+        # Un empleado respondió desde Meta Business Suite: el bot se pausa en ese chat.
+        bot_service.registrar_mensaje_saliente(Channel.WHATSAPP, telefono, texto)
 
     # Meta reintenta lo que no se confirma con 200 (también llegan avisos de entrega/lectura, que se ignoran).
     return {"status": "ok"}

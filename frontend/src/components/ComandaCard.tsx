@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import type { MouseEvent } from 'react';
 import { PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { AdminOrder, OrderStatus, SectorFilter } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
+import { useAsyncData } from '@/hooks/useAsyncData';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
+import { fetchOrderDelayEstimate } from '@/services/orderService';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
@@ -45,7 +47,12 @@ interface ComandaCardProps {
   onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
   /** Callback opcional de sector (para compatibilidad). */
   onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
+  /** En el modo simulación los pedidos no existen en el servidor: no se consulta la estimación de demora. */
+  simulated?: boolean;
 }
+
+/** Cada cuánto se vuelve a consultar la estimación de un pedido pendiente (cambia con los pedidos en cola). */
+export const ESTIMATE_REFRESH_INTERVAL_MS = 15000;
 
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
 const stopPropagation = (event: MouseEvent) => event.stopPropagation();
@@ -58,18 +65,46 @@ export function ComandaCard({
   onAcknowledgeUpdate,
   activeDrivers = [],
   onOpenDetail,
+  simulated = false,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
   const [markingPaid, setMarkingPaid] = useState(false);
   const [acknowledging, setAcknowledging] = useState(false);
   const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
+  // Con la demora automática, el empleado puede elegir cargar otra a mano.
+  const [changingDelay, setChangingDelay] = useState(false);
   const elapsedMs = useElapsedTime(order.created_at);
   const isScheduled = order.scheduled_for != null;
+  // Un pedido a domicilio "En Camino" primero arma su viaje (en silencio) y recién sale cuando se inicia el viaje.
+  const isDeliveryOnTheWay = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !simulated;
+  const isDispatched = isDeliveryOnTheWay && order.trip_id != null;
+  const isBuildingTrip = isDeliveryOnTheWay && order.trip_id == null;
+  // Al aceptar un pedido para ahora, la demora sale del historial del local o, si todavía no hay datos, la indica el empleado.
+  const needsEstimate = order.status === 'Pendiente' && !isScheduled && !simulated;
+  const loadEstimate = useMemo(
+    () => (needsEstimate ? () => fetchOrderDelayEstimate(order.id) : null),
+    [needsEstimate, order.id]
+  );
+  const { data: estimate, loading, reload: reloadEstimate } = useAsyncData(
+    loadEstimate,
+    'No se pudo calcular la demora estimada.'
+  );
+  // Solo la primera carga muestra "calculando": al refrescar en segundo plano se sigue viendo lo anterior (sin parpadeos).
+  const estimateLoading = loading && estimate === undefined;
+  useEffect(() => {
+    if (!needsEstimate) return;
+    const intervalId = setInterval(reloadEstimate, ESTIMATE_REFRESH_INTERVAL_MS);
+    return () => clearInterval(intervalId);
+  }, [needsEstimate, reloadEstimate]);
+  const smartMinutes = estimate?.mode === 'smart' ? estimate.estimated_minutes : null;
+  // Sin estimación automática (o si no se pudo consultar) el empleado tiene que cargar la demora.
+  const manualRequired = needsEstimate && !estimateLoading && smartMinutes == null;
   const hasKitchenUpdate = Boolean(order.kitchen_update_pending);
   // Pago mixto: ya se cobró una parte y el resto (la diferencia) se cobra aparte, ej. en efectivo al repartidor.
   const hasPartialPayment = !order.is_paid && (order.paid_amount ?? 0) > 0;
   // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
-  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
+  // Con el viaje ya despachado el repartidor no se cambia (la ruta y los avisos ya salieron).
+  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !isDispatched;
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
   const delayLevel = getDelayLevel(order, new Date(order.created_at).getTime() + elapsedMs);
@@ -80,7 +115,10 @@ export function ComandaCard({
       : 'bg-gray-100 text-gray-600';
   const parsedMinutes = Number(estimatedMinutesInput);
   
-  const isValidMinutes = estimatedMinutesInput.trim() === '' || (Number.isInteger(parsedMinutes) && parsedMinutes > 0);
+  const hasValidMinutes = estimatedMinutesInput.trim() !== '' && Number.isInteger(parsedMinutes) && parsedMinutes > 0;
+  // El campo de minutos se pide siempre sin estimación automática, y a pedido del empleado si quiere cambiarla.
+  const showMinutesInput = manualRequired || (smartMinutes != null && changingDelay);
+  const canConfirm = !(needsEstimate && estimateLoading) && (!showMinutesInput || hasValidMinutes);
 
   const handleClick = async (newStatus: OrderStatus, estimatedMinutes?: number) => {
     setPending(true);
@@ -131,7 +169,7 @@ export function ComandaCard({
           <div
             role="alert"
             onClick={stopPropagation}
-            className="flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
+            className="cursor-default flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
           >
             <span className="inline-flex items-center gap-1.5">
               <BellIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
@@ -244,6 +282,17 @@ export function ComandaCard({
             )
           )}
 
+          {isBuildingTrip && (
+            <span className="bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-xl font-semibold">
+              Armando viaje
+            </span>
+          )}
+          {isDispatched && (
+            <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-xl font-semibold">
+              En viaje{order.eta_minutes != null ? ` · llega en ~${order.eta_minutes} min` : ''}
+            </span>
+          )}
+
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
         </div>
 
@@ -302,14 +351,83 @@ export function ComandaCard({
         </div>
 
         {order.status === 'Pendiente' && (
-          <div className="space-y-2 pt-2 border-t border-gray-50" onClick={stopPropagation}>
+          <div className="cursor-default space-y-2 pt-2 border-t border-gray-50" onClick={stopPropagation}>
             {/* Los programados se entregan en su horario: no llevan demora estimada. */}
-            {!isScheduled && (
+            {needsEstimate && estimateLoading && (
+              <p className="text-xs text-gray-400" role="status">
+                Calculando demora estimada...
+              </p>
+            )}
+            {smartMinutes != null && !changingDelay && (
+              <div className="flex items-center justify-between gap-3 rounded-xl bg-emerald-50 px-3 py-2">
+                <div role="status" className="leading-tight">
+                  <p className="text-[11px] text-emerald-700">Demora estimada</p>
+                  <p className="text-base font-bold text-emerald-900">{smartMinutes} min</p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setChangingDelay(true)}
+                  aria-label="Cambiar demora"
+                  className="shrink-0 whitespace-nowrap rounded-lg border border-emerald-300 bg-white px-2.5 py-1 text-xs font-semibold text-emerald-800 hover:bg-emerald-100 transition"
+                >
+                  Cambiar
+                </button>
+              </div>
+            )}
+            {smartMinutes != null && changingDelay && (
+              <div className="space-y-1">
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  required
+                  autoFocus
+                  aria-label="Demora estimada en minutos"
+                  placeholder={`Minutos (automática: ${smartMinutes})`}
+                  value={estimatedMinutesInput}
+                  onChange={(e) => setEstimatedMinutesInput(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
+                />
+                <button
+                  type="button"
+                  onClick={() => {
+                    setChangingDelay(false);
+                    setEstimatedMinutesInput('');
+                  }}
+                  className="text-[11px] font-semibold text-gray-600 underline hover:text-gray-900"
+                >
+                  Volver a la automática
+                </button>
+              </div>
+            )}
+            {manualRequired && (
+              <div className="space-y-1">
+                <input
+                  type="number"
+                  min={1}
+                  step={1}
+                  required
+                  aria-label="Demora estimada en minutos"
+                  placeholder={`Demora estimada en minutos (obligatoria)${estimate ? `, ej: ${estimate.suggested_minutes}` : ''}`}
+                  value={estimatedMinutesInput}
+                  onChange={(e) => setEstimatedMinutesInput(e.target.value)}
+                  className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
+                />
+                {estimate && (
+                  <p className="text-[11px] text-gray-500">
+                    Todavía no hay datos suficientes para estimarla ({estimate.samples} de {estimate.min_samples} pedidos
+                    similares).
+                  </p>
+                )}
+              </div>
+            )}
+            {simulated && !isScheduled && (
               <input
                 type="number"
                 min={1}
                 step={1}
-                placeholder="Automática (15+ min) o manual"
+                aria-label="Demora estimada en minutos"
+                placeholder="Demora estimada en minutos (opcional)"
                 value={estimatedMinutesInput}
                 onChange={(e) => setEstimatedMinutesInput(e.target.value)}
                 className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
@@ -318,9 +436,9 @@ export function ComandaCard({
             <div className="flex gap-2">
               <button
                 type="button"
-                disabled={pending || !isValidMinutes}
+                disabled={pending || !canConfirm || (simulated && estimatedMinutesInput.trim() !== '' && !hasValidMinutes)}
                 onClick={() =>
-                  handleClick('Confirmado', isScheduled || estimatedMinutesInput.trim() === '' ? undefined : parsedMinutes)
+                  handleClick('Confirmado', showMinutesInput || simulated ? (hasValidMinutes ? parsedMinutes : undefined) : undefined)
                 }
                 className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
               >
@@ -339,7 +457,7 @@ export function ComandaCard({
         )}
 
         {order.status === 'Confirmado' && (
-          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
+          <div className="cursor-default pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}
@@ -351,8 +469,16 @@ export function ComandaCard({
           </div>
         )}
 
-        {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
-          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
+        {isBuildingTrip && (
+          <p className="cursor-default pt-2 border-t border-gray-50 text-xs text-gray-500" onClick={stopPropagation}>
+            {order.delivery_driver_id != null
+              ? 'Esperando que inicies el viaje del repartidor.'
+              : 'Asignale un repartidor para armar el viaje.'}
+          </p>
+        )}
+
+        {(order.status === 'Listo para Retirar' || (order.status === 'En Camino' && !isBuildingTrip)) && (
+          <div className="cursor-default pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}

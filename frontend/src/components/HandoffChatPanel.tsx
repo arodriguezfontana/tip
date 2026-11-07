@@ -1,6 +1,13 @@
 import { useEffect, useRef, useState } from 'react';
 import type { FormEvent } from 'react';
-import { fetchHandoff, finishHandoff, sendHandoffMessage, takeHandoff } from '@/services/handoffService';
+import {
+  fetchHandoff,
+  fetchOrderChat,
+  finishHandoff,
+  sendHandoffMessage,
+  sendOrderChatMessage,
+  takeHandoff,
+} from '@/services/handoffService';
 import type { HandoffDetail } from '@/types/handoff';
 import { getErrorMessage } from '@/utils/errors';
 import { handoffAvatarColor, handoffDetails, handoffName } from '@/utils/handoff';
@@ -9,7 +16,10 @@ import { BotIcon } from '@/components/Icons';
 export const CHAT_POLL_INTERVAL_MS = 2000;
 
 interface HandoffChatPanelProps {
-  handoffId: number;
+  /** Conversación ya derivada o intervenida: al abrirla el empleado la toma. */
+  handoffId?: number;
+  /** Chat con el cliente de un pedido del bot: se abre sin pausar al bot hasta que el empleado escriba. */
+  orderId?: number;
   /** Vuelve a la lista de chats; la conversación sigue a cargo del empleado. */
   onBack: () => void;
   /** Mensajes nuevos en los demás chats, para avisarlo en la flecha de volver (como en WhatsApp). */
@@ -27,7 +37,7 @@ const BUBBLE_CLASSES = {
  * Chat del empleado con un cliente derivado, en un panel lateral que no bloquea el resto de la página.
  * Al abrirlo toma la conversación; con la flecha vuelve a la lista sin soltarla; al finalizar vuelve al bot.
  */
-export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: HandoffChatPanelProps) {
+export function HandoffChatPanel({ handoffId, orderId, onBack, otherUnread = 0 }: HandoffChatPanelProps) {
   const [handoff, setHandoff] = useState<HandoffDetail | null>(null);
   const [text, setText] = useState('');
   const [busy, setBusy] = useState(false);
@@ -46,12 +56,16 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
       clearInterval(intervalId);
     };
 
-    takeHandoff(handoffId)
+    // Con un pedido no se toma el chat al abrirlo: el bot sigue hasta que el empleado escribe.
+    const open = () => (handoffId !== undefined ? takeHandoff(handoffId) : fetchOrderChat(orderId as number));
+    const refresh = () => (handoffId !== undefined ? fetchHandoff(handoffId) : fetchOrderChat(orderId as number));
+
+    open()
       .then((data) => {
         if (cancelled) return;
         setHandoff(data);
         intervalId = setInterval(() => {
-          fetchHandoff(handoffId)
+          refresh()
             .then((latest) => {
               if (!cancelled) setHandoff(latest);
             })
@@ -64,7 +78,7 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
       cancelled = true;
       clearInterval(intervalId);
     };
-  }, [handoffId]);
+  }, [handoffId, orderId]);
 
   const messageCount = handoff?.messages.length ?? 0;
   useEffect(() => {
@@ -78,7 +92,11 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
     setBusy(true);
     setError(null);
     try {
-      setHandoff(await sendHandoffMessage(handoffId, message));
+      setHandoff(
+        handoffId !== undefined
+          ? await sendHandoffMessage(handoffId, message)
+          : await sendOrderChatMessage(orderId as number, message)
+      );
       setText('');
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo enviar el mensaje.'));
@@ -88,11 +106,12 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
   };
 
   const handleFinish = async () => {
-    if (busy || closed) return;
+    // Solo se cierra una atención que ya está registrada (id real); un chat que sigue con el bot no tiene nada que cerrar.
+    if (busy || closed || !handoff || handoff.status === 'bot') return;
     setBusy(true);
     setError(null);
     try {
-      await finishHandoff(handoffId);
+      await finishHandoff(handoff.id);
       onBack();
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo finalizar la atención.'));
@@ -145,6 +164,23 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
         </div>
       </header>
 
+      {handoff?.status === 'in_progress' && (
+        <div role="status" className="shrink-0 border-b border-amber-200 bg-amber-50 px-3 py-1.5 text-[11px] text-amber-900">
+          <p className="font-bold">⏸ Bot pausado: atención manual{handoff.handled_by ? ` (${handoff.handled_by})` : ''}</p>
+          {handoff.expires_at && (
+            <p>
+              Si no hay mensajes, el bot retoma solo a las{' '}
+              {new Date(handoff.expires_at).toLocaleTimeString('es-AR', { hour: '2-digit', minute: '2-digit' })}.
+            </p>
+          )}
+        </div>
+      )}
+      {handoff?.status === 'bot' && (
+        <div role="status" className="shrink-0 border-b border-blue-100 bg-blue-50 px-3 py-1.5 text-[11px] text-blue-900">
+          El bot está atendiendo este chat. Si enviás un mensaje, el bot se pausa.
+        </div>
+      )}
+
       <div className="flex min-h-0 flex-1 flex-col gap-2 overflow-y-auto px-3 py-3" aria-label="Mensajes">
         {!handoff && !error && <p className="text-sm text-gray-400">Cargando conversación...</p>}
         {handoff?.messages.map((message, index) => (
@@ -191,10 +227,10 @@ export function HandoffChatPanel({ handoffId, onBack, otherUnread = 0 }: Handoff
         <button
           type="button"
           onClick={handleFinish}
-          disabled={!handoff || closed || busy}
-          className="w-full rounded-xl border border-gray-300 px-3 py-2 text-xs font-semibold text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+          disabled={!handoff || handoff.status === 'bot' || closed || busy}
+          className="w-full rounded-xl bg-emerald-600 px-3 py-2 text-xs font-semibold text-white hover:bg-emerald-700 transition disabled:opacity-60 disabled:hover:bg-emerald-600"
         >
-          Finalizar atención y volver al bot
+          Cerrar atención manual / Reactivar Bot
         </button>
       </div>
     </section>

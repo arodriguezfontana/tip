@@ -216,13 +216,23 @@ export interface AdminOrder {
   delivery_method: DeliveryMethod;
   source: OrderSource;
   channel?: OrderChannel | null;
+  /** El pedido salió de un chat del bot: se puede hablar con el cliente desde el panel. */
+  has_chat?: boolean;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;
+  /** De dónde salió la demora: historial del local, la cargó el personal o la estándar. */
+  estimate_source?: 'smart' | 'manual' | 'default' | null;
+  /** Demora real en minutos (desde que ingresó hasta que se finalizó); vacía mientras el pedido no terminó. */
+  actual_minutes?: number | null;
   scheduled_for: string | null;
   created_at: string;
   item_count: number;
   delivery_driver_id?: number | null;
+  /** Viaje en el que salió el pedido, su parada y la llegada estimada; vacíos mientras el viaje se está armando. */
+  trip_id?: number | null;
+  trip_stop?: number | null;
+  eta_minutes?: number | null;
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
@@ -245,4 +255,38 @@ export interface OrderDetail extends AdminOrder {
   shipping_cost: number;
   payment_method: PaymentMethod | null;
   is_paid: boolean;
+}
+
+/** Cómo se estimará la demora al aceptar un pedido. */
+export interface OrderDelayEstimate {
+  /** 'smart': la calcula el sistema con el historial del local; 'manual': la tiene que indicar el empleado. */
+  mode: 'smart' | 'manual';
+  estimated_minutes: number | null;
+  /** Pedidos parecidos con los que se calculó (o los que hay hasta ahora) y los que hacen falta. */
+  samples: number;
+  min_samples: number;
+  queue_size: number;
+  /** Demora estándar del local, para sugerirla al cargarla a mano. */
+  suggested_minutes: number;
+}
+
+/** Una parada del viaje de un repartidor con la llegada estimada al domicilio. */
+export interface TripStop {
+  order_id: number;
+  stop: number;
+  address: string;
+  customer_name: string;
+  eta_minutes: number | null;
+}
+
+/** Viaje despachado: la ruta calculada sobre todos los pedidos del lote. */
+export interface DeliveryTrip {
+  id: number;
+  delivery_driver_id: number | null;
+  delivery_driver_name: string | null;
+  dispatched_at: string;
+  total_minutes: number | null;
+  /** Por qué el viaje salió sin tiempos estimados (solo si no se pudo calcular la ruta). */
+  warning?: string | null;
+  stops: TripStop[];
 }
