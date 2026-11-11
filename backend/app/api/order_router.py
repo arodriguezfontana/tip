@@ -25,7 +25,8 @@ from app.schemas.order_schemas import (
     WebOrderCreate,
     WebOrderCreatedResponse,
 )
-from app.services import delivery_trip_service, order_service
+from app.schemas.printer_schemas import PrintResult
+from app.services import delivery_trip_service, order_service, printer_service
 from app.services.channels import enviar_mensaje
 from app.services.mercadopago_service import (
     payment_received_message,
@@ -72,6 +73,7 @@ def list_orders(
 @router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
 def create_order_from_web(
     payload: WebOrderCreate,
+    background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_current_user),
 ) -> WebOrderCreatedResponse:
@@ -91,6 +93,8 @@ def create_order_from_web(
     except SQLAlchemyError:
         logger.exception("Error al guardar un pedido web.")
         raise _unavailable("No pudimos registrar tu pedido en este momento. Por favor, intentá nuevamente en unos minutos.")
+    # El pedido web entra ya aceptado: la comanda sale sola hacia cocina sin hacer esperar al cliente.
+    printer_service.print_order_in_background(background_tasks, db, order)
     return WebOrderCreatedResponse.from_model(order, payment_url=payment_url)
 
 
@@ -106,7 +110,21 @@ def create_order_from_counter(
     except SQLAlchemyError:
         logger.exception("Error al guardar un pedido presencial.")
         raise _unavailable("No se pudo registrar el pedido en este momento. Intentá nuevamente.")
-    return WebOrderCreatedResponse.from_model(order)
+    # La comanda se imprime recién con el pedido guardado; si la impresora falla, el pedido queda registrado igual.
+    result = printer_service.print_order(db, order)
+    response = WebOrderCreatedResponse.from_model(order)
+    response.print_error = None if result.success else (result.message or "Error de impresión.")
+    return response
+
+
+@router.post("/{order_id}/print", response_model=PrintResult)
+def reprint_order(
+    order_id: int,
+    db: Session = Depends(get_db),
+    current_user: User = Depends(get_current_admin),
+) -> PrintResult:
+    """Vuelve a imprimir la comanda de un pedido (papel atascado, ticket perdido). No modifica el pedido."""
+    return printer_service.print_order(db, order_service.get_order(db, order_id))
 
 
 @router.get("/{order_id}", response_model=OrderDetailResponse)
@@ -162,6 +180,7 @@ def update_order_status(
     current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por su canal de chat."""
+    previous_status = order_service.get_order(db, order_id).status
     order = order_service.change_order_status(
         db,
         order_id,
@@ -171,12 +190,18 @@ def update_order_status(
     )
     # Los pedidos del chat se pagan una vez aceptados: así nadie paga un pedido que el local después rechaza.
     payment_instructions = None
+    # Al aceptar un pedido pendiente la comanda va a cocina (los de mostrador ya se imprimieron al registrarlos).
+    just_confirmed = status_update.status == OrderStatus.CONFIRMED and previous_status == OrderStatus.PENDING.value
     if status_update.status == OrderStatus.CONFIRMED:
         payment_instructions = start_chat_payment(db, order, get_or_create_store_config(db))
     background_tasks.add_task(
         notify_order_status_change, OrderSnapshot.of(order), status_update.status, payment_instructions
     )
-    return OrderResponse.from_model(order)
+    response = OrderResponse.from_model(order)
+    if just_confirmed:
+        result = printer_service.print_order(db, order)
+        response.print_error = None if result.success else (result.message or "Error de impresión.")
+    return response
 
 
 @router.patch("/{order_id}/delivery-driver", response_model=OrderResponse)

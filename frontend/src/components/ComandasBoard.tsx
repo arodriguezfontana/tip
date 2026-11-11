@@ -22,6 +22,7 @@ import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
 import { SectorIcon, UtensilsIcon } from '@/components/Icons';
 import { formatCurrency } from '@/utils/currency';
+import { printErrorMessage } from '@/utils/printing';
 
 const POLL_INTERVAL_MS = 10000;
 
@@ -318,7 +319,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         }
         return prev.map((order) => (order.id === orderId ? updated : order));
       });
-      setError(null);
+      // El pedido ya se confirmó: si la comanda no salió, se avisa sin deshacer nada.
+      setError(updated.print_error ? printErrorMessage(orderId) : null);
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
       setError(message || 'No se pudo actualizar el estado del pedido.');

@@ -241,7 +241,7 @@ describe('AdminDashboardPage', () => {
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Control de caja', 'Historial', 'Clientes', 'Repartidores']);
     expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Promociones', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Configuración']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Configuración', 'Impresoras']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });

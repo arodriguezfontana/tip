@@ -15,7 +15,8 @@ export type ViewKey =
   | 'ingredientes'
   | 'menu-imagen'
   | 'horarios'
-  | 'configuracion-web';
+  | 'configuracion-web'
+  | 'impresoras';
 
 /** Secciones del panel agrupadas por tarea: el día a día, el catálogo, los reportes y la configuración del local. */
 const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] = [
@@ -51,6 +52,7 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
       { key: 'horarios', label: 'Horarios' },
       { key: 'menu-imagen', label: 'Menú y promociones' },
       { key: 'configuracion-web', label: 'Configuración' },
+      { key: 'impresoras', label: 'Impresoras' },
     ],
   },
 ];

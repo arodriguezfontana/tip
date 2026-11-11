@@ -7,7 +7,8 @@ import type { AdminOrder, OrderDetail, OrderStatus, PreparationSector, WebOrderI
 import { formatCurrency } from '@/utils/currency';
 import { getErrorMessage } from '@/utils/errors';
 import { openOrderChat } from '@/utils/orderChat';
-import { BellIcon, BotIcon, SectorIcon } from '@/components/Icons';
+import { useReprint } from '@/hooks/useReprint';
+import { BellIcon, BotIcon, PrinterIcon, SectorIcon } from '@/components/Icons';
 
 const TIME_ZONE = 'America/Argentina/Buenos_Aires';
 
@@ -136,6 +137,7 @@ export function OrderDetailModal({
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
   const closeButtonRef = useRef<HTMLButtonElement>(null);
+  const { reprint, printingId, feedback: printFeedback } = useReprint();
   const onCloseRef = useRef(onClose);
 
   const handleMarkAsPaid = async () => {
@@ -766,7 +768,27 @@ export function OrderDetailModal({
           </Section>
         </div>
 
-        <footer className="px-6 py-4 border-t border-gray-100 flex justify-end">
+        <footer className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-end gap-3">
+          {printFeedback && (
+            <p
+              role={printFeedback.type === 'error' ? 'alert' : 'status'}
+              className={`mr-auto text-xs font-semibold ${printFeedback.type === 'error' ? 'text-red-700' : 'text-green-700'}`}
+            >
+              {printFeedback.message}
+            </p>
+          )}
+          {!simulated && (
+            <button
+              type="button"
+              onClick={() => void reprint(order.id)}
+              disabled={printingId === order.id}
+              aria-label="Reimprimir comanda"
+              title="Reimprimir comanda"
+              className="p-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-800 transition disabled:opacity-60"
+            >
+              <PrinterIcon className={`w-5 h-5 ${printingId === order.id ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

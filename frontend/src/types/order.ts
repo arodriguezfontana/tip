@@ -175,6 +175,8 @@ export interface WebOrderCreated {
   is_paid: boolean;
   /** Link de Checkout Pro de MercadoPago al que se redirige al cliente (solo si eligió MercadoPago). */
   payment_url: string | null;
+  /** Solo en pedidos de mostrador: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 export interface CheckoutFormErrors {
@@ -246,6 +248,8 @@ export interface AdminOrder {
   items_prepared_count?: number;
   is_all_prepared?: boolean;
   sectors?: (PreparationSector | string)[];
+  /** Solo al confirmar el pedido: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */

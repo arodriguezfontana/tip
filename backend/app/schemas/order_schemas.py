@@ -51,6 +51,8 @@ class OrderResponse(BaseModel):
     items_prepared_count: int = 0
     is_all_prepared: bool = False
     sectors: list[str] = Field(default_factory=list)
+    # Solo al confirmar: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @model_validator(mode="after")
     def _web_payment_methods(self) -> "OrderResponse":
@@ -316,6 +318,8 @@ class WebOrderCreatedResponse(BaseModel):
     is_paid: bool = False
     # Link de Checkout Pro de MercadoPago al que se redirige al cliente para pagar (solo si eligió MercadoPago).
     payment_url: str | None = None
+    # Solo en pedidos de mostrador: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @classmethod
     def from_model(cls, order: Order, payment_url: str | None = None) -> "WebOrderCreatedResponse":
