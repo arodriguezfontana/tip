@@ -34,7 +34,9 @@ interface PaymentReturnProps {
  * Página de confirmación a la que vuelve el cliente después de pagar en MercadoPago. El pago se verifica con
  * el backend (que lo consulta a MercadoPago): el estado que viene en la URL solo se usa si no se pudo verificar.
  */
-export function PaymentReturn({ orderId, paymentId, status, saved, onNewOrder }: PaymentReturnProps) {
+export function PaymentReturn({ orderId: orderRef, paymentId, status, saved, onNewOrder }: PaymentReturnProps) {
+  // La URL trae el id interno; al cliente se le muestra el número del pedido (si el pedido sigue guardado en esta pestaña).
+  const orderId = saved?.order.shift_number ?? orderRef;
   const hasPayment = Boolean(paymentId && paymentId !== 'null');
   const [outcome, setOutcome] = useState<PaymentOutcome>(hasPayment ? 'checking' : outcomeFor(status));
 

@@ -44,7 +44,7 @@ AVISO_LINK_AL_ACEPTAR = "Te pasamos el link de pago cuando el local acepte tu pe
 
 def _mensaje_en_camino(order: Order) -> str:
     return (
-        f"Tu pedido #{order.id} ya está en camino 🛵, así que no es posible modificarlo. "
+        f"Tu pedido #{order.shift_number} ya está en camino 🛵, así que no es posible modificarlo. "
         "Si querés, te tomo un pedido nuevo: contame qué te gustaría pedir."
     )
 
@@ -117,7 +117,7 @@ def agregar_items_al_pedido(
         except InvalidOrderError as exc:
             return f"No pude agregar esos productos. {exc}"
 
-        encabezado = f"¡Agregado! 🛒 Sumé a tu pedido #{order.id}:\n{_detalle_agregado(resueltos)}\n\n"
+        encabezado = f"¡Agregado! 🛒 Sumé a tu pedido #{order.shift_number}:\n{_detalle_agregado(resueltos)}\n\n"
 
         if order.has_partial_payment:
             return encabezado + (
@@ -175,7 +175,7 @@ def cambiar_metodo_de_pago(
                 return _mensaje_en_camino(order)
             return "Tu pedido ya salió, así que no puedo cambiar el medio de pago. Cualquier duda, comunicate con el local."
         except PaymentChangeNotAllowedError:
-            return f"Tu pedido #{order.id} ya está abonado, no hay nada más por pagar. ✅"
+            return f"Tu pedido #{order.shift_number} ya está abonado, no hay nada más por pagar. ✅"
 
         parcial = order.has_partial_payment
         monto = order.amount_pending if parcial else Decimal(order.total_amount)

@@ -47,6 +47,7 @@ const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 function orderCreated(overrides: Partial<WebOrderCreated> = {}): WebOrderCreated {
   return {
     id: 321,
+    shift_number: 321,
     status: 'Pendiente',
     customer_name: 'Ana Gómez',
     customer_phone: '11 5555-1234',

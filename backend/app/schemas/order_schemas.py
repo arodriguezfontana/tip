@@ -13,6 +13,8 @@ WEB_PAYMENT_METHODS = (PaymentMethod.CASH, PaymentMethod.MERCADOPAGO)
 
 class OrderResponse(BaseModel):
     id: int
+    # Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna).
+    shift_number: int
     customer_name: str
     shipping_address: str
     total_amount: float
@@ -63,6 +65,7 @@ class OrderResponse(BaseModel):
     def from_model(cls, order: Order) -> "OrderResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             customer_name=order.customer_name,
             shipping_address=order.shipping_address,
             total_amount=order.total_amount,
@@ -305,6 +308,7 @@ class WebOrderItemResponse(BaseModel):
 
 class WebOrderCreatedResponse(BaseModel):
     id: int
+    shift_number: int
     status: str
     customer_name: str
     customer_phone: str | None
@@ -325,6 +329,7 @@ class WebOrderCreatedResponse(BaseModel):
     def from_model(cls, order: Order, payment_url: str | None = None) -> "WebOrderCreatedResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             status=order.status,
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,

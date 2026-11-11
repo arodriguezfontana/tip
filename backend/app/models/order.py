@@ -16,14 +16,17 @@ from sqlalchemy import (
     Integer,
     String,
     Text,
+    UniqueConstraint,
     event,
     false,
     insert,
     inspect,
     select,
 )
+from sqlalchemy import column as sa_column
+from sqlalchemy import table as sa_table
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import Session, object_session, relationship, validates
 from sqlalchemy.sql import func
 
 from app.core.channels import Channel
@@ -161,6 +164,7 @@ class Order(Base):
         CheckConstraint(f"balance_payment_method IN {_values(PaymentMethod)}", name="ck_orders_balance_payment_method"),
         CheckConstraint(f"payment_method IN {_values(PaymentMethod)}", name="ck_orders_payment_method"),
         CheckConstraint(f"estimate_source IN {_values(EstimateSource)}", name="ck_orders_estimate_source"),
+        UniqueConstraint("numbering_shift_id", "shift_number", name="uq_orders_numbering_shift_id_shift_number"),
     )
 
     # Ciclo de vida del pedido: a qué estados puede pasar desde cada uno.
@@ -176,6 +180,11 @@ class Order(Base):
     }
 
     id = Column(Integer, primary_key=True, index=True)
+    # Turno de caja al que pertenece la numeración del pedido (0 si todavía no hubo ningún turno) y su número dentro de
+    # él: es el "#N" que ven el personal y el cliente, y arranca de nuevo en 1 con cada turno que se abre. Un pedido que
+    # entra con la caja cerrada sigue la numeración del último turno. El `id` sigue siendo la clave interna.
+    numbering_shift_id = Column(Integer, nullable=False)
+    shift_number = Column(Integer, nullable=False)
     customer_name = Column(String(150), nullable=False)
     shipping_address = Column(String(255), nullable=False)
     # Total a pagar: suma de los productos más el costo de envío.
@@ -744,6 +753,34 @@ def _record_status_event(connection, order: "Order") -> None:
             queue_size=queue_size or 0,
         )
     )
+
+
+_SHIFT_NUMBERS_KEY = "order_shift_numbers"
+_cash_shifts = sa_table("cash_shifts", sa_column("id"))
+
+
+@event.listens_for(Session, "after_flush_postexec")
+def _forget_assigned_shift_numbers(session, _flush_context) -> None:
+    session.info.pop(_SHIFT_NUMBERS_KEY, None)
+
+
+@event.listens_for(Order, "before_insert")
+def _assign_shift_number(_mapper, connection, order: "Order") -> None:
+    """Numera el pedido dentro de su turno de caja: el siguiente al mayor número ya usado en el turno (1 si es el primero)."""
+    if order.numbering_shift_id is None:
+        order.numbering_shift_id = order.cash_shift_id or connection.execute(
+            select(func.max(_cash_shifts.c.id))
+        ).scalar() or 0
+    if order.shift_number is None:
+        table = Order.__table__
+        last = connection.execute(
+            select(func.max(table.c.shift_number)).where(table.c.numbering_shift_id == order.numbering_shift_id)
+        ).scalar()
+        # Varios pedidos que se guardan en un mismo flush todavía no están en la base: se cuentan aparte.
+        assigned = object_session(order).info.setdefault(_SHIFT_NUMBERS_KEY, {})
+        number = max(last or 0, assigned.get(order.numbering_shift_id, 0)) + 1
+        assigned[order.numbering_shift_id] = number
+        order.shift_number = number
 
 
 @event.listens_for(Order, "after_insert")

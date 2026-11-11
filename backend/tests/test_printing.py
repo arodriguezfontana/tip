@@ -271,3 +271,23 @@ def test_pagina_de_prueba(client, fake_printer, dead_port):
 def test_endpoints_de_impresoras_exigen_admin(public_client):
     assert public_client.get(PRINTERS_URL).status_code in (401, 403)
     assert public_client.post("/api/v1/orders/1/print").status_code in (401, 403)
+
+
+def test_el_numero_de_pedido_se_reinicia_con_cada_turno_de_caja(client, db_session, products, open_shift):
+    from app.models.cash_shift import CashShift
+
+    def new_order():
+        items = [{"product_id": products["muzza"].id, "quantity": 1}]
+        return client.post(COUNTER_URL, json=_counter_payload(items)).json()
+
+    primero, segundo = new_order(), new_order()
+    assert (primero["shift_number"], segundo["shift_number"]) == (1, 2)
+
+    # Al cerrar el turno y abrir otro, la numeración vuelve a empezar en 1 (el id interno sigue creciendo).
+    open_shift.status = "cerrada"
+    db_session.add(CashShift(initial_amount=0, status="abierta"))
+    db_session.commit()
+    tercero = new_order()
+    assert tercero["shift_number"] == 1
+    assert tercero["id"] > segundo["id"]
+    assert db_session.query(Order).filter(Order.id == primero["id"]).one().shift_number == 1

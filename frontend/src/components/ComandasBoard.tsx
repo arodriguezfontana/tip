@@ -320,7 +320,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         return prev.map((order) => (order.id === orderId ? updated : order));
       });
       // El pedido ya se confirmó: si la comanda no salió, se avisa sin deshacer nada.
-      setError(updated.print_error ? printErrorMessage(orderId) : null);
+      setError(updated.print_error ? printErrorMessage(updated.shift_number) : null);
     } catch (err) {
       const message = err && typeof err === 'object' && 'message' in err ? String(err.message) : null;
       setError(message || 'No se pudo actualizar el estado del pedido.');
@@ -796,7 +796,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
       {unpaidToFinish && (
         <Modal
           title="El pedido aún no está pago"
-          subtitle={`Pedido #${unpaidToFinish.id} · ${unpaidToFinish.customer_name}`}
+          subtitle={`Pedido #${unpaidToFinish.shift_number} · ${unpaidToFinish.customer_name}`}
           onClose={() => setUnpaidToFinish(null)}
           closeDisabled={finishingUnpaid}
           width="md"

@@ -411,7 +411,7 @@ export function OrderDetailModal({
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 id={titleId} className="text-xl font-bold text-gray-900">
-                Pedido #{current.id}
+                Pedido #{current.shift_number}
               </h2>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE_CLASS[current.status]}`}>
                 {current.status}
@@ -780,7 +780,7 @@ export function OrderDetailModal({
           {!simulated && (
             <button
               type="button"
-              onClick={() => void reprint(order.id)}
+              onClick={() => void reprint(order)}
               disabled={printingId === order.id}
               aria-label="Reimprimir comanda"
               title="Reimprimir comanda"

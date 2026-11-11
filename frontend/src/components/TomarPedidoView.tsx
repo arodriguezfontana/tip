@@ -342,7 +342,7 @@ export function TomarPedidoView() {
         }),
       });
       resetOrder();
-      setLastOrderId(order.id);
+      setLastOrderId(order.shift_number);
       setPrintFailed(Boolean(order.print_error));
       phoneInputRef.current?.focus();
     } catch (err) {

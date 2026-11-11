@@ -128,10 +128,10 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
                           event.stopPropagation();
                           setDetailOrder(order);
                         }}
-                        aria-label={`Ver detalle del pedido #${order.id}`}
+                        aria-label={`Ver detalle del pedido #${order.shift_number}`}
                         className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
                       >
-                        #{order.id}
+                        #{order.shift_number}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
@@ -149,10 +149,10 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
                         type="button"
                         onClick={(event) => {
                           event.stopPropagation();
-                          void reprint(order.id);
+                          void reprint(order);
                         }}
                         disabled={printingId === order.id}
-                        aria-label={`Imprimir comanda del pedido #${order.id}`}
+                        aria-label={`Imprimir comanda del pedido #${order.shift_number}`}
                         title="Imprimir comanda"
                         className="inline-flex items-center justify-center rounded-lg border border-gray-300 p-2 text-gray-700 hover:bg-gray-100 disabled:opacity-60"
                       >

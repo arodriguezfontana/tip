@@ -162,6 +162,7 @@ export interface WebOrderItem {
 
 export interface WebOrderCreated {
   id: number;
+  shift_number: number;
   status: OrderStatus;
   customer_name: string;
   customer_phone: string | null;
@@ -211,6 +212,8 @@ export type OrderChannel = 'telegram' | 'whatsapp';
 
 export interface AdminOrder {
   id: number;
+  /** Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna). */
+  shift_number: number;
   customer_name: string;
   shipping_address: string;
   total_amount: number;

@@ -134,7 +134,7 @@ def build_ticket_lines(order: Order, sector: str | None = None) -> list[tuple[st
     lines: list[tuple[str, str]] = []
     if sector:
         lines.append(("center", f"SECTOR: {sector.upper()}"))
-    lines.append(("title", f"PEDIDO #{order.id}"))
+    lines.append(("title", f"PEDIDO #{order.shift_number}"))
     if order.created_at is not None:
         lines.append(("center", _local_time(order.created_at, "%d/%m/%Y %H:%M")))
     if order.scheduled_for is not None:

@@ -1,5 +1,6 @@
 import { useCallback, useState } from 'react';
 import { reprintOrder } from '@/services/orderService';
+import type { AdminOrder } from '@/types/order';
 import { getErrorMessage } from '@/utils/errors';
 
 export interface ReprintFeedback {
@@ -12,11 +13,12 @@ export function useReprint() {
   const [printingId, setPrintingId] = useState<number | null>(null);
   const [feedback, setFeedback] = useState<ReprintFeedback | null>(null);
 
-  const reprint = useCallback(async (orderId: number) => {
-    setPrintingId(orderId);
+  const reprint = useCallback(async (order: Pick<AdminOrder, 'id' | 'shift_number'>) => {
+    const orderId = order.shift_number;
+    setPrintingId(order.id);
     setFeedback(null);
     try {
-      const result = await reprintOrder(orderId);
+      const result = await reprintOrder(order.id);
       setFeedback(
         result.success
           ? { type: 'success', message: `Comanda del pedido #${orderId} enviada a imprimir.` }
