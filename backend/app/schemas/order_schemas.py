@@ -13,6 +13,8 @@ WEB_PAYMENT_METHODS = (PaymentMethod.CASH, PaymentMethod.MERCADOPAGO)
 
 class OrderResponse(BaseModel):
     id: int
+    # Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna).
+    shift_number: int
     customer_name: str
     shipping_address: str
     total_amount: float
@@ -51,6 +53,8 @@ class OrderResponse(BaseModel):
     items_prepared_count: int = 0
     is_all_prepared: bool = False
     sectors: list[str] = Field(default_factory=list)
+    # Solo al confirmar: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @model_validator(mode="after")
     def _web_payment_methods(self) -> "OrderResponse":
@@ -61,6 +65,7 @@ class OrderResponse(BaseModel):
     def from_model(cls, order: Order) -> "OrderResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             customer_name=order.customer_name,
             shipping_address=order.shipping_address,
             total_amount=order.total_amount,
@@ -303,6 +308,7 @@ class WebOrderItemResponse(BaseModel):
 
 class WebOrderCreatedResponse(BaseModel):
     id: int
+    shift_number: int
     status: str
     customer_name: str
     customer_phone: str | None
@@ -316,11 +322,14 @@ class WebOrderCreatedResponse(BaseModel):
     is_paid: bool = False
     # Link de Checkout Pro de MercadoPago al que se redirige al cliente para pagar (solo si eligió MercadoPago).
     payment_url: str | None = None
+    # Solo en pedidos de mostrador: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @classmethod
     def from_model(cls, order: Order, payment_url: str | None = None) -> "WebOrderCreatedResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             status=order.status,
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,

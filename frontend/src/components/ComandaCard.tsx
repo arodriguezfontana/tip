@@ -144,13 +144,13 @@ export function ComandaCard({
                   event.stopPropagation();
                   onOpenDetail(order);
                 }}
-                aria-label={`Ver detalle del pedido #${order.id}`}
+                aria-label={`Ver detalle del pedido #${order.shift_number}`}
                 className="font-bold text-gray-900 text-sm rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
               >
-                #{order.id}
+                #{order.shift_number}
               </button>
             ) : (
-              <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
+              <span className="font-bold text-gray-900 text-sm">#{order.shift_number}</span>
             )}
             <span
               className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${

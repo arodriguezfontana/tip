@@ -10,6 +10,7 @@ import type {
   WebOrderCreated,
   WebOrderPayload,
 } from '@/types/order';
+import type { PrintResult } from '@/types/printer';
 
 export interface FetchOrdersParams {
   dateFrom?: Date;
@@ -65,6 +66,12 @@ export async function dispatchTrip(deliveryDriverId: number, orderIds?: number[]
     delivery_driver_id: deliveryDriverId,
     ...(orderIds ? { order_ids: orderIds } : {}),
   });
+  return data;
+}
+
+/** Vuelve a imprimir la comanda de un pedido. No lanza si la impresora falla: informa el resultado. */
+export async function reprintOrder(orderId: number): Promise<PrintResult> {
+  const { data } = await api.post<PrintResult>(`/orders/${orderId}/print`);
   return data;
 }
 

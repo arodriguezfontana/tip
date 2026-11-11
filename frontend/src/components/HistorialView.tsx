@@ -7,6 +7,8 @@ import type { DateRangePreset } from '@/utils/dateRange';
 import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
+import { PrinterIcon } from '@/components/Icons';
+import { useReprint } from '@/hooks/useReprint';
 
 import type { ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
@@ -42,6 +44,7 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
 
   const [detailOrder, setDetailOrder] = useState<AdminOrder | null>(null);
   const closeDetail = useCallback(() => setDetailOrder(null), []);
+  const { reprint, printingId, feedback: printFeedback } = useReprint();
 
   const range = useMemo(
     () =>
@@ -86,6 +89,16 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
       </div>
 
       {error && <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>}
+      {printFeedback && (
+        <div
+          role={printFeedback.type === 'error' ? 'alert' : 'status'}
+          className={`shrink-0 rounded-xl px-4 py-3 text-sm ${
+            printFeedback.type === 'error' ? 'bg-red-50 text-red-700' : 'bg-green-50 text-green-800'
+          }`}
+        >
+          {printFeedback.message}
+        </div>
+      )}
 
       {loading ? (
         <PanelNote>Cargando...</PanelNote>
@@ -102,6 +115,7 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
                   <th className="px-4 py-3">Cliente</th>
                   <th className="px-4 py-3 text-right">Total</th>
                   <th className="px-4 py-3">Estado</th>
+                  <th className="px-4 py-3 text-right">Comanda</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -114,10 +128,10 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
                           event.stopPropagation();
                           setDetailOrder(order);
                         }}
-                        aria-label={`Ver detalle del pedido #${order.id}`}
+                        aria-label={`Ver detalle del pedido #${order.shift_number}`}
                         className="rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
                       >
-                        #{order.id}
+                        #{order.shift_number}
                       </button>
                     </td>
                     <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
@@ -129,6 +143,21 @@ export function HistorialView({ themeColor }: HistorialViewProps = {}) {
                       <span className={`inline-block rounded-full px-2.5 py-1 text-xs font-semibold ${statusBadgeClasses(order.status)}`}>
                         {order.status}
                       </span>
+                    </td>
+                    <td className="px-4 py-3 text-right">
+                      <button
+                        type="button"
+                        onClick={(event) => {
+                          event.stopPropagation();
+                          void reprint(order);
+                        }}
+                        disabled={printingId === order.id}
+                        aria-label={`Imprimir comanda del pedido #${order.shift_number}`}
+                        title="Imprimir comanda"
+                        className="inline-flex items-center justify-center rounded-lg border border-gray-300 p-2 text-gray-700 hover:bg-gray-100 disabled:opacity-60"
+                      >
+                        <PrinterIcon className={`w-4 h-4 ${printingId === order.id ? 'animate-pulse' : ''}`} />
+                      </button>
                     </td>
                   </tr>
                 ))}

@@ -484,4 +484,69 @@ describe('ComandasBoard', () => {
   });
 
 
+
+  describe('buscador', () => {
+    const SEARCHABLE = [
+      makeOrder({ id: 11, shift_number: 66, customer_name: 'Emanuel', status: 'Pendiente', shipping_address: 'Rodolfo Lopez 55', customer_phone: '1162939338' }),
+      makeOrder({ id: 12, shift_number: 7, customer_name: 'Fede', status: 'Confirmado', estimated_minutes: 20, shipping_address: 'Belgrano 95', customer_phone: '1144445555' }),
+      makeOrder({ id: 13, shift_number: 8, customer_name: 'Laura', status: 'En Camino', shipping_address: 'Mitre 10', customer_phone: '1100000000' }),
+    ];
+
+    it('filtra las tarjetas dejando cada una en la columna de su estado', async () => {
+      service.fetchOrders.mockResolvedValue(SEARCHABLE);
+      const user = userEvent.setup();
+      render(<ComandasBoard />);
+      await screen.findByText('Emanuel');
+
+      await user.type(screen.getByRole('textbox', { name: 'Buscar comandas' }), 'fede');
+
+      await waitFor(() => expect(screen.queryByText('Emanuel')).not.toBeInTheDocument());
+      expect(within(column('Confirmados')).getByText('Fede')).toBeInTheDocument();
+      expect(screen.queryByText('Laura')).not.toBeInTheDocument();
+      // Las cuatro columnas siguen ahí.
+      expect(screen.getByRole('heading', { name: 'En Camino' })).toBeInTheDocument();
+    });
+
+    it('encuentra por número de pedido, dirección y teléfono', async () => {
+      service.fetchOrders.mockResolvedValue(SEARCHABLE);
+      const user = userEvent.setup();
+      render(<ComandasBoard />);
+      await screen.findByText('Emanuel');
+      const input = screen.getByRole('textbox', { name: 'Buscar comandas' });
+
+      await user.type(input, '#66');
+      await waitFor(() => expect(screen.queryByText('Fede')).not.toBeInTheDocument());
+      expect(screen.getByText('Emanuel')).toBeInTheDocument();
+
+      await user.clear(input);
+      await user.type(input, 'belgrano');
+      await waitFor(() => expect(screen.queryByText('Emanuel')).not.toBeInTheDocument());
+      expect(screen.getByText('Fede')).toBeInTheDocument();
+
+      await user.clear(input);
+      await user.type(input, '1100000000');
+      await waitFor(() => expect(screen.queryByText('Fede')).not.toBeInTheDocument());
+      expect(screen.getByText('Laura')).toBeInTheDocument();
+    });
+
+    it('avisa cuando nada coincide y se limpia con la X o con Esc', async () => {
+      service.fetchOrders.mockResolvedValue(SEARCHABLE);
+      const user = userEvent.setup();
+      render(<ComandasBoard />);
+      await screen.findByText('Emanuel');
+      const input = screen.getByRole('textbox', { name: 'Buscar comandas' });
+
+      await user.type(input, 'zzz');
+      expect(await screen.findByText("No se encontraron comandas para 'zzz'.")).toBeInTheDocument();
+
+      await user.click(screen.getByRole('button', { name: 'Borrar búsqueda' }));
+      expect(await screen.findByText('Emanuel')).toBeInTheDocument();
+      expect(input).toHaveValue('');
+
+      await user.type(input, 'zzz');
+      await screen.findByText("No se encontraron comandas para 'zzz'.");
+      await user.keyboard('{Escape}');
+      expect(await screen.findByText('Emanuel')).toBeInTheDocument();
+    });
+  });
 });

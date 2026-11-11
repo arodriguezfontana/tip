@@ -69,6 +69,7 @@ export function generarMockOrders(cantidad: number = 55): AdminOrder[] {
       scheduled_for,
       created_at: createdAtDate.toISOString(),
       item_count: items.length,
+      shift_number: id,
       delivery_driver_id: null,
       delivery_driver_name: null,
       items,
