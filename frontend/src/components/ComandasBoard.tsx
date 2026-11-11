@@ -20,7 +20,8 @@ import { generarMockOrders } from '@/utils/mockOrdenes';
 import { useNewOrderAlert } from '@/hooks/useNewOrderAlert';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
-import { SectorIcon, UtensilsIcon } from '@/components/Icons';
+import { CloseIcon, SearchIcon, SectorIcon, UtensilsIcon } from '@/components/Icons';
+import { orderMatchesSearch } from '@/utils/orderSearch';
 import { formatCurrency } from '@/utils/currency';
 import { printErrorMessage } from '@/utils/printing';
 
@@ -61,6 +62,8 @@ interface ComandasBoardProps {
   themeColor?: ThemeColor;
 }
 
+const SEARCH_DEBOUNCE_MS = 250;
+
 export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
   const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [orders, setOrders] = useState<AdminOrder[]>([]);
@@ -93,6 +96,21 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
     }
     return 'todos';
   });
+
+  // Buscador: lo que se escribe se aplica al tablero con una pequeña demora para no filtrar en cada tecla.
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+      setPages({ Pendiente: 1, Confirmado: 1, 'En Camino': 1, 'Listo para Retirar': 1 });
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchTerm('');
+  };
 
   const [detailOrderId, setDetailOrderId] = useState<number | null>(null);
   const closeDetail = useCallback(() => setDetailOrderId(null), []);
@@ -221,11 +239,17 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         });
       }
 
+      // Con una búsqueda activa solo quedan los pedidos que coinciden, en la columna de su estado.
+      if (searchTerm) {
+        allOrdersForStatus = allOrdersForStatus.filter((order) => orderMatchesSearch(order, searchTerm));
+      }
+
       // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
       const totalCount = allOrdersForStatus.length;
       const modifiedCount = allOrdersForStatus.filter((o) => o.kitchen_update_pending).length;
 
-      if (status === 'Pendiente') {
+      // Al buscar se muestran también los programados, para no esconder un pedido que sí coincide.
+      if (status === 'Pendiente' && !searchTerm) {
         if (pendingFilter === 'ahora') {
           allOrdersForStatus = allOrdersForStatus.filter((o) => !o.scheduled_for);
         } else if (pendingFilter === 'programados') {
@@ -249,7 +273,9 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         totalPages,
       };
     });
-  }, [orders, pages, pageSize, pendingFilter, selectedSector]);
+  }, [orders, pages, pageSize, pendingFilter, selectedSector, searchTerm]);
+
+  const noSearchResults = Boolean(searchTerm) && columns.every((column) => column.totalCount === 0);
 
 
 
@@ -500,6 +526,32 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         </div>
 
         <div className="flex items-center gap-4">
+          <div className="relative">
+            <SearchIcon className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+            <input
+              type="text"
+              value={searchInput}
+              onChange={(event) => setSearchInput(event.target.value)}
+              onKeyDown={(event) => {
+                if (event.key === 'Escape') clearSearch();
+              }}
+              placeholder="Buscar por #, cliente, dirección o teléfono"
+              aria-label="Buscar comandas"
+              className="w-64 xl:w-80 rounded-xl border border-gray-200 bg-gray-50 pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-black"
+            />
+            {searchInput && (
+              <button
+                type="button"
+                onClick={clearSearch}
+                aria-label="Borrar búsqueda"
+                title="Borrar búsqueda"
+                className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-500 hover:bg-gray-200"
+              >
+                <CloseIcon className="w-3.5 h-3.5" />
+              </button>
+            )}
+          </div>
+
           {onTakeOrder && (
             <button
               type="button"
@@ -653,6 +705,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
       {loading && !hasLoaded && orders.length === 0 ? (
         <PanelNote>Cargando comandas...</PanelNote>
+      ) : noSearchResults ? (
+        <PanelNote>{`No se encontraron comandas para '${searchTerm}'.`}</PanelNote>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
           {columns.map((column) => (
@@ -731,7 +785,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
               <div className="space-y-3 min-h-[220px] lg:min-h-0 lg:flex-1 lg:overflow-y-auto">
                 {column.orders.length === 0 ? (
                   <p className="text-xs text-gray-400 text-center py-12">
-                    {selectedSector !== 'todos' ? `Sin pedidos para ${SECTOR_CONFIG[selectedSector].label}` : 'Sin pedidos'}
+                    {searchTerm ? 'Sin coincidencias' : selectedSector !== 'todos' ? `Sin pedidos para ${SECTOR_CONFIG[selectedSector].label}` : 'Sin pedidos'}
                   </p>
                 ) : (
                   column.orders.map((order) => (
