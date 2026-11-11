@@ -75,12 +75,12 @@ class CanalDeMensajeria(ABC):
     async def enviar_escribiendo(self, chat_id: str) -> None:
         """Muestra "escribiendo..." en el chat. Si falla no pasa nada: es solo un indicador visual."""
 
-    async def enviar_imagen(self, chat_id: str, imagen: ImagenParaEnviar, pie: str) -> bool:
+    async def enviar_imagen(self, chat_id: str, imagen: ImagenParaEnviar, pie: str) -> bool:  # pylint: disable=unused-argument
         """Manda la imagen, con un pie de foto si no está vacío. Devuelve si salió; False si el canal no la soporta
         o falló."""
         return False
 
-    async def descargar_audio(self, media_id: str) -> AudioRecibido | None:
+    async def descargar_audio(self, media_id: str) -> AudioRecibido | None:  # pylint: disable=unused-argument
         """Descarga un mensaje de voz del cliente. None si el canal no los soporta o la descarga falla."""
         return None
 

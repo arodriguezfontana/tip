@@ -63,7 +63,7 @@ class OrderResponse(BaseModel):
             id=order.id,
             customer_name=order.customer_name,
             shipping_address=order.shipping_address,
-            total_amount=order.total_amount,
+            total_amount=float(order.total_amount),
             status=order.status,
             delivery_method=order.delivery_method,
             source=order.source,
@@ -82,11 +82,11 @@ class OrderResponse(BaseModel):
             trip_id=order.trip_id,
             trip_stop=order.trip_stop,
             eta_minutes=order.eta_minutes,
-            payment_method=order.payment_method,
+            payment_method=PaymentMethod(order.payment_method) if order.payment_method else None,
             is_paid=bool(order.is_paid),
-            paid_amount=order.amount_paid,
-            pending_amount=order.amount_pending,
-            balance_payment_method=order.balance_payment_method,
+            paid_amount=float(order.amount_paid),
+            pending_amount=float(order.amount_pending),
+            balance_payment_method=PaymentMethod(order.balance_payment_method) if order.balance_payment_method else None,
             kitchen_update_pending=bool(order.kitchen_update_pending),
             items=[WebOrderItemResponse.from_model(item) for item in order.items] if order.items else [],
             items_prepared_count=order.items_prepared_count,
@@ -270,18 +270,17 @@ class WebOrderItemResponse(BaseModel):
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
-        promo_products = []
-        if item.promotion and item.promotion.items:
-            for it in item.promotion.items:
-                if it.product:
-                    promo_products.append(
-                        PromotionProductDetail(
-                            product_id=it.product_id,
-                            product_name=it.product.name,
-                            quantity=it.quantity * item.quantity,
-                            sector=it.product.effective_sector,
-                        )
-                    )
+        promotion_items = item.promotion.items if item.promotion else []
+        promo_products = [
+            PromotionProductDetail(
+                product_id=it.product_id,
+                product_name=it.product.name,
+                quantity=it.quantity * item.quantity,
+                sector=it.product.effective_sector,
+            )
+            for it in promotion_items
+            if it.product
+        ]
         return cls(
             id=item.id,
             product_id=item.product_id,
@@ -289,8 +288,8 @@ class WebOrderItemResponse(BaseModel):
             is_promotion=item.promotion_id is not None,
             product_name=item.display_name,
             quantity=item.quantity,
-            unit_price=item.unit_price,
-            subtotal=item.subtotal,
+            unit_price=float(item.unit_price),
+            subtotal=float(item.subtotal),
             sector=item.sector,
             is_prepared=bool(item.is_prepared),
             added_later=bool(item.added_later),
@@ -327,7 +326,7 @@ class WebOrderCreatedResponse(BaseModel):
             delivery_method=order.delivery_method,
             shipping_address=order.shipping_address,
             notes=order.notes,
-            total_amount=order.total_amount,
+            total_amount=float(order.total_amount),
             created_at=order.created_at,
             items=[WebOrderItemResponse.from_model(item) for item in order.items],
             payment_method=order.payment_method,
@@ -346,8 +345,8 @@ class OrderDetailResponse(OrderResponse):
     def from_model(cls, order: Order) -> "OrderDetailResponse":
         return cls(
             **OrderResponse.from_model(order).model_dump(),
-            subtotal=order.subtotal,
-            shipping_cost=order.shipping_cost or 0,
+            subtotal=float(order.subtotal),
+            shipping_cost=float(order.shipping_cost or 0),
         )
 
 

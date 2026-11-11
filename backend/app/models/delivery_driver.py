@@ -1,10 +1,15 @@
 import re
+from datetime import datetime
+from typing import TYPE_CHECKING
 
-from sqlalchemy import Boolean, Column, DateTime, ForeignKey, Integer, String
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy import Boolean, DateTime, ForeignKey, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.sql import func
 
 from app.db.base_class import Base
+
+if TYPE_CHECKING:
+    from app.models.order import Order
 
 
 class DeliveryDriver(Base):
@@ -12,19 +17,19 @@ class DeliveryDriver(Base):
 
     __tablename__ = "delivery_drivers"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), nullable=False)
-    phone = Column(String(30), nullable=False)
-    is_active = Column(Boolean, nullable=False, default=True, server_default="true")
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), nullable=False)
+    phone: Mapped[str] = mapped_column(String(30), nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, nullable=False, default=True, server_default="true")
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
     )
 
-    orders = relationship("Order", back_populates="delivery_driver")
+    orders: Mapped[list["Order"]] = relationship("Order", back_populates="delivery_driver")
 
     @staticmethod
     def normalize_phone(phone: str) -> str:
@@ -52,14 +57,14 @@ class DeliveryTrip(Base):
 
     __tablename__ = "delivery_trips"
 
-    id = Column(Integer, primary_key=True, index=True)
-    delivery_driver_id = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    delivery_driver_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    dispatched_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    dispatched_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
     # Duración total de la ida (hasta la última entrega, con la tolerancia de cada parada), en minutos.
     # Vacía si el viaje salió sin poder calcular la ruta.
-    total_minutes = Column(Integer, nullable=True)
+    total_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
 
-    driver = relationship("DeliveryDriver")
-    orders = relationship("Order", back_populates="trip", order_by="Order.trip_stop")
+    driver: Mapped["DeliveryDriver"] = relationship("DeliveryDriver")
+    orders: Mapped[list["Order"]] = relationship("Order", back_populates="trip", order_by="Order.trip_stop")

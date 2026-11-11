@@ -102,8 +102,6 @@ export function KitchenIcon({ className = 'w-4 h-4' }: { className?: string }) {
   );
 }
 
-export const ChefHatIcon = KitchenIcon;
-
 export function BarIcon({ className = 'w-4 h-4' }: { className?: string }) {
   return (
     <svg

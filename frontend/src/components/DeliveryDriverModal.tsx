@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { INPUT_LG_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { DeliveryDriver, DeliveryDriverPayload } from '@/types/deliveryDriver';
@@ -18,7 +18,7 @@ export function DeliveryDriverModal({ driver, onClose, onSave }: DeliveryDriverM
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (saving) return;
 

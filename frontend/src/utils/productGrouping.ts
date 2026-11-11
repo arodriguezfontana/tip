@@ -1,4 +1,5 @@
 import type { Product, ProductCategory } from '@/types/order';
+import { groupBy } from '@/utils/collections';
 
 export interface ProductGroup {
   category: ProductCategory;
@@ -6,14 +7,6 @@ export interface ProductGroup {
 }
 
 export function groupByCategory(products: Product[]): ProductGroup[] {
-  const groups: ProductGroup[] = [];
-  for (const product of products) {
-    let group = groups.find((g) => g.category.id === product.category.id);
-    if (!group) {
-      group = { category: product.category, products: [] };
-      groups.push(group);
-    }
-    group.products.push(product);
-  }
-  return groups;
+  const productsByCategory = groupBy(products, (product) => product.category.id);
+  return [...productsByCategory.values()].map((group) => ({ category: group[0].category, products: group }));
 }

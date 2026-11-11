@@ -1,12 +1,10 @@
-import { useEffect, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useState } from 'react';
+import type { SubmitEvent } from 'react';
 import { Navigate, useLocation, useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/TopBar';
 import type { ApiErrorResponse } from '@/services/api';
-import { fetchStoreConfig } from '@/services/storeConfigService';
-import { applyThemeColor } from '@/utils/theme';
-import type { StoreConfig } from '@/types/storeConfig';
+import { useStoreConfig } from '@/hooks/useStoreConfig';
 import backgroundBistro from '@/assets/background_bistro.jpg';
 import backgroundKitchen from '@/assets/background_kitchen.jpg';
 import backgroundTrattoria from '@/assets/background_trattoria.jpg';
@@ -26,30 +24,14 @@ export default function LoginPage() {
   const [password, setPassword] = useState('');
   const [error, setError] = useState<string | null>(null);
   const [isSubmitting, setIsSubmitting] = useState(false);
-  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchStoreConfig()
-      .then((data) => {
-        if (cancelled) return;
-        setStoreConfig(data);
-        if (data?.theme_color) {
-          applyThemeColor(data.theme_color);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const { storeConfig } = useStoreConfig();
 
   if (isAdmin) {
     const redirectTo = (location.state as { from?: string } | null)?.from ?? '/admin';
     return <Navigate to={redirectTo} replace />;
   }
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     setError(null);
     setIsSubmitting(true);
@@ -60,7 +42,7 @@ export default function LoginPage() {
         setError('Esta cuenta no tiene acceso al panel de administración.');
         return;
       }
-      navigate('/admin', { replace: true });
+      void navigate('/admin', { replace: true });
     } catch (err) {
       const apiError = err as ApiErrorResponse;
       setError(apiError.message ?? 'No se pudo iniciar sesión.');

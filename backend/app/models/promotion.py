@@ -4,7 +4,6 @@ from decimal import Decimal
 from sqlalchemy import (
     Boolean,
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
@@ -12,7 +11,7 @@ from sqlalchemy import (
     String,
     Text,
 )
-from sqlalchemy.orm import deferred, relationship, validates
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship, validates
 from sqlalchemy.sql import func
 
 from app.core.errors import BusinessRuleError
@@ -29,12 +28,12 @@ class PromotionProduct(Base):
     __tablename__ = "promotion_products"
     __table_args__ = (CheckConstraint("quantity > 0", name="ck_promotion_products_quantity"),)
 
-    promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True)
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
-    quantity = Column(Integer, nullable=False, default=1)
+    promotion_id: Mapped[int] = mapped_column(Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False, default=1)
 
-    promotion = relationship("Promotion", back_populates="items")
-    product = relationship("Product")
+    promotion: Mapped["Promotion"] = relationship("Promotion", back_populates="items")
+    product: Mapped["Product"] = relationship("Product")
 
 
 class Promotion(Base):
@@ -42,22 +41,22 @@ class Promotion(Base):
 
     __tablename__ = "promotions"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), unique=True, index=True, nullable=False)
-    description = Column(Text, nullable=True)
-    price = Column(MoneyColumn, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
-    image_url = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
+    image_url: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(
         DateTime(timezone=True),
         server_default=func.now(),
         onupdate=func.now(),
         nullable=False,
     )
 
-    items = relationship("PromotionProduct", back_populates="promotion", cascade="all, delete-orphan")
-    photo = relationship("PromotionPhoto", uselist=False, cascade="all, delete-orphan")
+    items: Mapped[list["PromotionProduct"]] = relationship("PromotionProduct", back_populates="promotion", cascade="all, delete-orphan")
+    photo: Mapped["PromotionPhoto | None"] = relationship("PromotionPhoto", uselist=False, cascade="all, delete-orphan")
 
     @validates("price")
     def _as_money(self, _key: str, value) -> Decimal:
@@ -96,16 +95,12 @@ class Promotion(Base):
         """Define los productos incluidos en la promoción con sus cantidades."""
         if not items:
             raise BusinessRuleError("La promoción debe incluir al menos un producto.")
-        seen_ids = set()
-        new_items = []
-        for product, quantity in items:
-            if quantity < 1:
-                raise BusinessRuleError("La cantidad de cada producto debe ser mayor a cero.")
-            if product.id in seen_ids:
-                raise BusinessRuleError("Un producto figura más de una vez en la promoción.")
-            seen_ids.add(product.id)
-            new_items.append(PromotionProduct(product=product, quantity=quantity))
-        self.items = new_items
+        if any(quantity < 1 for _, quantity in items):
+            raise BusinessRuleError("La cantidad de cada producto debe ser mayor a cero.")
+        product_ids = [product.id for product, _ in items]
+        if len(product_ids) != len(set(product_ids)):
+            raise BusinessRuleError("Un producto figura más de una vez en la promoción.")
+        self.items = [PromotionProduct(product=product, quantity=quantity) for product, quantity in items]
 
 
 class PromotionImage(Base):
@@ -113,12 +108,12 @@ class PromotionImage(Base):
 
     __tablename__ = "promotion_images"
 
-    id = Column(Integer, primary_key=True)
-    position = Column(Integer, nullable=False, default=0)
-    content_type = Column(String(20), nullable=False)
-    size_bytes = Column(Integer, nullable=False)
-    data = deferred(Column(LargeBinary, nullable=False))
-    updated_at = Column(DateTime(timezone=True), nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     @property
     def version(self) -> int:
@@ -136,9 +131,7 @@ class PromotionPhoto(Base):
 
     __tablename__ = "promotion_photos"
 
-    promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True)
-    content_type = Column(String(20), nullable=False)
-    data = deferred(Column(LargeBinary, nullable=False))
-    updated_at = Column(DateTime(timezone=True), nullable=False)
-
-
+    promotion_id: Mapped[int] = mapped_column(Integer, ForeignKey("promotions.id", ondelete="CASCADE"), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    data: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)

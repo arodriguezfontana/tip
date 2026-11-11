@@ -10,7 +10,7 @@ from app.services.store_config_service import get_or_create_store_config, update
 router = APIRouter()
 
 
-@router.get("", response_model=StoreConfigResponse)
+@router.get("")
 def get_store_config_endpoint(
     db: Session = Depends(get_db),
     current_user: User | None = Depends(get_optional_current_user),
@@ -23,11 +23,10 @@ def get_store_config_endpoint(
     return res
 
 
-@router.put("", response_model=StoreConfigResponse)
+@router.put("", dependencies=[Depends(get_current_admin)])
 def update_store_config_endpoint(
     payload: StoreConfigUpdate,
     db: Session = Depends(get_db),
-    _admin: User = Depends(get_current_admin),
 ) -> StoreConfigResponse:
     """Actualiza la identidad y diseño del local (exclusivo para administradores)."""
     return StoreConfigResponse.model_validate(update_store_config(db, payload))

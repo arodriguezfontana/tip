@@ -184,12 +184,15 @@ class RegistroDerivaciones:
             nueva = not self.esta_derivado(chat_id)
             derivacion = self.solicitar(chat_id, motivo="El local escribió desde Meta Business Suite")
             if nueva:
-                if historial:
-                    self.adjuntar_historial(chat_id, historial, aviso=None)
-                derivacion.atendida_por = EMPLEADO_EXTERNO
-                derivacion.agregar(AutorMensaje.SISTEMA, "El local tomó la conversación desde Meta Business Suite.")
+                self._tomar_desde_meta(derivacion, historial)
             derivacion.agregar(AutorMensaje.EMPLEADO, texto)
             return derivacion
+
+    def _tomar_desde_meta(self, derivacion: Derivacion, historial: list[MensajeDerivacion] | None) -> None:
+        if historial:
+            self.adjuntar_historial(derivacion.chat_id, historial, aviso=None)
+        derivacion.atendida_por = EMPLEADO_EXTERNO
+        derivacion.agregar(AutorMensaje.SISTEMA, "El local tomó la conversación desde Meta Business Suite.")
 
     def registrar_mensaje_del_cliente(self, chat_id: str, texto: str) -> None:
         with self._lock:
@@ -230,10 +233,10 @@ class RegistroDerivaciones:
     def obtener(self, derivacion_id: int) -> Derivacion:
         with self._lock:
             self._vencer_inactivas()
-            for derivacion in self._por_chat.values():
-                if derivacion.id == derivacion_id:
-                    return derivacion
-        raise DerivacionInexistenteError("La conversación derivada ya no está activa.")
+            derivacion = next((d for d in self._por_chat.values() if d.id == derivacion_id), None)
+        if derivacion is None:
+            raise DerivacionInexistenteError("La conversación derivada ya no está activa.")
+        return derivacion
 
     def tomar(self, derivacion_id: int, empleado: str) -> Derivacion:
         """El empleado toma el control. Si ya lo tiene otro empleado, no se le quita."""

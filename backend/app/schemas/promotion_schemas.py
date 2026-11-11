@@ -120,4 +120,3 @@ class MenuLinkUpdate(BaseModel):
 class PromotionsLinkUpdate(BaseModel):
     model_config = ConfigDict(str_strip_whitespace=True)
     promotions_link: str | None = Field(None, description="URL externa de promociones")
-

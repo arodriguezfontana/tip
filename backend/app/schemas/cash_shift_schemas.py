@@ -3,6 +3,7 @@ from datetime import datetime
 from pydantic import BaseModel, ConfigDict, Field
 
 from app.models.cash_shift import CashMovement, CashShift
+from app.services.cash_shift_service import ShiftReport, ShiftReportsPage, ShiftSummary
 
 
 class CashShiftOpenRequest(BaseModel):
@@ -55,6 +56,8 @@ class CashMovementResponse(BaseModel):
 
 
 class CashShiftSummaryBreakdown(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     initial_amount: float
     cash_sales: float
     mercadopago_sales: float
@@ -91,7 +94,7 @@ class CashShiftResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
     @classmethod
-    def from_model(cls, shift: CashShift, summary: CashShiftSummaryBreakdown | None = None) -> "CashShiftResponse":
+    def from_model(cls, shift: CashShift, summary: ShiftSummary | None = None) -> "CashShiftResponse":
         return cls(
             id=shift.id,
             opened_at=shift.opened_at,
@@ -105,21 +108,23 @@ class CashShiftResponse(BaseModel):
             notes=shift.notes,
             opened_by_name=shift.opened_by.email if shift.opened_by else None,
             closed_by_name=shift.closed_by.email if shift.closed_by else None,
-            summary=summary,
+            summary=CashShiftSummaryBreakdown.model_validate(summary) if summary else None,
         )
+
+    @classmethod
+    def from_report(cls, report: ShiftReport) -> "CashShiftResponse":
+        return cls.from_model(report.shift, report.summary)
 
 
 class CashShiftDetailResponse(CashShiftResponse):
     movements: list[CashMovementResponse] = Field(default_factory=list)
 
     @classmethod
-    def from_model_detail(
-        cls, shift: CashShift, summary: CashShiftSummaryBreakdown | None = None
-    ) -> "CashShiftDetailResponse":
-        base = CashShiftResponse.from_model(shift, summary)
+    def from_report(cls, report: ShiftReport) -> "CashShiftDetailResponse":
+        base = CashShiftResponse.from_report(report)
         return cls(
             **base.model_dump(),
-            movements=[CashMovementResponse.from_model(m) for m in shift.movements] if shift.movements else [],
+            movements=[CashMovementResponse.from_model(m) for m in report.shift.movements or []],
         )
 
 
@@ -132,3 +137,6 @@ class CashShiftHistoryResponse(BaseModel):
     items: list[CashShiftResponse]
     total: int
 
+    @classmethod
+    def from_page(cls, page: ShiftReportsPage) -> "CashShiftHistoryResponse":
+        return cls(items=[CashShiftResponse.from_report(report) for report in page.items], total=page.total)

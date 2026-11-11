@@ -1,10 +1,11 @@
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy import and_, func, or_
 from sqlalchemy.orm import Session, aliased, joinedload
 
 from app.models.menu import Category, Product
-from app.models.order import Order, OrderItem, OrderStatus, OrderStatusEvent
+from app.models.order import Order, OrderItem, OrderStatus, OrderStatusEvent, PaymentMethod
 from app.models.promotion import Promotion, PromotionProduct
 from app.repositories.common import created_between
 
@@ -33,6 +34,60 @@ def get_with_items(db: Session, order_id: int) -> Order | None:
         .filter(Order.id == order_id)
         .first()
     )
+
+
+def get(db: Session, order_id: int) -> Order | None:
+    return db.query(Order).filter(Order.id == order_id).first()
+
+
+def find_by_mercadopago_id(db: Session, mercadopago_id: str) -> Order | None:
+    """Pedido cuya preferencia o pago de MercadoPago tiene ese id."""
+    return (
+        db.query(Order)
+        .filter((Order.mp_preference_id == mercadopago_id) | (Order.mp_payment_id == mercadopago_id))
+        .first()
+    )
+
+
+def awaiting_mercadopago_payment(db: Session, statuses: list[str], limit: int) -> list[Order]:
+    """Pedidos con un cobro de MercadoPago generado y todavía sin abonar, del más nuevo al más viejo."""
+    return (
+        db.query(Order)
+        .filter(
+            or_(
+                Order.payment_method == PaymentMethod.MERCADOPAGO.value,
+                Order.balance_payment_method == PaymentMethod.MERCADOPAGO.value,
+            ),
+            Order.is_paid.is_(False),
+            Order.mp_preference_id.isnot(None),
+            Order.status.in_(statuses),
+        )
+        .order_by(Order.id.desc())
+        .limit(limit)
+        .all()
+    )
+
+
+def mark_paid_if_unpaid(
+    db: Session, order_id: int, is_balance: bool, mercadopago_payment_id: str | None, payment_method: str | None
+) -> bool:
+    """Marca el pedido como abonado solo si todavía no lo está (UPDATE condicional, sin confirmar).
+
+    Con `is_balance` salda la diferencia de un pedido con pago parcial; si no, el primer pago. Devuelve False si
+    no cambió nada: el aviso era repetido o corresponde al otro pago.
+    """
+    values: dict = {Order.is_paid: True}
+    if payment_method:
+        values[Order.payment_method] = payment_method
+    if mercadopago_payment_id:
+        values[Order.mp_payment_id] = mercadopago_payment_id
+    payment_is_due = Order.paid_amount > 0 if is_balance else Order.paid_amount == 0
+    updated = (
+        db.query(Order)
+        .filter(Order.id == order_id, Order.is_paid.is_(False), payment_is_due)
+        .update(values, synchronize_session=False)
+    )
+    return updated > 0
 
 
 def latest_for_chat(db: Session, channel: str, chat_id: str) -> Order | None:
@@ -160,7 +215,7 @@ def best_selling_products(
     return query.group_by(Product.id, Product.name).order_by(quantity.desc(), Product.name).limit(limit).all()
 
 
-def billable_totals(db: Session, date_from: datetime | None, date_to: datetime | None) -> list[tuple[datetime, float]]:
+def billable_totals(db: Session, date_from: datetime | None, date_to: datetime | None) -> list[tuple[datetime, Decimal]]:
     """(fecha de creación, total) de cada pedido que cuenta como venta."""
     query = created_between(db.query(Order.created_at, Order.total_amount).filter(Order.is_billable), date_from, date_to)
     return query.all()

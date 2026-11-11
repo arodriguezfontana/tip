@@ -11,6 +11,11 @@ import re
 _LARGO_NACIONAL = 10
 
 
+def _sin_el_15(numero: str) -> str | None:
+    """El número sin el 15 de los celulares que va después del código de área (de 2 a 4 dígitos), si lo tiene."""
+    return next((numero[:posicion] + numero[posicion + 2 :] for posicion in (2, 3, 4) if numero[posicion : posicion + 2] == "15"), None)
+
+
 def _argentino_nacional(digits: str) -> str | None:
     """El número sin prefijos si es un teléfono argentino reconocible, o None."""
     if digits.startswith("549") and len(digits) == _LARGO_NACIONAL + 3:  # 54 9 AAAANNNNNN
@@ -20,10 +25,9 @@ def _argentino_nacional(digits: str) -> str | None:
     if len(digits) == _LARGO_NACIONAL + 1 and digits[0] in "09":  # 0 AAAANNNNNN  o  9 AAAANNNNNN
         return digits[1:]
     sin_cero = digits[1:] if digits.startswith("0") else digits
-    if len(sin_cero) == _LARGO_NACIONAL + 2:  # AA 15 NNNNNNNN, AAA 15 NNNNNNN o AAAA 15 NNNNNN
-        for posicion in (2, 3, 4):
-            if sin_cero[posicion : posicion + 2] == "15":
-                return sin_cero[:posicion] + sin_cero[posicion + 2 :]
+    # AA 15 NNNNNNNN, AAA 15 NNNNNNN o AAAA 15 NNNNNN
+    if len(sin_cero) == _LARGO_NACIONAL + 2 and (sin_el_15 := _sin_el_15(sin_cero)):
+        return sin_el_15
     if len(digits) == _LARGO_NACIONAL:
         return digits
     return None

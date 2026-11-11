@@ -1,4 +1,5 @@
 import type { BusinessHoursRange } from '@/types/businessHours';
+import { groupAdjacent } from '@/utils/collections';
 
 /** Índice = day_of_week del backend (0 = lunes). */
 export const DAY_NAMES = ['Lunes', 'Martes', 'Miércoles', 'Jueves', 'Viernes', 'Sábado', 'Domingo'];
@@ -38,26 +39,15 @@ export interface ScheduleGroup {
  * omite los días cerrados. Vacío si no hay franjas cargadas.
  */
 export function groupWeeklySchedule(ranges: BusinessHoursRange[]): ScheduleGroup[] {
-  const days = groupRangesByDay(ranges);
-  const groups: ScheduleGroup[] = [];
-  let start = 0;
-  while (start < days.length) {
-    if (days[start].ranges.length === 0) {
-      start++;
-      continue;
-    }
-    const description = describeDayRanges(days[start].ranges);
-    let end = start;
-    while (end + 1 < days.length && days[end + 1].ranges.length > 0 && describeDayRanges(days[end + 1].ranges) === description) {
-      end++;
-    }
-    groups.push({
-      label: start === end ? days[start].name : `${days[start].name} a ${days[end].name}`,
-      ranges: days[start].ranges.map((range) => `${range.opens_at} a ${range.closes_at}`),
-    });
-    start = end + 1;
-  }
-  return groups;
+  const openDays = groupRangesByDay(ranges).filter((day) => day.ranges.length > 0);
+  const runs = groupAdjacent(
+    openDays,
+    (previous, next) => next.day === previous.day + 1 && describeDayRanges(next.ranges) === describeDayRanges(previous.ranges)
+  );
+  return runs.map((run) => ({
+    label: run.length === 1 ? run[0].name : `${run[0].name} a ${run[run.length - 1].name}`,
+    ranges: run[0].ranges.map((range) => `${range.opens_at} a ${range.closes_at}`),
+  }));
 }
 
 /** Resumen de la semana en una línea: "Martes a Domingo: 19:30 a 00:00". Null si no hay franjas cargadas. */

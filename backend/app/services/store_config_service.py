@@ -1,9 +1,29 @@
+from typing import Protocol
+
 from sqlalchemy.orm import Session
 
 from app.db.session import transaction
 from app.models.store_config import StoreConfig
 from app.repositories import store_config_repository
-from app.schemas.store_config_schemas import StoreConfigUpdate
+
+
+class StoreConfigChanges(Protocol):
+    """Los datos de la configuración del local que se guardan."""
+
+    store_name: str
+    address: str | None
+    contact_phone: str | None
+    logo_url: str | None
+    theme_color: str
+    mp_alias: str | None
+    login_bg: str
+    login_bg_image: str | None
+    panel_bg: str
+    panel_bg_image: str | None
+    panel_bg_color: str | None
+    cash_pin_enabled: bool
+    cash_pin: str | None
+
 
 DEFAULT_STORE_CONFIG = {
     "store_name": "RestoIT",
@@ -29,7 +49,7 @@ def get_or_create_store_config(db: Session) -> StoreConfig:
     return config
 
 
-def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
+def update_store_config(db: Session, data: StoreConfigChanges) -> StoreConfig:
     """Actualiza la identidad visual y datos de contacto de la tienda."""
     with transaction(db):
         config = get_or_create_store_config(db)
@@ -47,5 +67,23 @@ def update_store_config(db: Session, data: StoreConfigUpdate) -> StoreConfig:
         config.panel_bg_color = data.panel_bg_color
         config.cash_pin_enabled = data.cash_pin_enabled
         config.cash_pin = data.cash_pin if data.cash_pin_enabled else None
+    db.refresh(config)
+    return config
+
+
+def set_menu_link(db: Session, menu_link: str | None) -> StoreConfig:
+    """Guarda el link externo a la carta del local."""
+    with transaction(db):
+        config = get_or_create_store_config(db)
+        config.menu_link = menu_link
+    db.refresh(config)
+    return config
+
+
+def set_promotions_link(db: Session, promotions_link: str | None) -> StoreConfig:
+    """Guarda el link externo a las promociones del local."""
+    with transaction(db):
+        config = get_or_create_store_config(db)
+        config.promotions_link = promotions_link
     db.refresh(config)
     return config

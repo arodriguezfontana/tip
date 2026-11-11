@@ -13,4 +13,3 @@ def add(db: Session, config: StoreConfig) -> StoreConfig:
     db.add(config)
     db.flush()
     return config
-

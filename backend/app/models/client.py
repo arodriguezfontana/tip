@@ -1,5 +1,7 @@
-from sqlalchemy import Column, DateTime, Integer, String
-from sqlalchemy.orm import validates
+from datetime import datetime
+
+from sqlalchemy import DateTime, Integer, String
+from sqlalchemy.orm import Mapped, mapped_column, validates
 from sqlalchemy.sql import func
 
 from app.core.phone import normalize_phone
@@ -15,14 +17,14 @@ class Client(Base):
 
     __tablename__ = "clients"
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     # En el formato único de teléfonos (ver core.phone): "11 4444-5555", "+54 9 11 4444-5555" y "1144445555"
     # son el mismo cliente.
-    phone = Column(String(30), unique=True, index=True, nullable=False)
-    full_name = Column(String(150), nullable=False)
-    address = Column(String(255), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    updated_at = Column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
+    phone: Mapped[str] = mapped_column(String(30), unique=True, index=True, nullable=False)
+    full_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    address: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), onupdate=func.now(), nullable=False)
 
     @staticmethod
     def normalize_phone(phone: str) -> str:

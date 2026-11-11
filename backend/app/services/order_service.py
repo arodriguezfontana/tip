@@ -2,6 +2,7 @@
 avanzarlos en su ciclo de vida. Las reglas del pedido en sí viven en el modelo Order."""
 
 import logging
+from collections import defaultdict
 from dataclasses import dataclass
 from datetime import datetime, timedelta
 from decimal import Decimal
@@ -13,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.channels import Channel
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
+from app.models.delivery_driver import DeliveryDriver
 from app.models.order import (
     DeliveryMethod,
     EstimateSource,
@@ -21,6 +23,7 @@ from app.models.order import (
     OrderSource,
     OrderStatus,
     PaymentMethod,
+    complete_line,
 )
 from app.models.user import User
 from app.repositories import delivery_driver_repository, order_repository, product_repository, promotion_repository
@@ -28,6 +31,11 @@ from app.services import cash_shift_service
 from app.services.business_hours_service import verificar_local_abierto
 from app.services.client_service import upsert_client
 from app.services.delivery_time_service import DelayEstimate, estimate_delay
+from app.services.modifier_nlp import (
+    extraer_modificadores_de_texto,
+    filtrar_modificadores_para_producto,
+    vincular_modificadores_con_db,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -122,22 +130,39 @@ def validate_schedule(db: Session, requested: datetime, now: datetime, tolerance
 # --- Alta de pedidos ----------------------------------------------------------------------------------
 
 
+def _ids_referenced_by(item: tuple) -> tuple[set[int], set[int]]:
+    """(ids de productos, ids de promociones) a los que se refiere el ítem."""
+    product_id, _, secondary_id, _, _, promotion_id = complete_line(item)
+    if promotion_id is not None:
+        return set(), {promotion_id}
+    if product_id is None:
+        raise InvalidOrderError("Cada ítem debe tener un producto o una promoción.")
+    return {i for i in (product_id, secondary_id) if i is not None}, set()
+
+
+def _collect_referenced_ids(items: list[tuple]) -> tuple[set[int], set[int]]:
+    """(ids de productos, ids de promociones) a los que se refieren los ítems del pedido."""
+    referenced = [_ids_referenced_by(item) for item in items]
+    return (
+        {product_id for product_ids, _ in referenced for product_id in product_ids},
+        {promotion_id for _, promotion_ids in referenced for promotion_id in promotion_ids},
+    )
+
+
+def _line_with_objects(item: tuple, products: dict, promotions: dict) -> tuple:
+    """El ítem con los productos y la promoción en lugar de sus ids."""
+    product_id, quantity, secondary_id, custom_name, mods, promotion_id = complete_line(item)
+    if promotion_id is not None:
+        promotion = promotions[promotion_id]
+        return None, quantity, None, custom_name or promotion.name, mods, promotion
+    secondary_product = products[secondary_id] if secondary_id is not None else None
+    return products[product_id], quantity, secondary_product, custom_name, mods, None
+
+
 def _products_for(
     db: Session, items: list[tuple]
 ) -> list[tuple[Any, int, Any, str | None, list[dict], Any]]:
-    product_ids = set()
-    promotion_ids = set()
-    for item in items:
-        p_id = item[0]
-        promo_id = item[5] if len(item) > 5 else None
-        if promo_id is not None:
-            promotion_ids.add(promo_id)
-        elif p_id is not None:
-            product_ids.add(p_id)
-            if len(item) > 2 and item[2] is not None:
-                product_ids.add(item[2])
-        else:
-            raise InvalidOrderError("Cada ítem debe tener un producto o una promoción.")
+    product_ids, promotion_ids = _collect_referenced_ids(items)
 
     products = product_repository.get_many(db, product_ids) if product_ids else {}
     if len(products) != len(product_ids):
@@ -147,23 +172,64 @@ def _products_for(
     if len(promotions) != len(promotion_ids):
         raise InvalidOrderError("Algunas promociones del pedido ya no están disponibles.")
 
-    result = []
-    for item in items:
-        p_id = item[0]
-        qty = item[1]
-        p2_id = item[2] if len(item) > 2 and item[2] is not None else None
-        custom_name = item[3] if len(item) > 3 else None
-        mods = item[4] if len(item) > 4 and item[4] else []
-        promo_id = item[5] if len(item) > 5 else None
+    return [_line_with_objects(item, products, promotions) for item in items]
 
-        if promo_id is not None:
-            promo = promotions[promo_id]
-            result.append((None, qty, None, custom_name or promo.name, mods, promo))
-        else:
-            p1 = products[p_id]
-            p2 = products[p2_id] if p2_id is not None else None
-            result.append((p1, qty, p2, custom_name, mods, None))
-    return result
+
+def _promotion_products(promotion: Any) -> list[Any]:
+    if promotion is None or not hasattr(promotion, "items"):
+        return []
+    return [item.product for item in promotion.items if getattr(item, "product", None)]
+
+
+def _ingredient_ids_of_line(line: tuple) -> set[int]:
+    """Ingredientes de las recetas de lo que lleva la línea (sus productos o los de su promoción)."""
+    product, _, secondary_product, _, _, promotion = complete_line(line)
+    direct_products = [p for p in (product, secondary_product) if p is not None]
+    return {
+        recipe_item.ingredient_id
+        for p in [*_promotion_products(promotion), *direct_products]
+        for recipe_item in (getattr(p, "recipe_items", None) or [])
+        if recipe_item.ingredient_id is not None
+    }
+
+
+def _is_food(product: Any) -> bool:
+    category = getattr(product, "category", None)
+    return product is not None and bool(category) and getattr(category, "sector", "") != "barra"
+
+
+def _line_index_for_modifier(modifier: dict, lines: list[tuple], ingredient_ids_by_line: list[set[int]]) -> int:
+    """Posición del ítem al que corresponde el modificador: el que tiene ese ingrediente en su receta o, si no
+    hay, el único ítem o el primero que no sea una bebida."""
+    ingredient_id = modifier.get("ingredient_id")
+    owners = [i for i, ids in enumerate(ingredient_ids_by_line) if ingredient_id is not None and ingredient_id in ids]
+    if owners:
+        return owners[0]
+    if len(lines) == 1:
+        return 0
+    food_indices = [i for i, line in enumerate(lines) if _is_food(line[0])]
+    return food_indices[0] if food_indices else 0
+
+
+def _modifiers_from_notes(db: Session, notes: str) -> list[dict]:
+    """Exclusiones y extras de las observaciones que corresponden a ingredientes del sistema o a extras con costo."""
+    _, raw_modifiers = extraer_modificadores_de_texto(notes, db=db)
+    if not raw_modifiers:
+        return []
+    return [
+        m
+        for m in vincular_modificadores_con_db(db, raw_modifiers)
+        if m.get("ingredient_id") is not None or float(m.get("price") or 0) > 0
+    ]
+
+
+def _line_with_valid_modifiers(line: tuple, extra_modifiers: list[dict]) -> tuple:
+    """La línea con sus modificaciones más las indicadas, quedándose con las que valen para su producto."""
+    product, quantity, secondary_product, custom_name, modifiers, promotion = complete_line(line)
+    modifiers = modifiers + extra_modifiers
+    if product is not None:
+        modifiers = filtrar_modificadores_para_producto(modifiers, product, secondary_product)
+    return product, quantity, secondary_product, custom_name, modifiers, promotion
 
 
 def _attach_notes_modifiers(db: Session, notes: str | None, parsed_items: list[tuple]) -> list[tuple]:
@@ -171,91 +237,17 @@ def _attach_notes_modifiers(db: Session, notes: str | None, parsed_items: list[t
     if not notes or not str(notes).strip():
         return parsed_items
     # Si los ítems ya traen modificaciones explícitas (ej. bot con desglose previo), no las sobreescribimos
-    if any(len(line) > 4 and line[4] for line in parsed_items):
+    if any(complete_line(line)[4] for line in parsed_items):
+        return parsed_items
+    modifiers = _modifiers_from_notes(db, str(notes))
+    if not modifiers:
         return parsed_items
 
-    from app.services.modifier_nlp import (
-        extraer_modificadores_de_texto,
-        filtrar_modificadores_para_producto,
-        vincular_modificadores_con_db,
-    )
-
-    _, raw_mods = extraer_modificadores_de_texto(str(notes), db=db)
-    if not raw_mods:
-        return parsed_items
-
-    linked_mods = vincular_modificadores_con_db(db, raw_mods)
-    # Solo consideramos modificadores que correspondan a ingredientes del sistema o extras con costo
-    valid_mods = [
-        m for m in linked_mods
-        if m.get("ingredient_id") is not None or (float(m.get("price") or 0) > 0)
-    ]
-    if not valid_mods:
-        return parsed_items
-
-    # Obtener ingredientes de cada ítem para asociar modificaciones a la receta correcta
-    item_ing_map: list[set[int]] = []
-    for line in parsed_items:
-        p1 = line[0]
-        p2 = line[2] if len(line) > 2 else None
-        promo = line[5] if len(line) > 5 else None
-
-        prods = []
-        if promo is not None and hasattr(promo, "items"):
-            prods.extend([item.product for item in promo.items if getattr(item, "product", None)])
-        if p1 is not None:
-            prods.append(p1)
-        if p2 is not None:
-            prods.append(p2)
-
-        ing_ids = set()
-        for p in prods:
-            if hasattr(p, "recipe_items") and p.recipe_items:
-                for ri in p.recipe_items:
-                    if ri.ingredient_id is not None:
-                        ing_ids.add(ri.ingredient_id)
-        item_ing_map.append(ing_ids)
-
-    item_mods_to_add: dict[int, list[dict]] = {i: [] for i in range(len(parsed_items))}
-
-    for mod in valid_mods:
-        mod_ing_id = mod.get("ingredient_id")
-        assigned_idx = None
-
-        if mod_ing_id is not None:
-            matching_indices = [i for i, ings in enumerate(item_ing_map) if mod_ing_id in ings]
-            if matching_indices:
-                assigned_idx = matching_indices[0]
-
-        if assigned_idx is None:
-            if len(parsed_items) == 1:
-                assigned_idx = 0
-            else:
-                # Priorizar el primer ítem que no sea bebida/barra
-                food_indices = [
-                    i for i, line in enumerate(parsed_items)
-                    if line[0] is not None
-                    and getattr(line[0], "category", None)
-                    and getattr(line[0].category, "sector", "") != "barra"
-                ]
-                assigned_idx = food_indices[0] if food_indices else 0
-
-        item_mods_to_add[assigned_idx].append(mod)
-
-    updated_items = []
-    for i, line in enumerate(parsed_items):
-        p1 = line[0]
-        qty = line[1]
-        p2 = line[2] if len(line) > 2 else None
-        cname = line[3] if len(line) > 3 else None
-        existing_mods = list(line[4]) if len(line) > 4 and line[4] else []
-        promo = line[5] if len(line) > 5 else None
-        all_mods = existing_mods + item_mods_to_add.get(i, [])
-        if p1 is not None:
-            all_mods = filtrar_modificadores_para_producto(all_mods, p1, p2)
-        updated_items.append((p1, qty, p2, cname, all_mods, promo))
-
-    return updated_items
+    ingredient_ids_by_line = [_ingredient_ids_of_line(line) for line in parsed_items]
+    modifiers_by_line: defaultdict[int, list[dict]] = defaultdict(list)
+    for modifier in modifiers:
+        modifiers_by_line[_line_index_for_modifier(modifier, parsed_items, ingredient_ids_by_line)].append(modifier)
+    return [_line_with_valid_modifiers(line, modifiers_by_line[i]) for i, line in enumerate(parsed_items)]
 
 
 def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order:
@@ -268,21 +260,8 @@ def _new_order(db: Session, request: OrderRequest, source: OrderSource) -> Order
         status=OrderStatus.PENDING.value,
     )
     order.set_delivery(request.delivery_method, request.shipping_address)
-    from app.services.modifier_nlp import filtrar_modificadores_para_producto
-    parsed_items = _products_for(db, request.items)
-    parsed_items = _attach_notes_modifiers(db, request.notes, parsed_items)
-    validated_items = []
-    for line in parsed_items:
-        p1 = line[0]
-        qty = line[1]
-        p2 = line[2] if len(line) > 2 else None
-        cname = line[3] if len(line) > 3 else None
-        mods = list(line[4]) if len(line) > 4 and line[4] else []
-        promo = line[5] if len(line) > 5 else None
-        if p1 is not None:
-            mods = filtrar_modificadores_para_producto(mods, p1, p2)
-        validated_items.append((p1, qty, p2, cname, mods, promo))
-    order.set_items(validated_items)
+    parsed_items = _attach_notes_modifiers(db, request.notes, _products_for(db, request.items))
+    order.set_items([_line_with_valid_modifiers(line, []) for line in parsed_items])
     return order
 
 
@@ -291,6 +270,13 @@ def _save(db: Session, order: Order) -> Order:
         order_repository.add(db, order)
     db.refresh(order)
     return order
+
+
+def _attach_open_shift(db: Session, order: Order) -> None:
+    """El pedido entra al turno de caja abierto, si lo hay."""
+    shift = cash_shift_service.get_current_open_shift(db)
+    if shift:
+        order.cash_shift_id = shift.id
 
 
 def create_web_order(
@@ -314,9 +300,7 @@ def create_web_order(
     order.estimate_source = source.value
     order.payment_method = PaymentMethod(payment_method).value
     order.is_paid = False
-    shift = cash_shift_service.get_current_open_shift(db)
-    if shift:
-        order.cash_shift_id = shift.id
+    _attach_open_shift(db, order)
     return _save(db, order)
 
 
@@ -359,9 +343,7 @@ def create_bot_order(
     order.scheduled_for = scheduled_for
     order.payment_method = payment_method
     order.is_paid = False
-    shift = cash_shift_service.get_current_open_shift(db)
-    if shift:
-        order.cash_shift_id = shift.id
+    _attach_open_shift(db, order)
     order = _save(db, order)
     # Queda en la agenda (nombre, teléfono y dirección de envío) para reconocerlo en su próximo pedido.
     _register_client(db, request)
@@ -404,10 +386,44 @@ def get_order(db: Session, order_id: int) -> Order:
     return order
 
 
-def _require_trip_not_started(order: Order) -> None:
-    """El repartidor de un pedido cuyo viaje ya salió no se puede cambiar: la ruta y los avisos ya están en curso."""
+def _require_driver_change_allowed(order: Order) -> None:
+    """Solo los envíos a domicilio llevan repartidor, y no se lo puede cambiar cuando su viaje ya salió: la ruta y
+    los avisos ya están en curso."""
+    if order.delivery_method != DeliveryMethod.DELIVERY.value:
+        raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
     if order.is_dispatched:
         raise BusinessRuleError("El viaje de este pedido ya salió: no se puede cambiar el repartidor.")
+
+
+def _find_active_driver(db: Session, delivery_driver_id: int) -> DeliveryDriver:
+    driver = delivery_driver_repository.get(db, delivery_driver_id)
+    if driver is None:
+        raise NotFoundError("Repartidor no encontrado.")
+    if not driver.is_active:
+        raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
+    return driver
+
+
+def _smart_estimate_for_acceptance(
+    db: Session, order: Order, new_status: OrderStatus | str, estimated_minutes: int | None
+) -> int | None:
+    """Demora del historial del local con la que se acepta un pedido pendiente cuando el personal no la indica.
+
+    Devuelve None si el pedido no se está aceptando (o ya trae demora); si todavía no hay historial suficiente,
+    la tiene que indicar el personal.
+    """
+    is_acceptance = (
+        OrderStatus(new_status) == OrderStatus.CONFIRMED
+        and order.status == OrderStatus.PENDING.value
+        and order.scheduled_for is None
+        and estimated_minutes is None
+    )
+    if not is_acceptance:
+        return None
+    estimate = estimate_acceptance_delay(db, order)
+    if not estimate.is_smart:
+        raise ManualEstimateRequiredError()
+    return estimate.minutes
 
 
 def change_order_status(
@@ -419,34 +435,21 @@ def change_order_status(
 ) -> Order:
     """Avanza el pedido al nuevo estado según las reglas de su ciclo de vida (ver Order.transition_to)."""
     order = get_order(db, order_id)
+    driver = None
     if delivery_driver_id is not None:
-        if order.delivery_method != DeliveryMethod.DELIVERY.value:
-            raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
-        _require_trip_not_started(order)
-        driver = delivery_driver_repository.get(db, delivery_driver_id)
-        if driver is None:
-            raise NotFoundError("Repartidor no encontrado.")
-        if not driver.is_active:
-            raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
-        order.delivery_driver_id = driver.id
+        _require_driver_change_allowed(order)
+        driver = _find_active_driver(db, delivery_driver_id)
 
-    estimate_source = None
-    if (
-        OrderStatus(new_status) == OrderStatus.CONFIRMED
-        and order.status == OrderStatus.PENDING.value
-        and order.scheduled_for is None
-        and estimated_minutes is None
-    ):
-        # Al aceptar el pedido la demora sale del historial del local; si todavía no alcanza, la indica el personal.
-        estimate = estimate_acceptance_delay(db, order)
-        if not estimate.is_smart:
-            raise ManualEstimateRequiredError()
-        estimated_minutes, estimate_source = estimate.minutes, EstimateSource.SMART
+    # Al aceptar el pedido la demora sale del historial del local; si todavía no alcanza, la indica el personal.
+    smart_minutes = _smart_estimate_for_acceptance(db, order, new_status, estimated_minutes)
+    estimate_source = None if smart_minutes is None else EstimateSource.SMART
 
     with transaction(db):
+        if driver is not None:
+            order.delivery_driver_id = driver.id
         order.transition_to(
             new_status,
-            estimated_minutes,
+            estimated_minutes if smart_minutes is None else smart_minutes,
             current_delay_minutes=estimate_delay_minutes(db),
             estimate_source=estimate_source,
         )
@@ -460,9 +463,7 @@ def _collect_cash_payment(db: Session, order: Order) -> None:
     """Un pedido en efectivo se cobra al entregarlo: al finalizar entra a la caja, sin marcarlo a mano."""
     order.is_paid = True
     if not order.cash_shift_id:
-        shift = cash_shift_service.get_current_open_shift(db)
-        if shift:
-            order.cash_shift_id = shift.id
+        _attach_open_shift(db, order)
 
 
 def assign_delivery_driver(
@@ -470,43 +471,38 @@ def assign_delivery_driver(
 ) -> Order:
     """Asigna (o desasigna) un repartidor de la lista de personal activo a un pedido con envío a domicilio."""
     order = get_order(db, order_id)
-    if order.delivery_method != DeliveryMethod.DELIVERY.value:
-        raise BusinessRuleError("Solo se pueden asignar repartidores a pedidos con envío a domicilio.")
-    _require_trip_not_started(order)
-
-    if delivery_driver_id is not None:
-        driver = delivery_driver_repository.get(db, delivery_driver_id)
-        if driver is None:
-            raise NotFoundError("Repartidor no encontrado.")
-        if not driver.is_active:
-            raise BusinessRuleError("Solo se pueden asignar repartidores activos.")
-        order.delivery_driver_id = driver.id
-    else:
-        order.delivery_driver_id = None
-
+    _require_driver_change_allowed(order)
+    driver = _find_active_driver(db, delivery_driver_id) if delivery_driver_id is not None else None
     with transaction(db):
-        pass
+        order.delivery_driver_id = driver.id if driver else None
     db.refresh(order)
     return order
+
+
+def _release_from_closed_shift(order: Order, is_paid: bool) -> None:
+    """Lo que ya se cobró en un turno cerrado no se toca. Pero un pedido que quedó abierto sin cobrar al cerrar la
+    caja se cobra recién ahora: ese dinero entra en el turno que está abierto."""
+    if not is_paid or order.is_paid or order.amount_paid > 0:
+        raise BusinessRuleError("No se puede modificar el pago de un pedido con turno de caja cerrado.")
+    order.cash_shift_id = None
+
+
+def _require_open_shift_to_collect(db: Session, order: Order) -> None:
+    shift = cash_shift_service.get_current_open_shift(db)
+    if not shift:
+        raise BusinessRuleError("No se pueden cobrar pedidos porque no hay una caja abierta.")
+    order.cash_shift_id = shift.id
 
 
 def update_order_payment(db: Session, order_id: int, is_paid: bool) -> Order:
     """Actualiza manualmente el estado de cobro de un pedido."""
     order = get_order(db, order_id)
-    if order.is_shift_closed:
-        # Lo que ya se cobró en un turno cerrado no se toca. Pero un pedido que quedó abierto sin cobrar al cerrar la
-        # caja se cobra recién ahora: ese dinero entra en el turno que está abierto.
-        if not is_paid or order.is_paid or order.amount_paid > 0:
-            raise BusinessRuleError("No se puede modificar el pago de un pedido con turno de caja cerrado.")
-        order.cash_shift_id = None
-    if is_paid and not order.cash_shift_id:
-        shift = cash_shift_service.get_current_open_shift(db)
-        if not shift:
-            raise BusinessRuleError("No se pueden cobrar pedidos porque no hay una caja abierta.")
-        order.cash_shift_id = shift.id
-    order.is_paid = is_paid
     with transaction(db):
-        pass
+        if order.is_shift_closed:
+            _release_from_closed_shift(order, is_paid)
+        if is_paid and not order.cash_shift_id:
+            _require_open_shift_to_collect(db, order)
+        order.is_paid = is_paid
     db.refresh(order)
     return order
 
@@ -517,9 +513,8 @@ def update_order_item_prepared(db: Session, order_id: int, item_id: int, is_prep
     item = next((i for i in order.items if i.id == item_id), None)
     if item is None:
         raise NotFoundError("Ítem no encontrado en el pedido.")
-    item.is_prepared = is_prepared
     with transaction(db):
-        pass
+        item.is_prepared = is_prepared
     db.refresh(order)
     return order
 
@@ -528,15 +523,12 @@ def update_order_sector_prepared(db: Session, order_id: int, sector: str, is_pre
     """Marca o desmarca todos los ítems de un sector en una comanda como preparados."""
     order = get_order(db, order_id)
     sector_clean = sector.strip().lower()
-    matched = False
-    for item in order.items:
-        if item.sector.lower() == sector_clean:
-            item.is_prepared = is_prepared
-            matched = True
-    if not matched:
+    sector_items = [item for item in order.items if item.sector.lower() == sector_clean]
+    if not sector_items:
         raise NotFoundError(f"No hay ítems para el sector '{sector}' en este pedido.")
     with transaction(db):
-        pass
+        for item in sector_items:
+            item.is_prepared = is_prepared
     db.refresh(order)
     return order
 
@@ -568,8 +560,7 @@ def change_order_payment_method(db: Session, order: Order, method: PaymentMethod
 def acknowledge_kitchen_update(db: Session, order_id: int) -> Order:
     """Cocina vio los productos agregados: se apaga la alerta del tablero."""
     order = get_order(db, order_id)
-    order.kitchen_update_pending = False
     with transaction(db):
-        pass
+        order.kitchen_update_pending = False
     db.refresh(order)
     return order

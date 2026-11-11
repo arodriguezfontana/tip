@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import {
   fetchHandoff,
   fetchOrderChat,
@@ -85,7 +85,7 @@ export function HandoffChatPanel({ handoffId, orderId, onBack, otherUnread = 0 }
     endRef.current?.scrollIntoView?.({ block: 'end' });
   }, [messageCount]);
 
-  const handleSend = async (e: FormEvent) => {
+  const handleSend = async (e: SubmitEvent) => {
     e.preventDefault();
     const message = text.trim();
     if (!message || busy || closed) return;

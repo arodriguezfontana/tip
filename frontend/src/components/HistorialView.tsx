@@ -8,7 +8,6 @@ import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { DateRangeFilter } from '@/components/DateRangeFilter';
 import { OrderDetailModal } from '@/components/OrderDetailModal';
 
-import type { ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
 
 function statusBadgeClasses(status: string): string {
@@ -30,12 +29,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-interface HistorialViewProps {
-  themeColor?: ThemeColor;
-}
-
-export function HistorialView({ themeColor }: HistorialViewProps = {}) {
-  void themeColor;
+export function HistorialView() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');

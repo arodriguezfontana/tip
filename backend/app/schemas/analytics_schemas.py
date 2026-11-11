@@ -5,7 +5,7 @@ from pydantic import BaseModel, ConfigDict, Field
 
 
 class BusinessGoalItem(BaseModel):
-    model_config = ConfigDict(str_strip_whitespace=True)
+    model_config = ConfigDict(str_strip_whitespace=True, from_attributes=True)
 
     period_type: str = Field(..., description="Tipo de período: 'monthly', 'weekly', 'daily'")
     target_revenue: float = Field(..., ge=0, description="Meta de facturación para el período")
@@ -22,6 +22,8 @@ class UpdateBusinessGoalsPayload(BaseModel):
 
 
 class GrowthMetric(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     current: float
     previous: float
     growth_pct: float | None = None
@@ -30,6 +32,8 @@ class GrowthMetric(BaseModel):
 
 
 class GoalProgress(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     period_type: str
     target_revenue: float
     revenue_progress_pct: float
@@ -40,6 +44,8 @@ class GoalProgress(BaseModel):
 
 
 class TopProductKpi(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     product_name: str
     total_quantity: int
     total_revenue: float
@@ -51,6 +57,8 @@ class TopProductKpi(BaseModel):
 
 
 class DashboardKPIsResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     revenue: GrowthMetric
     orders_count: GrowthMetric
     completed_orders_count: int
@@ -66,6 +74,8 @@ class DashboardKPIsResponse(BaseModel):
 
 
 class OperationalMetricsContext(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     avg_wait_minutes: float = 0.0
     max_wait_minutes: int = 0
     high_wait_count: int = 0
@@ -77,6 +87,8 @@ class OperationalMetricsContext(BaseModel):
 
 
 class StrategicInsightResponse(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
     summary: str
     highlights: list[str]
     warnings: list[str] = Field(default_factory=list, description="Puntos de atención y alertas")
@@ -84,4 +96,3 @@ class StrategicInsightResponse(BaseModel):
     recommendations: list[str]
     operational_metrics: OperationalMetricsContext | None = None
     generated_at: datetime
-

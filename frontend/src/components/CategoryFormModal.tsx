@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { INPUT_FULL_CLASS as INPUT_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, CategoryPayload } from '@/types/catalog';
@@ -40,7 +40,7 @@ export function CategoryFormModal({ category, products, onClose, onSave }: Categ
   const moved = products.filter((p) => selected.has(p.id) && p.category !== null && !isInThisCategory(p)).length;
   const removed = products.filter((p) => !selected.has(p.id) && isInThisCategory(p)).length;
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (saving) return;
     if (!name.trim()) {

@@ -6,6 +6,17 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.channels import Channel
 
+# Variables de configuración que necesita cada canal para funcionar.
+_CREDENCIALES_POR_CANAL = {
+    Channel.TELEGRAM: ("TELEGRAM_TOKEN",),
+    Channel.WHATSAPP: (
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_VERIFY_TOKEN",
+        "WHATSAPP_APP_SECRET",
+    ),
+}
+
 
 class Settings(BaseSettings):
     PROJECT_NAME: str = "TIP"
@@ -100,25 +111,21 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _credenciales_de_los_canales_habilitados(self) -> "Settings":
-        requeridas = {
-            Channel.TELEGRAM: ("TELEGRAM_TOKEN",),
-            Channel.WHATSAPP: (
-                "WHATSAPP_ACCESS_TOKEN",
-                "WHATSAPP_PHONE_NUMBER_ID",
-                "WHATSAPP_VERIFY_TOKEN",
-                "WHATSAPP_APP_SECRET",
-            ),
-        }
         habilitados = self.canales_habilitados
         if not habilitados:
             raise ValueError("BOT_CHANNELS debe incluir al menos un canal (telegram, whatsapp).")
         for canal in habilitados:
-            faltan = [nombre for nombre in requeridas[canal] if not getattr(self, nombre)]
-            if faltan:
-                raise ValueError(f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}.")
+            self._exigir_credenciales(canal)
         if not re.match(r"^\d{4}$", self.ADMIN_PIN):
             raise ValueError("ADMIN_PIN debe ser un código numérico de 4 dígitos (ej. '1234').")
         return self
+
+    def _exigir_credenciales(self, canal: Channel) -> None:
+        faltan = [nombre for nombre in _CREDENCIALES_POR_CANAL[canal] if not getattr(self, nombre)]
+        if faltan:
+            raise ValueError(
+                f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}."
+            )
 
     @property
     def telegram_webhook_secret(self) -> str:
@@ -132,4 +139,4 @@ class Settings(BaseSettings):
         return hashlib.sha256(f"telegram-webhook:{self.TELEGRAM_TOKEN}".encode()).hexdigest()
 
 
-settings = Settings()
+settings = Settings()  # pyright: ignore[reportCallIssue]  # los campos obligatorios vienen del entorno

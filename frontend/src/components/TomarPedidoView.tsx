@@ -1,51 +1,28 @@
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
-import { ProductThumbnail } from '@/components/ProductThumbnail';
-import { lookupClientByPhone } from '@/services/clientService';
-import { useMenuProducts } from '@/hooks/useMenuProducts';
-import { createCounterOrder } from '@/services/orderService';
-import { fetchCurrentCashShift } from '@/services/cashShiftService';
-import { fetchAvailablePromotions } from '@/services/promotionService';
-import type { Client } from '@/types/client';
-import { COUNTER_PAYMENT_METHODS, MAX_QUANTITY_PER_ITEM, PAYMENT_METHOD_LABEL } from '@/types/order';
-import type { CartItem, DeliveryMethod, PaymentMethod, Product } from '@/types/order';
-import type { Promotion } from '@/types/promotion';
-import { productImageSrc } from '@/utils/catalog';
-import { formatCurrency } from '@/utils/currency';
-import { groupByCategory } from '@/utils/productGrouping';
-import { PHONE_PATTERN } from '@/utils/customerValidation';
-import { getErrorMessage } from '@/utils/errors';
-import { INPUT_FULL_CLASS as INPUT_CLASS } from '@/styles/forms';
+import { useEffect, useRef, useState } from 'react';
+import type { SubmitEvent } from 'react';
 import { CheckIcon } from '@/components/Icons';
+import { CustomerFieldset } from '@/components/mostrador/CustomerFieldset';
+import { OrderSummary } from '@/components/mostrador/OrderSummary';
+import { ProductCatalog } from '@/components/mostrador/ProductCatalog';
+import { useAvailablePromotions } from '@/hooks/useAvailablePromotions';
+import { useClientLookup } from '@/hooks/useClientLookup';
+import { useMenuProducts } from '@/hooks/useMenuProducts';
+import { useOrderLines } from '@/hooks/useOrderLines';
+import { fetchCurrentCashShift } from '@/services/cashShiftService';
+import { createCounterOrder } from '@/services/orderService';
+import type { DeliveryMethod, PaymentMethod } from '@/types/order';
+import { buildCounterOrderPayload, validateCounterOrder } from '@/utils/counterOrder';
+import type { CounterOrderErrors } from '@/utils/counterOrder';
+import { getErrorMessage } from '@/utils/errors';
 
-const ALL_CATEGORIES = 'all';
-const PROMOTIONS_CATEGORY = 'promos';
-type CategoryFilter = number | typeof ALL_CATEGORIES | typeof PROMOTIONS_CATEGORY;
-
-/** Espera tras la última tecla del teléfono antes de buscar al cliente. */
-const CLIENT_LOOKUP_DEBOUNCE_MS = 400;
-
-interface CustomerFormErrors {
-  name?: string;
-  phone?: string;
-  address?: string;
-  items?: string;
-}
-
-type ClientLookup =
-  | { status: 'idle' | 'searching' | 'new' | 'error' }
-  | { status: 'found'; client: Client };
+const CLOSED_CASH_MESSAGE =
+  'No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.';
 
 export function TomarPedidoView() {
-  // Catálogo
+  // Catálogo y pedido
   const { products, loading: loadingProducts, error: productsError, reload: reloadProducts } = useMenuProducts();
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
-  const [loadingPromos, setLoadingPromos] = useState(false);
-  const [activeCategory, setActiveCategory] = useState<CategoryFilter>(ALL_CATEGORIES);
-  const [search, setSearch] = useState('');
-
-  // Pedido
-  const [lines, setLines] = useState<CartItem[]>([]);
+  const { promotions, loading: loadingPromotions, reload: reloadPromotions } = useAvailablePromotions();
+  const order = useOrderLines();
 
   // Datos del cliente
   const [name, setName] = useState('');
@@ -55,41 +32,14 @@ export function TomarPedidoView() {
   const [notes, setNotes] = useState('');
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod | null>(null);
   const [isPaid, setIsPaid] = useState(false);
-  const [errors, setErrors] = useState<CustomerFormErrors>({});
+  const [errors, setErrors] = useState<CounterOrderErrors>({});
   const [isShiftOpen, setIsShiftOpen] = useState<boolean | null>(null);
-
-  // Búsqueda del cliente por teléfono
-  const [clientLookup, setClientLookup] = useState<ClientLookup>({ status: 'idle' });
-  // Últimos valores autocompletados: solo se pisan campos vacíos o que el usuario no editó.
-  const autofilledRef = useRef({ name: '', address: '' });
+  const clientLookup = useClientLookup(phone, { setName, setAddress });
 
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
   const phoneInputRef = useRef<HTMLInputElement>(null);
-
-  const loadPromos = useCallback(() => {
-    setLoadingPromos(true);
-    fetchAvailablePromotions()
-      .then((data) => setPromotions(data ?? []))
-      .catch(() => {})
-      .finally(() => setLoadingPromos(false));
-  }, []);
-
-  useEffect(() => {
-    let active = true;
-    fetchAvailablePromotions()
-      .then((data) => {
-        if (active) setPromotions(data ?? []);
-      })
-      .catch(() => {})
-      .finally(() => {
-        if (active) setLoadingPromos(false);
-      });
-    return () => {
-      active = false;
-    };
-  }, []);
 
   useEffect(() => {
     let active = true;
@@ -105,172 +55,19 @@ export function TomarPedidoView() {
     };
   }, []);
 
-  // Busca al cliente por teléfono y autocompleta nombre y dirección. Nunca bloquea la carga:
-  // si la búsqueda falla o tarda, el usuario sigue completando los campos a mano.
-  useEffect(() => {
-    const trimmedPhone = phone.trim();
-    if (!PHONE_PATTERN.test(trimmedPhone)) return;
+  const foundClient = clientLookup.lookup.status === 'found' ? clientLookup.lookup.client : null;
+  const nameChanged = name.trim() !== '' && name.trim() !== foundClient?.full_name;
+  const addressChanged =
+    deliveryMethod === 'domicilio' && address.trim() !== '' && address.trim() !== (foundClient?.address ?? '');
+  const clientDataChanged = foundClient !== null && (nameChanged || addressChanged);
 
-    const controller = new AbortController();
-    const timer = setTimeout(() => {
-      setClientLookup({ status: 'searching' });
-      lookupClientByPhone(trimmedPhone, controller.signal)
-        .then((client) => {
-          if (controller.signal.aborted) return;
-          const previous = autofilledRef.current;
-          const isUntouched = (current: string, autofilled: string) => !current.trim() || current === autofilled;
-
-          if (client) {
-            const clientAddress = client.address ?? '';
-            autofilledRef.current = { name: client.full_name, address: clientAddress };
-            setName((current) => (isUntouched(current, previous.name) ? client.full_name : current));
-            if (clientAddress) {
-              setAddress((current) => (isUntouched(current, previous.address) ? clientAddress : current));
-            }
-            setClientLookup({ status: 'found', client });
-          } else {
-            // Teléfono nuevo: se quitan los datos autocompletados de otro cliente que no se editaron.
-            autofilledRef.current = { name: '', address: '' };
-            if (previous.name) setName((current) => (current === previous.name ? '' : current));
-            if (previous.address) setAddress((current) => (current === previous.address ? '' : current));
-            setClientLookup({ status: 'new' });
-          }
-        })
-        .catch(() => {
-          if (!controller.signal.aborted) setClientLookup({ status: 'error' });
-        });
-    }, CLIENT_LOOKUP_DEBOUNCE_MS);
-
-    return () => {
-      clearTimeout(timer);
-      controller.abort();
-    };
-  }, [phone]);
-
-  const foundClient = clientLookup.status === 'found' ? clientLookup.client : null;
-  const clientDataChanged =
-    foundClient !== null &&
-    ((name.trim() !== '' && name.trim() !== foundClient.full_name) ||
-      (deliveryMethod === 'domicilio' && address.trim() !== '' && address.trim() !== (foundClient.address ?? '')));
-
-  const categories = useMemo(() => groupByCategory(products).map((group) => group.category), [products]);
-
-  const visiblePromotions = useMemo(() => {
-    if (activeCategory !== ALL_CATEGORIES && activeCategory !== PROMOTIONS_CATEGORY) {
-      return [];
-    }
-    const term = search.trim().toLowerCase();
-    return promotions.filter(
-      (promo) =>
-        !term ||
-        promo.name.toLowerCase().includes(term) ||
-        (promo.description && promo.description.toLowerCase().includes(term))
-    );
-  }, [promotions, activeCategory, search]);
-
-  const visibleGroups = useMemo(() => {
-    if (activeCategory === PROMOTIONS_CATEGORY) {
-      return [];
-    }
-    const term = search.trim().toLowerCase();
-    const filtered = products.filter(
-      (product) =>
-        (activeCategory === ALL_CATEGORIES || product.category.id === activeCategory) &&
-        (!term || product.name.toLowerCase().includes(term))
-    );
-    return groupByCategory(filtered);
-  }, [products, activeCategory, search]);
-
-  const quantityByProduct = useMemo(
-    () => new Map(lines.filter((l) => !l.promotion).map((line) => [line.product.id, line.quantity])),
-    [lines]
-  );
-
-  const quantityByPromo = useMemo(
-    () => new Map(lines.filter((l) => Boolean(l.promotion)).map((line) => [line.promotion!.id, line.quantity])),
-    [lines]
-  );
-
-  const total = lines.reduce(
-    (sum, line) => sum + (line.promotion ? line.promotion.price : line.product.price) * line.quantity,
-    0
-  );
-  const units = lines.reduce((sum, line) => sum + line.quantity, 0);
-
-  const getLineKey = (line: CartItem): string => {
-    if (line.promotion) return `promo-${line.promotion.id}`;
-    return `prod-${line.product.id}`;
-  };
-
-  const addProduct = (product: Product) => {
+  const itemAdded = () => {
     setLastOrderId(null);
     setErrors((prev) => ({ ...prev, items: undefined }));
-    setLines((prev) => {
-      const existing = prev.find((line) => !line.promotion && line.product.id === product.id);
-      if (existing) {
-        return prev.map((line) =>
-          !line.promotion && line.product.id === product.id
-            ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_ITEM) }
-            : line
-        );
-      }
-      return [...prev, { product, quantity: 1, unit_price: product.price }];
-    });
-  };
-
-  const addPromotion = (promo: Promotion) => {
-    setLastOrderId(null);
-    setErrors((prev) => ({ ...prev, items: undefined }));
-    setLines((prev) => {
-      const existing = prev.find((line) => line.promotion?.id === promo.id);
-      if (existing) {
-        return prev.map((line) =>
-          line.promotion?.id === promo.id
-            ? { ...line, quantity: Math.min(line.quantity + 1, MAX_QUANTITY_PER_ITEM) }
-            : line
-        );
-      }
-      return [
-        ...prev,
-        {
-          id: `promo-${promo.id}`,
-          product: {
-            id: -promo.id,
-            name: promo.name,
-            description: promo.description,
-            price: promo.price,
-            category: { id: -1, name: 'Promociones' },
-            dietary_restrictions: [],
-            image_url: promo.image_url,
-          },
-          promotion: promo,
-          quantity: 1,
-          unit_price: promo.price,
-        },
-      ];
-    });
-  };
-
-  const changeLineQuantity = (lineKey: string, quantity: number) => {
-    if (quantity <= 0) {
-      removeLine(lineKey);
-      return;
-    }
-    setLines((prev) =>
-      prev.map((line) =>
-        getLineKey(line) === lineKey
-          ? { ...line, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) }
-          : line
-      )
-    );
-  };
-
-  const removeLine = (lineKey: string) => {
-    setLines((prev) => prev.filter((line) => getLineKey(line) !== lineKey));
   };
 
   const resetOrder = () => {
-    setLines([]);
+    order.clear();
     setName('');
     setPhone('');
     setDeliveryMethod('retiro');
@@ -280,65 +77,31 @@ export function TomarPedidoView() {
     setIsPaid(false);
     setErrors({});
     setSubmitError(null);
-    setClientLookup({ status: 'idle' });
-    autofilledRef.current = { name: '', address: '' };
+    clientLookup.reset();
   };
 
-  const validate = (): CustomerFormErrors => {
-    const nextErrors: CustomerFormErrors = {};
-    if (!name.trim()) nextErrors.name = 'Ingresá el nombre del cliente.';
-    if (!phone.trim()) {
-      nextErrors.phone = 'Ingresá el teléfono.';
-    } else if (!PHONE_PATTERN.test(phone.trim())) {
-      nextErrors.phone = 'Teléfono inválido (solo números, espacios, guiones o +).';
-    }
-    if (deliveryMethod === 'domicilio' && !address.trim()) {
-      nextErrors.address = 'La dirección es obligatoria para envíos a domicilio.';
-    }
-    if (lines.length === 0) nextErrors.items = 'Agregá al menos un producto al pedido.';
-    return nextErrors;
-  };
+  const form = { name, phone, deliveryMethod, address, notes, paymentMethod, isPaid };
 
-  const handleConfirm = async (event: FormEvent) => {
+  const handleConfirm = async (event: SubmitEvent) => {
     event.preventDefault();
     if (submitting) return;
 
-    const nextErrors = validate();
+    const nextErrors = validateCounterOrder(form, order.lines);
     setErrors(nextErrors);
     setSubmitError(null);
     setLastOrderId(null);
     if (Object.keys(nextErrors).length > 0) return;
 
     if (isShiftOpen === false) {
-      setSubmitError('No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.');
+      setSubmitError(CLOSED_CASH_MESSAGE);
       return;
     }
 
     setSubmitting(true);
     try {
-      const order = await createCounterOrder({
-        customer_name: name.trim(),
-        customer_phone: phone.trim(),
-        delivery_method: deliveryMethod,
-        shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
-        notes: notes.trim() || null,
-        payment_method: paymentMethod,
-        is_paid: isPaid,
-        items: lines.map((line) => {
-          if (line.promotion) {
-            return {
-              promotion_id: line.promotion.id,
-              quantity: line.quantity,
-            };
-          }
-          return {
-            product_id: line.product.id,
-            quantity: line.quantity,
-          };
-        }),
-      });
+      const created = await createCounterOrder(buildCounterOrderPayload(form, order.lines));
       resetOrder();
-      setLastOrderId(order.id);
+      setLastOrderId(created.id);
       phoneInputRef.current?.focus();
     } catch (err) {
       setSubmitError(getErrorMessage(err, 'No se pudo registrar el pedido. Intentá nuevamente.'));
@@ -367,455 +130,66 @@ export function TomarPedidoView() {
         </div>
       )}
 
-      {/* Datos del cliente */}
-      <fieldset className="bg-white rounded-2xl shadow-md p-5 shrink-0">
-        <legend className="sr-only">Datos del cliente</legend>
-        <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-3">Datos del cliente</h2>
-        <div className="grid grid-cols-1 md:grid-cols-12 gap-3">
-          <div className="md:col-span-3">
-            <label htmlFor="tp-phone" className="block text-xs font-medium text-gray-600 mb-1">
-              Teléfono *
-            </label>
-            <input
-              id="tp-phone"
-              ref={phoneInputRef}
-              type="tel"
-              value={phone}
-              onChange={(e) => {
-                setPhone(e.target.value);
-                setClientLookup({ status: 'idle' });
-              }}
-              aria-describedby="tp-phone-status"
-              className={INPUT_CLASS}
-            />
-            {errors.phone ? (
-              <p className="text-xs text-red-600 mt-1">{errors.phone}</p>
-            ) : (
-              <p id="tp-phone-status" aria-live="polite" className="text-xs mt-1 min-h-4">
-                {clientLookup.status === 'searching' && <span className="text-gray-500">Buscando cliente…</span>}
-                {clientLookup.status === 'found' && (
-                  <span className="text-green-700 inline-flex items-center gap-1">
-                    <CheckIcon className="w-3.5 h-3.5 shrink-0" />
-                    Cliente registrado: datos completados.
-                  </span>
-                )}
-                {clientLookup.status === 'new' && (
-                  <span className="text-gray-500">Cliente nuevo: se registrará al confirmar.</span>
-                )}
-                {clientLookup.status === 'error' && (
-                  <span className="text-amber-700">No se pudo buscar el cliente. Completá los datos a mano.</span>
-                )}
-              </p>
-            )}
-          </div>
-
-          <div className="md:col-span-4">
-            <label htmlFor="tp-name" className="block text-xs font-medium text-gray-600 mb-1">
-              Nombre *
-            </label>
-            <input
-              id="tp-name"
-              type="text"
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className={INPUT_CLASS}
-            />
-            {errors.name && <p className="text-xs text-red-600 mt-1">{errors.name}</p>}
-            {clientDataChanged && (
-              <p className="text-xs text-blue-700 mt-1">
-                Modificaste los datos del cliente: se actualizarán al confirmar el pedido.
-              </p>
-            )}
-          </div>
-
-          <div className="md:col-span-5">
-            <span className="block text-xs font-medium text-gray-600 mb-1">Tipo de entrega *</span>
-            <div className="flex rounded-xl border border-gray-300 overflow-hidden text-sm" role="radiogroup">
-              {(
-                [
-                  ['retiro', 'Retira en el local'],
-                  ['domicilio', 'Envío a domicilio'],
-                ] as const
-              ).map(([value, label]) => (
-                <button
-                  key={value}
-                  type="button"
-                  role="radio"
-                  aria-checked={deliveryMethod === value}
-                  onClick={() => setDeliveryMethod(value)}
-                  style={deliveryMethod === value ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                  className={`flex-1 py-2 font-medium transition ${
-                    deliveryMethod === value ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {label}
-                </button>
-              ))}
-            </div>
-          </div>
-
-          <div className="md:col-span-6">
-            <label htmlFor="tp-address" className="block text-xs font-medium text-gray-600 mb-1">
-              Dirección {deliveryMethod === 'domicilio' ? '*' : '(solo para envíos)'}
-            </label>
-            <input
-              id="tp-address"
-              type="text"
-              value={address}
-              disabled={deliveryMethod !== 'domicilio'}
-              onChange={(e) => setAddress(e.target.value)}
-              className={`${INPUT_CLASS} disabled:bg-gray-100 disabled:text-gray-400 disabled:cursor-not-allowed`}
-            />
-            {errors.address && <p className="text-xs text-red-600 mt-1">{errors.address}</p>}
-          </div>
-
-          <div className="md:col-span-6">
-            <label htmlFor="tp-notes" className="block text-xs font-medium text-gray-600 mb-1">
-              Observaciones
-            </label>
-            <input
-              id="tp-notes"
-              type="text"
-              value={notes}
-              onChange={(e) => setNotes(e.target.value)}
-              placeholder="Ej: sin cebolla, timbre 2B…"
-              className={INPUT_CLASS}
-            />
-          </div>
-        </div>
-      </fieldset>
+      <CustomerFieldset
+        phone={phone}
+        onPhoneChange={(value) => {
+          setPhone(value);
+          clientLookup.invalidate();
+        }}
+        phoneInputRef={phoneInputRef}
+        lookup={clientLookup.lookup}
+        name={name}
+        onNameChange={setName}
+        clientDataChanged={clientDataChanged}
+        deliveryMethod={deliveryMethod}
+        onDeliveryMethodChange={setDeliveryMethod}
+        address={address}
+        onAddressChange={setAddress}
+        notes={notes}
+        onNotesChange={setNotes}
+        errors={errors}
+      />
 
       <div className="grid grid-cols-1 lg:grid-cols-12 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
-        {/* Catálogo */}
-        <section className="lg:col-span-7 bg-white rounded-2xl shadow-md p-4 flex flex-col gap-4 lg:min-h-0 lg:overflow-y-auto">
-          <div className="flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700">Productos</h2>
-            <input
-              type="search"
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-              onKeyDown={(e) => {
-                // Enter en el buscador no debe confirmar el pedido.
-                if (e.key === 'Enter') e.preventDefault();
-              }}
-              placeholder="Buscar producto…"
-              aria-label="Buscar producto"
-              className="rounded-xl border border-gray-300 px-3 py-1.5 text-sm w-full sm:w-56 focus:outline-none focus:ring-2 focus:ring-black"
-            />
-          </div>
-
-          <div className="flex flex-wrap gap-2">
-            {[{ id: ALL_CATEGORIES, name: 'Todas' } as const, ...categories].map((category) => (
-              <button
-                key={category.id}
-                type="button"
-                onClick={() => setActiveCategory(category.id)}
-                style={activeCategory === category.id ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                className={`flex items-center gap-2 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
-                  activeCategory === category.id
-                    ? 'text-white shadow-md'
-                    : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
-                }`}
-              >
-                {category.name}
-              </button>
-            ))}
-            {promotions.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setActiveCategory(PROMOTIONS_CATEGORY)}
-                style={activeCategory === PROMOTIONS_CATEGORY ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
-                  activeCategory === PROMOTIONS_CATEGORY
-                    ? 'text-white shadow-md'
-                    : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
-                }`}
-              >
-                <span>Promociones</span>
-                <span
-                  className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
-                    activeCategory === PROMOTIONS_CATEGORY
-                      ? 'bg-white/20 text-white'
-                      : 'bg-amber-200 text-amber-900'
-                  }`}
-                >
-                  {promotions.length}
-                </span>
-              </button>
-            )}
-          </div>
-
-          {loadingProducts && products.length === 0 && (
-            <p className="text-sm text-gray-500 text-center py-12">Cargando menú...</p>
-          )}
-
-          {productsError && (
-            <div role="alert" className="rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm flex items-center justify-between gap-3">
-              <span>{productsError}</span>
-              <button type="button" onClick={() => { reloadProducts(); loadPromos(); }} className="shrink-0 font-semibold underline hover:no-underline">
-                Reintentar
-              </button>
-            </div>
-          )}
-
-          {!loadingProducts && !productsError && !loadingPromos && visibleGroups.length === 0 && visiblePromotions.length === 0 && (
-            <p className="text-sm text-gray-500 text-center py-12">No hay productos que coincidan.</p>
-          )}
-
-          <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
-            {visiblePromotions.length > 0 && (
-              <div>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5 mb-2">
-                  <span>Promociones vigentes</span>
-                  <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-extrabold">
-                    {visiblePromotions.length}
-                  </span>
-                </h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-                  {visiblePromotions.map((promo) => {
-                    const quantity = quantityByPromo.get(promo.id) ?? 0;
-                    return (
-                      <button
-                        key={`promo-${promo.id}`}
-                        type="button"
-                        onClick={() => addPromotion(promo)}
-                        disabled={quantity >= MAX_QUANTITY_PER_ITEM}
-                        title={`Agregar promoción ${promo.name}`}
-                        className={`relative flex flex-col items-center text-center gap-1.5 rounded-xl border p-3 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          quantity > 0
-                            ? 'border-amber-600 bg-amber-50/70 ring-1 ring-amber-500'
-                            : 'border-amber-200/90 bg-gradient-to-b from-amber-50/40 to-white hover:border-amber-400 hover:shadow-md'
-                        }`}
-                      >
-                        <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 shadow-2xs">
-                          Promo
-                        </span>
-                        {quantity > 0 && (
-                          <span
-                            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
-                            className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
-                          >
-                            {quantity}
-                          </span>
-                        )}
-                        {promo.image_url ? (
-                          <img
-                            src={productImageSrc(promo.image_url)}
-                            alt={promo.name}
-                            loading="lazy"
-                            className="w-10 h-10 rounded-xl object-cover bg-amber-50 shrink-0 shadow-2xs"
-                          />
-                        ) : (
-                          <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 font-bold text-lg shrink-0 shadow-2xs">
-                            🎁
-                          </div>
-                        )}
-                        <span className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{promo.name}</span>
-                        <span className="text-xs font-bold text-amber-900">{formatCurrency(promo.price)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            )}
-
-            {visibleGroups.map((group) => (
-              <div key={group.category.id}>
-                <h3 className="text-xs font-bold uppercase tracking-wider text-gray-500 mb-2">{group.category.name}</h3>
-                <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
-                  {group.products.map((product) => {
-                    const quantity = quantityByProduct.get(product.id) ?? 0;
-                    return (
-                      <button
-                        key={product.id}
-                        type="button"
-                        onClick={() => addProduct(product)}
-                        disabled={quantity >= MAX_QUANTITY_PER_ITEM}
-                        title={`Agregar ${product.name}`}
-                        className={`relative flex flex-col items-center text-center gap-1.5 rounded-xl border p-3 transition active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed ${
-                          quantity > 0
-                            ? 'border-black bg-gray-50'
-                            : 'border-gray-200 bg-white hover:border-gray-400 hover:shadow-md'
-                        }`}
-                      >
-                        {quantity > 0 && (
-                          <span
-                            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
-                            className="absolute top-1.5 right-1.5 min-w-5 h-5 px-1 rounded-full text-white text-[11px] font-bold flex items-center justify-center"
-                          >
-                            {quantity}
-                          </span>
-                        )}
-                        <ProductThumbnail product={product} size="sm" />
-                        <span className="text-xs font-semibold text-gray-900 leading-tight">{product.name}</span>
-                        <span className="text-xs text-gray-600">{formatCurrency(product.price)}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        {/* Resumen del pedido */}
-        <section className="lg:col-span-5 bg-white rounded-2xl shadow-md p-4 flex flex-col lg:min-h-0 lg:overflow-y-auto">
-          <h2 className="text-sm font-bold uppercase tracking-wider text-gray-700 mb-3">Resumen del pedido</h2>
-
-          {lines.length === 0 ? (
-            <p className="text-sm text-gray-400 text-center py-10 border border-dashed border-gray-200 rounded-xl">
-              Hacé click en un producto para agregarlo.
-            </p>
-          ) : (
-            <div className="overflow-auto -mx-1 lg:flex-1 lg:min-h-28">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0 bg-white">
-                  <tr className="text-[11px] uppercase tracking-wide text-gray-500 border-b border-gray-200">
-                    <th className="text-left font-semibold py-2 px-1">Cant.</th>
-                    <th className="text-left font-semibold py-2 px-1">Producto</th>
-                    <th className="text-right font-semibold py-2 px-1">P. unit.</th>
-                    <th className="text-right font-semibold py-2 px-1">Total</th>
-                    <th className="py-2 px-1">
-                      <span className="sr-only">Quitar</span>
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {lines.map((line) => {
-                    const isPromo = Boolean(line.promotion);
-                    const lineKey = getLineKey(line);
-                    const name = line.promotion ? line.promotion.name : line.product.name;
-                    const price = line.promotion ? line.promotion.price : line.product.price;
-                    return (
-                      <tr key={lineKey} className={isPromo ? 'bg-amber-50/40' : undefined}>
-                        <td className="py-2 px-1">
-                          <div className="flex items-center gap-1">
-                            <button
-                              type="button"
-                              onClick={() => changeLineQuantity(lineKey, line.quantity - 1)}
-                              aria-label={`Restar una unidad de ${name}`}
-                              className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
-                            >
-                              −
-                            </button>
-                            <span className="w-6 text-center font-semibold">{line.quantity}</span>
-                            <button
-                              type="button"
-                              onClick={() => changeLineQuantity(lineKey, line.quantity + 1)}
-                              disabled={line.quantity >= MAX_QUANTITY_PER_ITEM}
-                              aria-label={`Sumar una unidad de ${name}`}
-                              className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
-                            >
-                              +
-                            </button>
-                          </div>
-                        </td>
-                        <td className="py-2 px-1 text-gray-900">
-                          <div className="flex items-center gap-1.5 flex-wrap">
-                            {isPromo && (
-                              <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-200">
-                                Promo
-                              </span>
-                            )}
-                            <span>{name}</span>
-                          </div>
-                        </td>
-                        <td className="py-2 px-1 text-right text-gray-600 whitespace-nowrap">
-                          {formatCurrency(price)}
-                        </td>
-                        <td className="py-2 px-1 text-right font-semibold text-gray-900 whitespace-nowrap">
-                          {formatCurrency(price * line.quantity)}
-                        </td>
-                        <td className="py-2 px-1 text-right">
-                          <button
-                            type="button"
-                            onClick={() => removeLine(lineKey)}
-                            aria-label={`Eliminar ${name} del pedido`}
-                            className="w-6 h-6 rounded-lg text-gray-400 hover:text-red-600 transition"
-                          >
-                            ×
-                          </button>
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {errors.items && <p className="text-xs text-red-600 mt-2">{errors.items}</p>}
-
-          <div className="mt-3 pt-3 border-t border-gray-200 flex flex-wrap items-center gap-3">
-            <div className="flex flex-1 min-w-48 rounded-xl border border-gray-300 overflow-hidden text-xs" role="radiogroup" aria-label="Método de pago">
-              {COUNTER_PAYMENT_METHODS.map((method) => (
-                <button
-                  key={method}
-                  type="button"
-                  role="radio"
-                  aria-checked={paymentMethod === method}
-                  // Un segundo clic lo deja sin especificar.
-                  onClick={() => setPaymentMethod((current) => (current === method ? null : method))}
-                  style={paymentMethod === method ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                  className={`flex-1 py-1.5 font-medium transition ${
-                    paymentMethod === method ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
-                >
-                  {PAYMENT_METHOD_LABEL[method]}
-                </button>
-              ))}
-            </div>
-            <label className="shrink-0 flex items-center gap-1.5 text-xs font-medium text-gray-700 cursor-pointer select-none">
-              <input
-                type="checkbox"
-                checked={isPaid}
-                onChange={(e) => setIsPaid(e.target.checked)}
-                className="w-4 h-4 accent-black"
-              />
-              Ya abonado
-            </label>
-          </div>
-
-          <div className="mt-3 pt-3 border-t border-gray-200 space-y-1">
-            <div className="flex justify-between text-xs text-gray-500">
-              <span>
-                Unidades: {units} · Productos: {lines.length}
-              </span>
-            </div>
-            <div className="flex items-center justify-between">
-              <span className="text-lg font-bold text-gray-900">TOTAL</span>
-              <span className="text-2xl font-bold text-gray-900">{formatCurrency(total)}</span>
-            </div>
-          </div>
-
-          {submitError && (
-            <div role="alert" className="mt-3 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">
-              {submitError}
-            </div>
-          )}
-
-          <div className="mt-4 flex flex-wrap gap-2">
-            <button
-              type="button"
-              onClick={() => {
-                resetOrder();
-                setLastOrderId(null);
-              }}
-              disabled={submitting}
-              className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
-            >
-              Limpiar
-            </button>
-            <button
-              type="submit"
-              disabled={submitting || isShiftOpen === false}
-              title={isShiftOpen === false ? 'Debés abrir la caja para confirmar pedidos' : undefined}
-              className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
-            >
-              {submitting ? 'Registrando...' : 'Confirmar pedido'}
-            </button>
-          </div>
-        </section>
+        <ProductCatalog
+          products={products}
+          promotions={promotions}
+          loadingProducts={loadingProducts}
+          loadingPromotions={loadingPromotions}
+          lines={order.lines}
+          error={productsError}
+          onRetry={() => {
+            reloadProducts();
+            reloadPromotions();
+          }}
+          onAddProduct={(product) => {
+            itemAdded();
+            order.addProduct(product);
+          }}
+          onAddPromotion={(promotion) => {
+            itemAdded();
+            order.addPromotion(promotion);
+          }}
+        />
+        <OrderSummary
+          lines={order.lines}
+          total={order.total}
+          units={order.units}
+          itemsError={errors.items}
+          paymentMethod={paymentMethod}
+          onPaymentMethodChange={setPaymentMethod}
+          isPaid={isPaid}
+          onPaidChange={setIsPaid}
+          submitError={submitError}
+          submitting={submitting}
+          shiftClosed={isShiftOpen === false}
+          onQuantityChange={order.changeQuantity}
+          onRemove={order.removeLine}
+          onClear={() => {
+            resetOrder();
+            setLastOrderId(null);
+          }}
+        />
       </div>
     </form>
   );

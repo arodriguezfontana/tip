@@ -45,7 +45,7 @@ def _unavailable(message: str) -> HTTPException:
     return HTTPException(status_code=http_status.HTTP_503_SERVICE_UNAVAILABLE, detail=message)
 
 
-@router.get("", response_model=list[OrderResponse])
+@router.get("", dependencies=[Depends(get_current_admin)])
 def list_orders(
     background_tasks: BackgroundTasks,
     date_from: datetime | None = Query(None, description="Fecha/hora mínima (inclusive) de creación del pedido."),
@@ -53,23 +53,22 @@ def list_orders(
     status: list[str] | None = Query(None, description="Filtra por uno o más estados del pedido."),
     sector: str | None = Query(None, description="Filtra por sector de preparación (cocina, pizzeria, barra)."),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> list[OrderResponse]:
     """Lista los pedidos registrados, opcionalmente filtrados por rango de fechas y/o estado.
 
     Antes de listar acredita los pedidos de MercadoPago que ya se pagaron y de los que no llegó el aviso
     (el tablero consulta seguido, así que el 'Abonado' aparece solo).
     """
-    for paid in reconcile_pending_payments(db):
-        if paid.channel and paid.chat_id:
-            background_tasks.add_task(enviar_mensaje, paid.channel, paid.chat_id, payment_received_message(paid))
+    paid_in_a_chat = [paid for paid in reconcile_pending_payments(db) if paid.channel and paid.chat_id]
+    for paid in paid_in_a_chat:
+        background_tasks.add_task(enviar_mensaje, paid.channel, paid.chat_id, payment_received_message(paid))
     return [
         OrderResponse.from_model(order)
         for order in order_service.list_orders(db, date_from, date_to, status, sector)
     ]
 
 
-@router.post("/web", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
+@router.post("/web", status_code=http_status.HTTP_201_CREATED)
 def create_order_from_web(
     payload: WebOrderCreate,
     db: Session = Depends(get_db),
@@ -88,43 +87,48 @@ def create_order_from_web(
         payment_url = None
         if order.payment_method == PaymentMethod.MERCADOPAGO.value:
             payment_url = start_web_payment(db, order, store_name=get_or_create_store_config(db).store_name)
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Error al guardar un pedido web.")
-        raise _unavailable("No pudimos registrar tu pedido en este momento. Por favor, intentá nuevamente en unos minutos.")
+        raise _unavailable("No pudimos registrar tu pedido en este momento. Por favor, intentá nuevamente en unos minutos.") from exc
     return WebOrderCreatedResponse.from_model(order, payment_url=payment_url)
 
 
-@router.post("/counter", response_model=WebOrderCreatedResponse, status_code=http_status.HTTP_201_CREATED)
+@router.post(
+    "/counter",
+    status_code=http_status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_admin)],
+)
 def create_order_from_counter(
     payload: CounterOrderCreate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> WebOrderCreatedResponse:
     """Registra un pedido presencial cargado por el personal: entra directamente 'Confirmado'."""
     try:
         order = order_service.create_counter_order(db, payload.to_request(), payload.to_payment())
-    except SQLAlchemyError:
+    except SQLAlchemyError as exc:
         logger.exception("Error al guardar un pedido presencial.")
-        raise _unavailable("No se pudo registrar el pedido en este momento. Intentá nuevamente.")
+        raise _unavailable("No se pudo registrar el pedido en este momento. Intentá nuevamente.") from exc
     return WebOrderCreatedResponse.from_model(order)
 
 
-@router.get("/{order_id}", response_model=OrderDetailResponse)
+@router.get("/{order_id}", dependencies=[Depends(get_current_admin)])
 def get_order_detail(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderDetailResponse:
     """Detalle completo de un pedido: productos, datos del cliente y de la entrega, y facturación."""
     return OrderDetailResponse.from_model(order_service.get_order(db, order_id))
 
 
-@router.post("/trips/dispatch", response_model=TripResponse, status_code=http_status.HTTP_201_CREATED)
+@router.post(
+    "/trips/dispatch",
+    status_code=http_status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_admin)],
+)
 def dispatch_delivery_trip(
     payload: TripDispatchPayload,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> TripResponse:
     """Inicia el viaje de un repartidor: calcula una sola ruta con Google Maps para todos sus pedidos armados y avisa
     a cada cliente cuánto va a tardar en llegar (si no se puede calcular, sale igual y el aviso va sin tiempo). Los pedidos que se sumen después forman el viaje siguiente."""
@@ -133,11 +137,13 @@ def dispatch_delivery_trip(
     return TripResponse.from_model(trip, warning)
 
 
-@router.get("/{order_id}/estimate", response_model=OrderDelayEstimateResponse)
+@router.get(
+    "/{order_id}/estimate",
+    dependencies=[Depends(get_current_admin)],
+)
 def get_order_delay_estimate(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderDelayEstimateResponse:
     """Cómo se va a estimar la demora si se acepta el pedido ahora: automática (con el historial del local) o
     manual, si todavía no hay datos suficientes para esa situación."""
@@ -153,13 +159,12 @@ def get_order_delay_estimate(
     )
 
 
-@router.patch("/{order_id}/status", response_model=OrderResponse)
+@router.patch("/{order_id}/status", dependencies=[Depends(get_current_admin)])
 def update_order_status(
     order_id: int,
     status_update: OrderStatusUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Avanza el pedido de estado según su ciclo de vida y le avisa al cliente por su canal de chat."""
     order = order_service.change_order_status(
@@ -179,25 +184,23 @@ def update_order_status(
     return OrderResponse.from_model(order)
 
 
-@router.patch("/{order_id}/delivery-driver", response_model=OrderResponse)
+@router.patch("/{order_id}/delivery-driver", dependencies=[Depends(get_current_admin)])
 def assign_order_delivery_driver(
     order_id: int,
     payload: OrderAssignDriverPayload,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Asigna o desasigna un repartidor de la lista de personal activo a un pedido con envío a domicilio."""
     order = order_service.assign_delivery_driver(db, order_id, payload.delivery_driver_id)
     return OrderResponse.from_model(order)
 
 
-@router.patch("/{order_id}/payment", response_model=OrderResponse)
+@router.patch("/{order_id}/payment", dependencies=[Depends(get_current_admin)])
 def update_order_payment(
     order_id: int,
     payload: OrderPaymentUpdate,
     background_tasks: BackgroundTasks,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Actualiza manualmente el estado de pago del pedido (Abonado)."""
     order = order_service.update_order_payment(db, order_id, payload.is_paid)
@@ -208,36 +211,42 @@ def update_order_payment(
     return OrderResponse.from_model(order)
 
 
-@router.post("/{order_id}/kitchen-update/ack", response_model=OrderResponse)
+@router.post(
+    "/{order_id}/kitchen-update/ack",
+    dependencies=[Depends(get_current_admin)],
+)
 def acknowledge_kitchen_update(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Cocina vio los productos que el cliente agregó al pedido: se apaga la alerta del tablero."""
     return OrderResponse.from_model(order_service.acknowledge_kitchen_update(db, order_id))
 
 
-@router.patch("/{order_id}/items/{item_id}/prepared", response_model=OrderResponse)
+@router.patch(
+    "/{order_id}/items/{item_id}/prepared",
+    dependencies=[Depends(get_current_admin)],
+)
 def update_order_item_prepared(
     order_id: int,
     item_id: int,
     payload: OrderItemPreparedUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Marca o desmarca un ítem individual del pedido como preparado."""
     order = order_service.update_order_item_prepared(db, order_id, item_id, payload.is_prepared)
     return OrderResponse.from_model(order)
 
 
-@router.patch("/{order_id}/sectors/{sector}/prepared", response_model=OrderResponse)
+@router.patch(
+    "/{order_id}/sectors/{sector}/prepared",
+    dependencies=[Depends(get_current_admin)],
+)
 def update_order_sector_prepared(
     order_id: int,
     sector: str,
     payload: OrderSectorPreparedUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> OrderResponse:
     """Marca o desmarca todos los ítems de un sector específico en el pedido como preparados."""
     order = order_service.update_order_sector_prepared(db, order_id, sector, payload.is_prepared)

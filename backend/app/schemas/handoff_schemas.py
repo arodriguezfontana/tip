@@ -19,10 +19,8 @@ class HandoffMessageResponse(BaseModel):
 
 def _ultimo_mensaje(derivacion: Derivacion) -> "HandoffMessageResponse | None":
     """Último mensaje del cliente o del empleado (sin avisos del sistema ni respuestas del bot), para la lista."""
-    for mensaje in reversed(derivacion.mensajes):
-        if mensaje.autor in (AutorMensaje.CLIENTE, AutorMensaje.EMPLEADO):
-            return HandoffMessageResponse.of(mensaje)
-    return None
+    propios = [m for m in derivacion.mensajes if m.autor in (AutorMensaje.CLIENTE, AutorMensaje.EMPLEADO)]
+    return HandoffMessageResponse.of(propios[-1]) if propios else None
 
 
 class HandoffSummaryResponse(BaseModel):

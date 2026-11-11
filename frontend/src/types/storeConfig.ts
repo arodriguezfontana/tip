@@ -84,26 +84,6 @@ export function getThemeOption(color?: string | null): ThemeOption {
 /** 'custom' = imagen propia subida desde el dispositivo (ver login_bg_image). */
 export type LoginBgOption = 'bistro' | 'kitchen' | 'trattoria' | 'custom';
 
-export interface LoginBgInfo {
-  id: LoginBgOption;
-  name: string;
-}
-
-export const LOGIN_BG_OPTIONS: Record<Exclude<LoginBgOption, 'custom'>, LoginBgInfo> = {
-  bistro: {
-    id: 'bistro',
-    name: 'Salón',
-  },
-  kitchen: {
-    id: 'kitchen',
-    name: 'Cocina',
-  },
-  trattoria: {
-    id: 'trattoria',
-    name: 'Platos',
-  },
-};
-
 /** Fondo del panel de administración: 'none' = liso; 'color' = color liso a elección (ver panel_bg_color); 'custom' = imagen propia (ver panel_bg_image). */
 export type PanelBgOption = 'none' | 'color' | 'bistro' | 'kitchen' | 'trattoria' | 'custom';
 

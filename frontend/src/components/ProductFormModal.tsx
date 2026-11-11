@@ -1,12 +1,14 @@
-import { useEffect, useRef, useState } from 'react';
-import type { FormEvent } from 'react';
+import { useState } from 'react';
+import type { SubmitEvent } from 'react';
+import { AllowedExtrasField } from '@/components/AllowedExtrasField';
+import { ImageChoiceField } from '@/components/ui/ImageChoiceField';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
+import { useImageChoice } from '@/hooks/useImageChoice';
 import { INPUT_FULL_CLASS as INPUT_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { AdminCategory, AdminProduct, ImageChange, ProductPayload } from '@/types/catalog';
 import type { Ingredient } from '@/types/ingredient';
 import { getErrorMessage } from '@/utils/errors';
-import { formatCurrency } from '@/utils/currency';
-import { ACCEPTED_IMAGE_TYPES, MAX_IMAGE_MB, parseRestrictions, productImageSrc, validateImageFile } from '@/utils/catalog';
+import { parseRestrictions } from '@/utils/catalog';
 
 interface ProductFormModalProps {
   /** null para crear un producto nuevo. */
@@ -27,39 +29,11 @@ export function ProductFormModal({ product, categories, availableIngredients = [
   const [allowedExtraIds, setAllowedExtraIds] = useState<number[]>(
     product?.allowed_extras?.map((e) => e.id) ?? []
   );
-  const [image, setImage] = useState<ImageChange>({ type: 'keep' });
-  const [imageError, setImageError] = useState<string | null>(null);
+  const imageChoice = useImageChoice(product?.image_url);
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
-  const fileInput = useRef<HTMLInputElement>(null);
 
-  // Vista previa del archivo elegido: se libera al elegir otro o al cerrar el modal.
-  const [previewUrl, setPreviewUrl] = useState<string | null>(null);
-  useEffect(() => () => {
-    if (previewUrl) URL.revokeObjectURL(previewUrl);
-  }, [previewUrl]);
-
-  const currentImage =
-    image.type === 'upload' ? previewUrl : image.type === 'keep' && product?.image_url ? productImageSrc(product.image_url) : null;
-
-  const handleFile = (file: File | undefined) => {
-    if (fileInput.current) fileInput.current.value = '';
-    if (!file) return;
-    const error = validateImageFile(file);
-    setImageError(error);
-    if (error) return;
-    setImage({ type: 'upload', file });
-    setPreviewUrl(URL.createObjectURL(file));
-  };
-
-  const handleRemoveImage = () => {
-    setImageError(null);
-    setPreviewUrl(null);
-    // Sin imagen guardada no hay nada que borrar: solo se descarta el archivo elegido.
-    setImage(product?.image_url ? { type: 'remove' } : { type: 'keep' });
-  };
-
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (saving) return;
 
@@ -85,7 +59,7 @@ export function ProductFormModal({ product, categories, availableIngredients = [
       if (allowedExtraIds.length > 0) {
         payload.allowed_extra_ids = allowedExtraIds;
       }
-      await onSave(payload, image);
+      await onSave(payload, imageChoice.image);
     } catch (err) {
       setFormError(getErrorMessage(err, 'No se pudo guardar el producto.'));
       setSaving(false);
@@ -187,42 +161,7 @@ export function ProductFormModal({ product, categories, availableIngredients = [
             />
           </div>
 
-          <div>
-            <label className={LABEL_CLASS}>Adicionales permitidos (opcional)</label>
-            <p className="text-[11px] text-gray-500 mb-2">
-              Elegí qué ingredientes se pueden sumar como extra con costo al pedir este producto.
-            </p>
-            {availableIngredients.length > 0 ? (
-              <div className="grid grid-cols-1 sm:grid-cols-2 gap-2 max-h-36 overflow-y-auto border border-gray-200 rounded-xl p-2.5 bg-gray-50/50">
-                {availableIngredients.map((ing) => {
-                  const isChecked = allowedExtraIds.includes(ing.id);
-                  const priceLabel = ing.extra_price ? ` (+${formatCurrency(ing.extra_price)})` : '';
-                  return (
-                    <label key={ing.id} className="flex items-center gap-2 text-xs text-gray-700 cursor-pointer select-none">
-                      <input
-                        type="checkbox"
-                        checked={isChecked}
-                        onChange={(e) => {
-                          if (e.target.checked) {
-                            setAllowedExtraIds([...allowedExtraIds, ing.id]);
-                          } else {
-                            setAllowedExtraIds(allowedExtraIds.filter((id) => id !== ing.id));
-                          }
-                        }}
-                        className="w-4 h-4 accent-black rounded"
-                      />
-                      <span className="truncate">
-                        {ing.name}
-                        <span className="text-gray-500 font-medium">{priceLabel}</span>
-                      </span>
-                    </label>
-                  );
-                })}
-              </div>
-            ) : (
-              <p className="text-xs text-gray-400 italic">No hay ingredientes cargados en el sistema.</p>
-            )}
-          </div>
+          <AllowedExtrasField ingredients={availableIngredients} selectedIds={allowedExtraIds} onChange={setAllowedExtraIds} />
 
           <label className="flex items-center gap-2 text-sm text-gray-700 cursor-pointer select-none">
             <input
@@ -234,48 +173,7 @@ export function ProductFormModal({ product, categories, availableIngredients = [
             Disponible para pedir
           </label>
 
-          <div>
-            <span className={LABEL_CLASS}>Imagen (opcional)</span>
-            <div className="flex items-center gap-4">
-              <div className="w-20 h-20 rounded-xl bg-gray-100 border border-gray-200 overflow-hidden flex items-center justify-center shrink-0">
-                {currentImage ? (
-                  <img src={currentImage} alt="Vista previa de la imagen" className="w-full h-full object-cover" />
-                ) : (
-                  <span className="text-[11px] text-gray-400 text-center px-1">Sin imagen</span>
-                )}
-              </div>
-              <div className="space-y-2">
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    type="button"
-                    onClick={() => fileInput.current?.click()}
-                    className="text-xs font-semibold rounded-lg border border-gray-300 px-3 py-1.5 text-gray-700 hover:bg-gray-100 transition"
-                  >
-                    {currentImage ? 'Cambiar imagen' : 'Elegir imagen'}
-                  </button>
-                  {currentImage && (
-                    <button
-                      type="button"
-                      onClick={handleRemoveImage}
-                      className="text-xs font-semibold rounded-lg px-3 py-1.5 text-red-600 hover:bg-red-50 transition"
-                    >
-                      Quitar imagen
-                    </button>
-                  )}
-                </div>
-                <p className="text-[11px] text-gray-500">JPG o PNG, hasta {MAX_IMAGE_MB} MB.</p>
-                <input
-                  ref={fileInput}
-                  type="file"
-                  accept={ACCEPTED_IMAGE_TYPES.join(',')}
-                  aria-label="Archivo de imagen"
-                  onChange={(e) => handleFile(e.target.files?.[0])}
-                  className="hidden"
-                />
-              </div>
-            </div>
-            {imageError && <p className="text-xs text-red-600 mt-2">{imageError}</p>}
-          </div>
+          <ImageChoiceField choice={imageChoice} previewAlt="Vista previa de la imagen" inputLabel="Archivo de imagen" />
         </ModalBody>
         <ModalFooter
           error={formError}

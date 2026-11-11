@@ -5,12 +5,13 @@ import time
 from typing import Any
 
 import httpx
-from sqlalchemy import or_
 from sqlalchemy.orm import Session
 
 from app.core.config import settings
+from app.db.session import transaction
 from app.models.order import Order, OrderStatus, PaymentMethod
 from app.models.store_config import StoreConfig
+from app.repositories import order_repository
 
 logger = logging.getLogger(__name__)
 
@@ -21,6 +22,11 @@ RECONCILE_MIN_INTERVAL_SECONDS = 8
 # Tope de pedidos que se verifican por consulta, para que una demora de MercadoPago no trabe el tablero.
 RECONCILE_MAX_ORDERS = 10
 _last_checked: dict[int, float] = {}
+# Estados en los que el pedido todavía puede recibir un pago.
+_ACTIVE_STATUSES = [
+    status.value
+    for status in (OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP)
+]
 
 # Referencia externa del cobro de la diferencia de un pedido ya abonado al que se le agregaron productos.
 # Va aparte de la del pedido ("<id>") para que el pago original no cuente como el pago de la diferencia.
@@ -50,6 +56,60 @@ def public_base_url() -> str | None:
     return base_url
 
 
+def _return_fields(return_url: str) -> dict[str, Any]:
+    """Adónde devuelve MercadoPago al cliente al terminar el checkout."""
+    fields: dict[str, Any] = {"back_urls": {"success": return_url, "pending": return_url, "failure": return_url}}
+    # MercadoPago solo acepta URLs https públicas: con otra descarta las back_urls y en el checkout
+    # no aparece "Volver al sitio". La vuelta automática también exige https.
+    if return_url.startswith("https://"):
+        fields["auto_return"] = "approved"
+    return fields
+
+
+def _preference_payload(order: Order, external_ref: str, title: str, total: float, return_url: str | None) -> dict:
+    payload: dict[str, Any] = {
+        "items": [{"id": external_ref, "title": title, "quantity": 1, "unit_price": total, "currency_id": "ARS"}],
+        "external_reference": external_ref,
+        "payer": {"name": order.customer_name},
+    }
+    base_url = public_base_url()
+    if base_url:
+        payload["notification_url"] = f"{base_url}{settings.API_V1_STR}/mercadopago/webhook"
+    if return_url:
+        payload.update(_return_fields(return_url))
+    return payload
+
+
+def _request_preference(order: Order, external_ref: str, payload: dict) -> dict[str, str] | None:
+    """Crea la preferencia en la API de MercadoPago; None si no se pudo o no devolvió un link de pago."""
+    headers = {
+        "Authorization": f"Bearer {settings.MERCADOPAGO_ACCESS_TOKEN.strip()}",
+        "Content-Type": "application/json",
+    }
+    try:
+        with httpx.Client(timeout=10.0) as client:
+            res = client.post(f"{MERCADOPAGO_API_URL}/checkout/preferences", json=payload, headers=headers)
+            if res.status_code >= 400:
+                logger.error("Error de MercadoPago (%s): %s", res.status_code, res.text)
+            res.raise_for_status()
+            data = res.json()
+    except Exception as e:
+        logger.error("Error al comunicarse con MercadoPago para pedido #%s: %s", order.id, e)
+        return None
+    init_point = data.get("init_point") or data.get("sandbox_init_point")
+    if not init_point:
+        return None
+    return {"preference_id": data.get("id") or f"mp-{external_ref}", "init_point": init_point}
+
+
+def _simulated_preference(external_ref: str) -> dict[str, str]:
+    simulated_id = f"mp-pref-{external_ref}"
+    return {
+        "preference_id": simulated_id,
+        "init_point": f"https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id={simulated_id}",
+    }
+
+
 def create_payment_preference(
     order: Order, store_name: str = "RestoIT", return_url: str | None = None, balance: bool = False
 ) -> dict[str, str]:
@@ -66,61 +126,14 @@ def create_payment_preference(
     """
     total = float(order.amount_pending if balance else order.total_amount)
     external_ref = _reference(order.id, balance)
-    pref_title = f"{'Diferencia del pedido' if balance else 'Pedido'} #{order.id} - {store_name}"
+    title = f"{'Diferencia del pedido' if balance else 'Pedido'} #{order.id} - {store_name}"
 
+    preference = None
     if settings.MERCADOPAGO_ACCESS_TOKEN:
-        url = f"{MERCADOPAGO_API_URL}/checkout/preferences"
-        headers = {
-            "Authorization": f"Bearer {settings.MERCADOPAGO_ACCESS_TOKEN.strip()}",
-            "Content-Type": "application/json",
-        }
-        base_url = public_base_url()
-        notification_url = f"{base_url}{settings.API_V1_STR}/mercadopago/webhook" if base_url else None
-
-        payload: dict[str, Any] = {
-            "items": [
-                {
-                    "id": external_ref,
-                    "title": pref_title,
-                    "quantity": 1,
-                    "unit_price": total,
-                    "currency_id": "ARS",
-                }
-            ],
-            "external_reference": external_ref,
-            "payer": {
-                "name": order.customer_name,
-            },
-        }
-        if notification_url:
-            payload["notification_url"] = notification_url
-        if return_url:
-            payload["back_urls"] = {"success": return_url, "pending": return_url, "failure": return_url}
-            # MercadoPago solo acepta URLs https públicas: con otra descarta las back_urls y en el checkout
-            # no aparece "Volver al sitio". La vuelta automática también exige https.
-            if return_url.startswith("https://"):
-                payload["auto_return"] = "approved"
-
-        try:
-            with httpx.Client(timeout=10.0) as client:
-                res = client.post(url, json=payload, headers=headers)
-                if res.status_code >= 400:
-                    logger.error("Error de MercadoPago (%s): %s", res.status_code, res.text)
-                res.raise_for_status()
-                data = res.json()
-                pref_id = data.get("id") or f"mp-{external_ref}"
-                init_point = data.get("init_point") or data.get("sandbox_init_point")
-                if init_point:
-                    return {"preference_id": pref_id, "init_point": init_point}
-        except Exception as e:
-            logger.error("Error al comunicarse con MercadoPago para pedido #%s: %s", order.id, e)
-
+        payload = _preference_payload(order, external_ref, title, total, return_url)
+        preference = _request_preference(order, external_ref, payload)
     # Modo simulado / fallback para testing o entornos sin credenciales reales
-    simulated_id = f"mp-pref-{external_ref}"
-    return {
-        "preference_id": simulated_id,
-        "init_point": f"https://sandbox.mercadopago.com.ar/checkout/v1/redirect?pref_id={simulated_id}",
-    }
+    return preference or _simulated_preference(external_ref)
 
 
 def frontend_menu_url() -> str:
@@ -189,6 +202,57 @@ def fetch_payment_details(payment_id: str) -> dict[str, Any] | None:
         return None
 
 
+def _first_present(*values: Any) -> Any:
+    return next((value for value in values if value), None)
+
+
+def _order_from_reference(db: Session, reference: Any) -> Order | None:
+    if not reference:
+        return None
+    try:
+        order_id = int(str(reference).removesuffix(BALANCE_REFERENCE_SUFFIX))
+    except (ValueError, TypeError):
+        logger.warning("external_reference / order_id no es un entero: %s", reference)
+        return None
+    return order_repository.get(db, order_id)
+
+
+def _find_notified_order(db: Session, reference: Any, payment_id: Any) -> Order | None:
+    order = _order_from_reference(db, reference)
+    if order is None and payment_id:
+        order = order_repository.find_by_mercadopago_id(db, str(payment_id))
+    return order
+
+
+def _is_approved(status: str | None, payload: dict[str, Any]) -> bool:
+    """Exitoso si el estado es approved (o la acción es created/updated en payloads mock sin estado explícito)."""
+    return status in ("approved", "accredited") or (
+        status is None and payload.get("action") in ("payment.created", "payment.updated")
+    )
+
+
+def _register_payment(db: Session, order: Order, payment_id: Any, is_balance: bool) -> Order | None:
+    """Marca el pedido como abonado. Devuelve el pedido solo si esta notificación fue la que lo concretó.
+
+    MercadoPago suele avisar varias veces el mismo pago (payment.created, payment.updated, IPN + webhook). El
+    UPDATE condicional hace que solo una notificación concrete el cambio, aunque lleguen en simultáneo, y así el
+    cliente recibe un único aviso. Un pedido con pago parcial ya cobró su primer pago: solo lo salda el pago de
+    la diferencia, y a la inversa, el aviso (repetido) del primer pago no debe darlo por saldado.
+    """
+    # La diferencia se cobra con el medio ya elegido para ella; el primer pago define el del pedido si faltaba.
+    payment_method = None if is_balance or order.payment_method else PaymentMethod.MERCADOPAGO.value
+    with transaction(db):
+        updated = order_repository.mark_paid_if_unpaid(
+            db, order.id, is_balance, str(payment_id) if payment_id else None, payment_method
+        )
+    if not updated:
+        logger.info("Pedido #%s ya figuraba abonado; se ignora la notificación repetida.", order.id)
+        return None
+    db.refresh(order)
+    logger.info("Pedido #%s marcado como abonado por webhook de MercadoPago.", order.id)
+    return order
+
+
 def process_payment_notification(
     db: Session,
     payload: dict[str, Any] | None = None,
@@ -204,91 +268,35 @@ def process_payment_notification(
     payload = payload or {}
     query_params = query_params or {}
 
-    # Extraer ID del pago
-    payment_id = (
-        payload.get("data", {}).get("id")
-        or payload.get("id")
-        or query_params.get("data.id")
-        or query_params.get("id")
+    payment_id = _first_present(
+        payload.get("data", {}).get("id"), payload.get("id"), query_params.get("data.id"), query_params.get("id")
+    )
+    status = _first_present(payload.get("status"), query_params.get("status"))
+    reference = _first_present(
+        payload.get("external_reference"),
+        payload.get("order_id"),
+        query_params.get("external_reference"),
+        query_params.get("order_id"),
     )
 
-    # Estado informado directamente en el payload o parámetros
-    status = payload.get("status") or query_params.get("status")
-    order_id_raw = (
-        payload.get("external_reference")
-        or payload.get("order_id")
-        or query_params.get("external_reference")
-        or query_params.get("order_id")
-    )
+    # Si falta el estado o el pedido, se consultan los detalles oficiales del pago (con credenciales).
+    if payment_id and settings.MERCADOPAGO_ACCESS_TOKEN and (not status or not reference):
+        details = fetch_payment_details(str(payment_id)) or {}
+        status = status or details.get("status")
+        reference = reference or details.get("external_reference")
 
-    # Si hay un payment_id y credenciales, consultar los detalles oficiales
-    if payment_id and settings.MERCADOPAGO_ACCESS_TOKEN and (not status or not order_id_raw):
-        details = fetch_payment_details(str(payment_id))
-        if details:
-            status = status or details.get("status")
-            order_id_raw = order_id_raw or details.get("external_reference")
-
-    # Si aún no tenemos order_id pero tenemos payment_id, buscar por coincidencia en la BD
-    # La diferencia de un pedido ya abonado se cobra con su propia referencia ("<id>-extra").
-    is_balance = str(order_id_raw or "").endswith(BALANCE_REFERENCE_SUFFIX)
-    order = None
-    if order_id_raw:
-        try:
-            order_id = int(str(order_id_raw).removesuffix(BALANCE_REFERENCE_SUFFIX))
-            order = db.query(Order).filter(Order.id == order_id).first()
-        except (ValueError, TypeError):
-            logger.warning("external_reference / order_id no es un entero: %s", order_id_raw)
-
-    if not order and payment_id:
-        order = (
-            db.query(Order)
-            .filter((Order.mp_preference_id == str(payment_id)) | (Order.mp_payment_id == str(payment_id)))
-            .first()
-        )
-
+    order = _find_notified_order(db, reference, payment_id)
     if not order:
         logger.warning(
-            "Webhook de MercadoPago recibido sin orden asociada: payment_id=%s, order_id=%s",
-            payment_id,
-            order_id_raw,
+            "Webhook de MercadoPago recibido sin orden asociada: payment_id=%s, order_id=%s", payment_id, reference
         )
         return None
-
-    # Considerar exitoso si el estado es approved (o acction created/updated en payloads mock sin status explícito negativo)
-    is_approved = (
-        status in ("approved", "accredited")
-        or (status is None and payload.get("action") in ("payment.created", "payment.updated"))
-    )
-
-    if is_approved:
-        # MercadoPago suele avisar varias veces el mismo pago (payment.created, payment.updated,
-        # IPN + webhook). El UPDATE condicional hace que solo una notificación concrete el cambio,
-        # aunque lleguen en simultáneo, y así el cliente recibe un único aviso.
-        values: dict[str, Any] = {Order.is_paid: True}
-        if not order.payment_method:
-            values[Order.payment_method] = PaymentMethod.MERCADOPAGO.value
-        if payment_id:
-            values[Order.mp_payment_id] = str(payment_id)
-        # Un pedido con pago parcial ya cobró su primer pago: solo lo salda el pago de la diferencia, y a la
-        # inversa, el aviso (repetido) del primer pago no debe darlo por saldado.
-        partial = Order.paid_amount > 0 if is_balance else Order.paid_amount == 0
-        if is_balance:
-            values.pop(Order.payment_method, None)
-        updated = (
-            db.query(Order)
-            .filter(Order.id == order.id, Order.is_paid.is_(False), partial)
-            .update(values, synchronize_session=False)
-        )
-        db.commit()
-        if not updated:
-            logger.info("Pedido #%s ya figuraba abonado; se ignora la notificación repetida.", order.id)
-            return None
-        db.refresh(order)
-        logger.info("Pedido #%s marcado como abonado por webhook de MercadoPago.", order.id)
-        return order
-
-    logger.info("Webhook de MercadoPago recibido para pedido #%s pero con estado '%s'.", order.id, status)
-    return None
+    if not _is_approved(status, payload):
+        logger.info("Webhook de MercadoPago recibido para pedido #%s pero con estado '%s'.", order.id, status)
+        return None
+    # La diferencia de un pedido ya abonado se cobra con su propia referencia ("<id>-extra").
+    is_balance = str(reference or "").endswith(BALANCE_REFERENCE_SUFFIX)
+    return _register_payment(db, order, payment_id, is_balance)
 
 
 def confirm_payment(db: Session, payment_id: str) -> str | None:
@@ -331,10 +339,35 @@ def find_approved_payment_id(order_id: int, balance: bool = False) -> str | None
     except Exception as e:
         logger.warning("No se pudo consultar los pagos del pedido #%s en MercadoPago: %s", order_id, e)
         return None
-    for payment in results:
-        if payment.get("status") == "approved" and str(payment.get("external_reference")) == reference:
-            return str(payment["id"])
-    return None
+    return next(
+        (
+            str(payment["id"])
+            for payment in results
+            if payment.get("status") == "approved" and str(payment.get("external_reference")) == reference
+        ),
+        None,
+    )
+
+
+def _reconcile_order(db: Session, order: Order, now: float) -> Order | None:
+    """Consulta a MercadoPago si el pedido ya se pagó; devuelve el pedido solo si esta consulta lo marcó abonado."""
+    balance = order.has_partial_payment
+    if balance and order.balance_payment_method != PaymentMethod.MERCADOPAGO.value:
+        return None  # la diferencia se cobra en efectivo: no hay nada que consultarle a MercadoPago
+    if now - _last_checked.get(order.id, float("-inf")) < RECONCILE_MIN_INTERVAL_SECONDS:
+        return None
+    _last_checked[order.id] = now
+    payment_id = find_approved_payment_id(order.id, balance=True) if balance else find_approved_payment_id(order.id)
+    if payment_id is None:
+        return None
+    return process_payment_notification(
+        db,
+        payload={
+            "status": "approved",
+            "external_reference": _reference(order.id, balance),
+            "data": {"id": payment_id},
+        },
+    )
 
 
 def reconcile_pending_payments(db: Session) -> list[Order]:
@@ -346,42 +379,7 @@ def reconcile_pending_payments(db: Session) -> list[Order]:
     """
     if not settings.MERCADOPAGO_ACCESS_TOKEN:
         return []
-    active = [s.value for s in (OrderStatus.PENDING, OrderStatus.CONFIRMED, OrderStatus.ON_THE_WAY, OrderStatus.READY_FOR_PICKUP)]
-    pending = (
-        db.query(Order)
-        .filter(
-            or_(
-                Order.payment_method == PaymentMethod.MERCADOPAGO.value,
-                Order.balance_payment_method == PaymentMethod.MERCADOPAGO.value,
-            ),
-            Order.is_paid.is_(False),
-            Order.mp_preference_id.isnot(None),
-            Order.status.in_(active),
-        )
-        .order_by(Order.id.desc())
-        .limit(RECONCILE_MAX_ORDERS)
-        .all()
-    )
+    pending = order_repository.awaiting_mercadopago_payment(db, _ACTIVE_STATUSES, RECONCILE_MAX_ORDERS)
     now = time.monotonic()
-    paid: list[Order] = []
-    for order in pending:
-        balance = order.has_partial_payment
-        if balance and order.balance_payment_method != PaymentMethod.MERCADOPAGO.value:
-            continue  # la diferencia se cobra en efectivo: no hay nada que consultarle a MercadoPago
-        if now - _last_checked.get(order.id, float("-inf")) < RECONCILE_MIN_INTERVAL_SECONDS:
-            continue
-        _last_checked[order.id] = now
-        payment_id = find_approved_payment_id(order.id, balance=balance) if balance else find_approved_payment_id(order.id)
-        if payment_id is None:
-            continue
-        updated = process_payment_notification(
-            db,
-            payload={
-                "status": "approved",
-                "external_reference": _reference(order.id, balance),
-                "data": {"id": payment_id},
-            },
-        )
-        if updated is not None:
-            paid.append(updated)
-    return paid
+    reconciled = [_reconcile_order(db, order, now) for order in pending]
+    return [order for order in reconciled if order is not None]

@@ -59,14 +59,10 @@ export function RepartidoresView({ themeColor }: RepartidoresViewProps) {
     reload();
   };
 
-  const filteredDrivers = drivers.filter((driver) => {
-    if (!search.trim()) return true;
-    const term = search.toLowerCase();
-    return (
-      driver.name.toLowerCase().includes(term) ||
-      driver.phone.toLowerCase().includes(term)
-    );
-  });
+  const term = search.trim().toLowerCase();
+  const filteredDrivers = drivers.filter(
+    (driver) => !term || driver.name.toLowerCase().includes(term) || driver.phone.toLowerCase().includes(term)
+  );
 
   return (
     <div className="space-y-6 max-w-7xl mx-auto p-4 relative">

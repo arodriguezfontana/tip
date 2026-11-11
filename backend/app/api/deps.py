@@ -62,6 +62,24 @@ def get_current_customer(current_user: User = Depends(get_current_user)) -> User
     return current_user
 
 
+def _token_has_scope(token: str | None, scopes: tuple[str, ...]) -> bool:
+    """El token privilegiado es válido y fue emitido para alguno de esos alcances."""
+    if not token:
+        return False
+    try:
+        return decode_privileged_token(token).get("scope") in scopes
+    except JWTError:
+        return False
+
+
+def _pin_matches(db: Session, pin_type: str, given_pin: str | None, expected_pin: str | None) -> bool:
+    """El PIN es correcto y no está bloqueado por intentos fallidos."""
+    if not given_pin:
+        return False
+    blocked, _ = is_pin_blocked(db, pin_type)
+    return not blocked and given_pin == expected_pin
+
+
 def require_admin_pin(
     _admin: User = Depends(get_current_admin),
     x_privileged_token: str | None = Header(None, alias="X-Privileged-Token"),
@@ -69,52 +87,40 @@ def require_admin_pin(
     db: Session = Depends(get_db),
 ) -> None:
     """Exige token de autorización o PIN de administración para acceder a métricas y reportes sensibles."""
-    if x_privileged_token:
-        try:
-            payload = decode_privileged_token(x_privileged_token)
-            if payload.get("scope") == "privileged:admin":
-                return
-        except JWTError:
-            pass
-
-    if x_admin_pin:
-        blocked, _ = is_pin_blocked(db, "admin")
-        if not blocked and x_admin_pin == settings.ADMIN_PIN:
-            return
-
+    if _token_has_scope(x_privileged_token, ("privileged:admin",)) or _pin_matches(
+        db, "admin", x_admin_pin, settings.ADMIN_PIN
+    ):
+        return
     raise HTTPException(
         status_code=status.HTTP_403_FORBIDDEN,
         detail="Se requiere PIN de administración para acceder a estadísticas y reportes.",
     )
 
 
-def require_cash_pin(
+def has_cash_access(
     _admin: User = Depends(get_current_admin),
     x_cash_privileged_token: str | None = Header(None, alias="X-Cash-Privileged-Token"),
     x_privileged_token: str | None = Header(None, alias="X-Privileged-Token"),
     x_cash_pin: str | None = Header(None, alias="X-Cash-PIN"),
     db: Session = Depends(get_db),
-) -> None:
-    """Exige token de autorización o PIN de caja cuando la protección de caja está habilitada."""
+) -> bool:
+    """Si quien consulta puede ver el dinero de la caja: siempre, salvo que la protección por PIN esté habilitada y
+    no mande un token autorizado ni el PIN correcto."""
     config = get_or_create_store_config(db)
     if not config.cash_pin_enabled:
-        return
-
-    for token in (x_cash_privileged_token, x_privileged_token):
-        if token:
-            try:
-                payload = decode_privileged_token(token)
-                if payload.get("scope") in ("privileged:cash", "privileged:admin"):
-                    return
-            except JWTError:
-                pass
-
-    if x_cash_pin:
-        blocked, _ = is_pin_blocked(db, "cash")
-        if not blocked and x_cash_pin == config.cash_pin:
-            return
-
-    raise HTTPException(
-        status_code=status.HTTP_403_FORBIDDEN,
-        detail="Se requiere PIN de caja para acceder o realizar operaciones de caja.",
+        return True
+    scopes = ("privileged:cash", "privileged:admin")
+    return (
+        _token_has_scope(x_cash_privileged_token, scopes)
+        or _token_has_scope(x_privileged_token, scopes)
+        or _pin_matches(db, "cash", x_cash_pin, config.cash_pin)
     )
+
+
+def require_cash_pin(cash_access: bool = Depends(has_cash_access)) -> None:
+    """Exige token de autorización o PIN de caja cuando la protección de caja está habilitada."""
+    if not cash_access:
+        raise HTTPException(
+            status_code=status.HTTP_403_FORBIDDEN,
+            detail="Se requiere PIN de caja para acceder o realizar operaciones de caja.",
+        )

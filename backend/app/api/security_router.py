@@ -14,7 +14,7 @@ from app.services import security_service
 router = APIRouter()
 
 
-@router.post("/verify-admin-pin", response_model=PinVerificationResponse)
+@router.post("/verify-admin-pin")
 def verify_admin_pin_endpoint(
     payload: PinVerificationRequest,
     request: Request,
@@ -33,7 +33,7 @@ def verify_admin_pin_endpoint(
     return PinVerificationResponse(**result)
 
 
-@router.post("/verify-cash-pin", response_model=PinVerificationResponse)
+@router.post("/verify-cash-pin")
 def verify_cash_pin_endpoint(
     payload: PinVerificationRequest,
     request: Request,
@@ -52,11 +52,9 @@ def verify_cash_pin_endpoint(
     return PinVerificationResponse(**result)
 
 
-@router.get("/pin-status", response_model=PinStatusResponse)
+@router.get("/pin-status", dependencies=[Depends(get_current_admin)])
 def get_pin_status_endpoint(
     db: Session = Depends(get_db),
-    _current_user: User = Depends(get_current_admin),
 ) -> PinStatusResponse:
     """Consulta si los PINs están configurados y si hay bloqueos temporales activos."""
     return PinStatusResponse(**security_service.get_pin_status(db))
-

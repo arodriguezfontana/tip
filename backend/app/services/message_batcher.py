@@ -54,6 +54,13 @@ class AgrupadorDeMensajes:
         # Referencias a las tareas en vuelo: sin ellas el intérprete podría descartarlas a mitad de camino.
         self._tareas: set[asyncio.Task] = set()
 
+    def _abrir_chat(self, chat_id: str) -> _Chat:
+        """Empieza a seguir un chat que estaba quieto."""
+        chat = self._chats[chat_id] = _Chat()
+        if self._al_empezar is not None:
+            self._lanzar(self._avisar_inicio(chat_id))
+        return chat
+
     def recibir(self, chat_id: str, mensaje: str, espera_segundos: float | None = None) -> None:
         """Registra un mensaje. Debe llamarse desde el event loop; no espera ni bloquea.
 
@@ -61,9 +68,7 @@ class AgrupadorDeMensajes:
         """
         chat = self._chats.get(chat_id)
         if chat is None:
-            chat = self._chats[chat_id] = _Chat()
-            if self._al_empezar is not None:
-                self._lanzar(self._avisar_inicio(chat_id))
+            chat = self._abrir_chat(chat_id)
 
         ahora = time.monotonic()
         if not chat.mensajes:

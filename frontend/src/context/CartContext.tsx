@@ -1,9 +1,11 @@
-import { useState } from 'react';
+import { useCallback, useMemo, useState } from 'react';
 import type { ReactNode } from 'react';
 import { MAX_QUANTITY_PER_ITEM } from '@/types/order';
 import type { CartItem, OrderItemModification, Product } from '@/types/order';
 import type { Promotion } from '@/types/promotion';
 import { CartContext } from '@/context/cart-context';
+import { basePriceOf, isPlainLineOf, lineMatches, withMoreUnits } from '@/utils/cart';
+import { additionsCost } from '@/utils/modifications';
 import { formatPizzaHalfName } from '@/utils/pizzaHalf';
 
 let nextCartLineId = 1;
@@ -11,61 +13,56 @@ function createLineId(prefix: string | number): string {
   return `${prefix}-${Date.now()}-${nextCartLineId++}`;
 }
 
-function isSameItem(
-  item: CartItem,
-  productId?: number,
-  secondaryProductId?: number,
-  promotionId?: number,
-  lineId?: string
-): boolean {
-  if (lineId && item.id) {
-    return item.id === lineId;
-  }
-  if (promotionId !== undefined) {
-    return item.promotion?.id === promotionId;
-  }
-  return (
-    item.product.id === productId &&
-    item.secondary_product?.id === (secondaryProductId ?? undefined) &&
-    (!item.modifications || item.modifications.length === 0)
-  );
+/** Suma las unidades a la línea que cumple la condición o, si no hay, agrega la línea nueva. */
+function addOrIncrease(
+  lines: CartItem[],
+  isSameLine: (item: CartItem) => boolean,
+  quantity: number,
+  newLine: () => CartItem
+): CartItem[] {
+  if (!lines.some(isSameLine)) return [...lines, newLine()];
+  return lines.map((item) => (isSameLine(item) ? withMoreUnits(item, quantity) : item));
 }
 
-export function CartProvider({ children }: { children: ReactNode }) {
+/** La línea con una sola unidad menos y, a continuación, esa unidad suelta (sin modificaciones) para personalizarla. */
+function splitOneUnit(lines: CartItem[], lineId: string): CartItem[] {
+  const index = lines.findIndex((line) => line.id === lineId);
+  const line = lines[index];
+  if (!line || line.quantity <= 1) return lines;
+
+  const separated: CartItem = {
+    ...line,
+    id: createLineId(line.product.id),
+    quantity: 1,
+    modifications: [],
+    unit_price: basePriceOf(line),
+  };
+  return [...lines.slice(0, index), { ...line, quantity: line.quantity - 1 }, separated, ...lines.slice(index + 1)];
+}
+
+export function CartProvider({ children }: Readonly<{ children: ReactNode }>) {
   const [items, setItems] = useState<CartItem[]>([]);
 
-  const addItem = (product: Product, quantity = 1, secondaryProduct?: Product, customName?: string) => {
-    const secId = secondaryProduct?.id;
-    const unitPrice = secondaryProduct ? Math.max(product.price, secondaryProduct.price) : product.price;
-    const finalCustomName = secondaryProduct
-      ? (customName || formatPizzaHalfName(product.name, secondaryProduct.name))
+  const addItem = useCallback((product: Product, quantity = 1, secondaryProduct?: Product, customName?: string) => {
+    const secondaryId = secondaryProduct?.id;
+    const customLineName = secondaryProduct
+      ? customName || formatPizzaHalfName(product.name, secondaryProduct.name)
       : undefined;
-
-    setItems((prev) => {
-      const existing = prev.find((item) => isSameItem(item, product.id, secId));
-      if (existing) {
-        return prev.map((item) =>
-          isSameItem(item, product.id, secId)
-            ? { ...item, quantity: Math.min(item.quantity + quantity, MAX_QUANTITY_PER_ITEM) }
-            : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          id: createLineId(product.id),
-          product,
-          quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM),
-          secondary_product: secondaryProduct,
-          custom_name: finalCustomName,
-          unit_price: unitPrice,
-          modifications: [],
-        },
-      ];
+    const newLine = (): CartItem => ({
+      id: createLineId(product.id),
+      product,
+      quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM),
+      secondary_product: secondaryProduct,
+      custom_name: customLineName,
+      unit_price: secondaryProduct ? Math.max(product.price, secondaryProduct.price) : product.price,
+      modifications: [],
     });
-  };
+    setItems((prev) =>
+      addOrIncrease(prev, (item) => isPlainLineOf(item, product.id, secondaryId), quantity, newLine)
+    );
+  }, []);
 
-  const addPromotion = (promotion: Promotion, quantity = 1) => {
+  const addPromotion = useCallback((promotion: Promotion, quantity = 1) => {
     const promoProduct: Product = {
       id: -promotion.id,
       name: promotion.name,
@@ -75,43 +72,23 @@ export function CartProvider({ children }: { children: ReactNode }) {
       dietary_restrictions: [],
       image_url: promotion.image_url,
     };
-
-    setItems((prev) => {
-      const existing = prev.find((item) => item.promotion?.id === promotion.id);
-      if (existing) {
-        return prev.map((item) =>
-          item.promotion?.id === promotion.id
-            ? { ...item, quantity: Math.min(item.quantity + quantity, MAX_QUANTITY_PER_ITEM) }
-            : item
-        );
-      }
-      return [
-        ...prev,
-        {
-          id: createLineId(`promo-${promotion.id}`),
-          product: promoProduct,
-          promotion,
-          quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM),
-          custom_name: promotion.name,
-          unit_price: promotion.price,
-          modifications: [],
-        },
-      ];
+    const newLine = (): CartItem => ({
+      id: createLineId(`promo-${promotion.id}`),
+      product: promoProduct,
+      promotion,
+      quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM),
+      custom_name: promotion.name,
+      unit_price: promotion.price,
+      modifications: [],
     });
-  };
+    setItems((prev) => addOrIncrease(prev, (item) => item.promotion?.id === promotion.id, quantity, newLine));
+  }, []);
 
-  const removeItem = (idOrLineId: number | string, secondaryProductId?: number, isPromotion = false) => {
-    setItems((prev) =>
-      prev.filter((item) => {
-        if (typeof idOrLineId === 'string') {
-          return item.id !== idOrLineId;
-        }
-        return isPromotion ? item.promotion?.id !== idOrLineId : !isSameItem(item, idOrLineId, secondaryProductId);
-      })
-    );
-  };
+  const removeItem = useCallback((idOrLineId: number | string, secondaryProductId?: number, isPromotion = false) => {
+    setItems((prev) => prev.filter((item) => !lineMatches(item, idOrLineId, secondaryProductId, isPromotion)));
+  }, []);
 
-  const updateQuantity = (
+  const updateQuantity = useCallback((
     idOrLineId: number | string,
     quantity: number,
     secondaryProductId?: number,
@@ -122,102 +99,51 @@ export function CartProvider({ children }: { children: ReactNode }) {
       return;
     }
     setItems((prev) =>
-      prev.map((item) => {
-        const match =
-          typeof idOrLineId === 'string'
-            ? item.id === idOrLineId
-            : isPromotion
-            ? item.promotion?.id === idOrLineId
-            : isSameItem(item, idOrLineId, secondaryProductId);
-        return match
+      prev.map((item) =>
+        lineMatches(item, idOrLineId, secondaryProductId, isPromotion)
           ? { ...item, quantity: Math.min(quantity, MAX_QUANTITY_PER_ITEM) }
-          : item;
-      })
+          : item
+      )
     );
-  };
+  }, [removeItem]);
 
-  const updateItemModifications = (lineId: string, modifications: OrderItemModification[]) => {
+  const updateItemModifications = useCallback((lineId: string, modifications: OrderItemModification[]) => {
     setItems((prev) =>
-      prev.map((item) => {
-        if (item.id !== lineId) return item;
-        const basePrice = item.secondary_product
-          ? Math.max(item.product.price, item.secondary_product.price)
-          : item.promotion
-          ? item.promotion.price
-          : item.product.price;
-        const extraCost = (modifications || []).reduce((acc, m) => {
-          if ((m.type === 'positive' || m.action === 'add') && m.price) {
-            return acc + m.price;
-          }
-          return acc;
-        }, 0);
-        return {
-          ...item,
-          modifications,
-          unit_price: basePrice + extraCost,
-        };
-      })
+      prev.map((item) =>
+        item.id === lineId ? { ...item, modifications, unit_price: basePriceOf(item) + additionsCost(modifications) } : item
+      )
     );
-  };
+  }, []);
 
-  const splitItem = (lineId: string) => {
-    setItems((prev) => {
-      const itemIndex = prev.findIndex((i) => i.id === lineId);
-      if (itemIndex === -1) return prev;
-      const currentItem = prev[itemIndex];
-      if (currentItem.quantity <= 1) return prev;
+  const splitItem = useCallback((lineId: string) => {
+    setItems((prev) => splitOneUnit(prev, lineId));
+  }, []);
 
-      const updatedCurrent = {
-        ...currentItem,
-        quantity: currentItem.quantity - 1,
-      };
-
-      const basePrice = currentItem.secondary_product
-        ? Math.max(currentItem.product.price, currentItem.secondary_product.price)
-        : currentItem.promotion
-        ? currentItem.promotion.price
-        : currentItem.product.price;
-
-      const newItem: CartItem = {
-        ...currentItem,
-        id: createLineId(currentItem.product.id),
-        quantity: 1,
-        modifications: [],
-        unit_price: basePrice,
-      };
-
-      const nextItems = [...prev];
-      nextItems[itemIndex] = updatedCurrent;
-      nextItems.splice(itemIndex + 1, 0, newItem);
-      return nextItems;
-    });
-  };
-
-  const clearCart = () => {
+  const clearCart = useCallback(() => {
     setItems([]);
-  };
+  }, []);
 
-  const total = items.reduce(
-    (sum, item) => sum + (item.unit_price ?? item.product.price) * item.quantity,
-    0
-  );
+  const total = items.reduce((sum, item) => sum + (item.unit_price ?? item.product.price) * item.quantity, 0);
   const itemCount = items.reduce((sum, item) => sum + item.quantity, 0);
 
+  const value = useMemo(
+    () => ({
+      items,
+      addItem,
+      addPromotion,
+      removeItem,
+      updateQuantity,
+      updateItemModifications,
+      splitItem,
+      clearCart,
+      total,
+      itemCount,
+    }),
+    [items, addItem, addPromotion, removeItem, updateQuantity, updateItemModifications, splitItem, clearCart, total, itemCount]
+  );
+
   return (
-    <CartContext.Provider
-      value={{
-        items,
-        addItem,
-        addPromotion,
-        removeItem,
-        updateQuantity,
-        updateItemModifications,
-        splitItem,
-        clearCart,
-        total,
-        itemCount,
-      }}
-    >
+    <CartContext.Provider value={value}>
       {children}
     </CartContext.Provider>
   );

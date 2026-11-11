@@ -69,3 +69,7 @@ def get_movement(db: Session, movement_id: int) -> CashMovement | None:
 
 def delete_movement(db: Session, movement: CashMovement) -> None:
     db.delete(movement)
+
+
+def add_movement(db: Session, movement: CashMovement) -> None:
+    db.add(movement)

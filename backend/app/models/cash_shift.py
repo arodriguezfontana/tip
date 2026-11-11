@@ -1,20 +1,25 @@
+from datetime import datetime
 from decimal import Decimal
 from enum import Enum
+from typing import TYPE_CHECKING
 
 from sqlalchemy import (
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
     String,
     Text,
 )
-from sqlalchemy.orm import relationship, validates
+from sqlalchemy.orm import Mapped, mapped_column, relationship, validates
 from sqlalchemy.sql import func
 
 from app.core.money import MoneyColumn, to_money
 from app.db.base_class import Base
+
+if TYPE_CHECKING:
+    from app.models.order import Order
+    from app.models.user import User
 
 
 class CashShiftStatus(str, Enum):
@@ -43,35 +48,35 @@ class CashShift(Base):
         ),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    opened_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
-    closed_at = Column(DateTime(timezone=True), nullable=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    opened_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    closed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
 
     # Fondo inicial en efectivo declarado al abrir
-    initial_amount = Column(MoneyColumn, nullable=False, default=0)
+    initial_amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, default=0)
     # Monto real físico contado al cerrar
-    final_amount = Column(MoneyColumn, nullable=True)
+    final_amount: Mapped[Decimal | None] = mapped_column(MoneyColumn, nullable=True)
     # Caja teórica calculada por el sistema al momento del cierre
-    expected_amount = Column(MoneyColumn, nullable=True)
+    expected_amount: Mapped[Decimal | None] = mapped_column(MoneyColumn, nullable=True)
     # Diferencia = final_amount - expected_amount (positivo = sobrante, negativo = faltante)
-    difference = Column(MoneyColumn, nullable=True)
+    difference: Mapped[Decimal | None] = mapped_column(MoneyColumn, nullable=True)
 
-    status = Column(String(20), nullable=False, default=CashShiftStatus.OPEN.value, index=True)
-    notes = Column(Text, nullable=True)
+    status: Mapped[str] = mapped_column(String(20), nullable=False, default=CashShiftStatus.OPEN.value, index=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
 
-    opened_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
-    closed_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    opened_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    closed_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    opened_by = relationship("User", foreign_keys=[opened_by_id])
-    closed_by = relationship("User", foreign_keys=[closed_by_id])
+    opened_by: Mapped["User | None"] = relationship("User", foreign_keys=[opened_by_id])
+    closed_by: Mapped["User | None"] = relationship("User", foreign_keys=[closed_by_id])
 
-    movements = relationship(
+    movements: Mapped[list["CashMovement"]] = relationship(
         "CashMovement",
         back_populates="shift",
         cascade="all, delete-orphan",
         order_by="CashMovement.created_at.desc()",
     )
-    orders = relationship("Order", back_populates="cash_shift")
+    orders: Mapped[list["Order"]] = relationship("Order", back_populates="cash_shift")
 
     @validates("initial_amount", "final_amount", "expected_amount", "difference")
     def _as_money(self, _key: str, value) -> Decimal | None:
@@ -105,19 +110,19 @@ class CashMovement(Base):
         CheckConstraint("amount > 0", name="ck_cash_movements_amount"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
-    cash_shift_id = Column(Integer, ForeignKey("cash_shifts.id", ondelete="CASCADE"), nullable=False, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    cash_shift_id: Mapped[int] = mapped_column(Integer, ForeignKey("cash_shifts.id", ondelete="CASCADE"), nullable=False, index=True)
 
-    amount = Column(MoneyColumn, nullable=False)
-    type = Column(String(20), nullable=False)  # 'ingreso' | 'egreso'
-    category = Column(String(100), nullable=False)  # ej. 'Pago a proveedor', 'Adelanto de sueldo', 'Compra de insumos'
-    description = Column(Text, nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    type: Mapped[str] = mapped_column(String(20), nullable=False)  # 'ingreso' | 'egreso'
+    category: Mapped[str] = mapped_column(String(100), nullable=False)  # ej. 'Pago a proveedor', 'Adelanto de sueldo', 'Compra de insumos'
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    created_by_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
+    created_by_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True)
 
-    shift = relationship("CashShift", back_populates="movements")
-    created_by = relationship("User", foreign_keys=[created_by_id])
+    shift: Mapped["CashShift"] = relationship("CashShift", back_populates="movements")
+    created_by: Mapped["User | None"] = relationship("User", foreign_keys=[created_by_id])
 
     @validates("amount")
     def _as_money(self, _key: str, value) -> Decimal:

@@ -7,6 +7,19 @@ export interface ApiErrorResponse {
   details?: unknown;
 }
 
+/** Error que rechaza toda llamada a la API fallida: el mensaje ya viene listo para mostrarle al usuario. */
+export class ApiError extends Error implements ApiErrorResponse {
+  readonly statusCode: number;
+  readonly details?: unknown;
+
+  constructor({ message, statusCode, details }: ApiErrorResponse) {
+    super(message);
+    this.name = 'ApiError';
+    this.statusCode = statusCode;
+    this.details = details;
+  }
+}
+
 export const API_URL = import.meta.env.VITE_API_URL || 'http://localhost:8000/api/v1';
 
 export const api = axios.create({
@@ -26,14 +39,6 @@ export function setAdminPrivilegedToken(token: string | null): void {
 
 export function setCashPrivilegedToken(token: string | null): void {
   cashPrivilegedToken = token;
-}
-
-export function getAdminPrivilegedToken(): string | null {
-  return adminPrivilegedToken;
-}
-
-export function getCashPrivilegedToken(): string | null {
-  return cashPrivilegedToken;
 }
 
 api.interceptors.request.use(
@@ -57,7 +62,7 @@ api.interceptors.request.use(
 
 api.interceptors.response.use(
   (response) => response,
-  (error: AxiosError<{ detail?: string | unknown }>) => {
+  (error: AxiosError<{ detail?: unknown }>) => {
     const errorResponse: ApiErrorResponse = {
       message: 'Ocurrió un error inesperado.',
       statusCode: error.response?.status || 500,
@@ -66,7 +71,7 @@ api.interceptors.response.use(
 
     if (!error.response) {
       errorResponse.message = 'No se pudo conectar con el servidor. Revisa tu conexión a internet.';
-      return Promise.reject(errorResponse);
+      return Promise.reject(new ApiError(errorResponse));
     }
 
     const serverMessage =
@@ -111,6 +116,6 @@ api.interceptors.response.use(
         break;
     }
 
-    return Promise.reject(errorResponse);
+    return Promise.reject(new ApiError(errorResponse));
   }
 );

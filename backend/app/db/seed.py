@@ -42,116 +42,115 @@ def seed_ingredientes(db: Session) -> dict[str, Ingredient]:
     return ingredientes
 
 
+PIZZAS = [
+    {
+        "name": "Pizza Muzzarella",
+        "description": "La clásica: salsa de tomate, muzzarella y albahaca fresca.",
+        "price": 8500.0,
+        "preparation_time_minutes": 20,
+        "dietary_restrictions": ["vegetariano"],
+        "receta": [
+            ("Salsa de tomate", 100),
+            ("Muzzarella", 250),
+            ("Albahaca", 5),
+        ],
+    },
+    {
+        "name": "Pizza Napolitana",
+        "description": "Muzzarella, tomate en rodajas, ajo y albahaca.",
+        "price": 9500.0,
+        "preparation_time_minutes": 22,
+        "dietary_restrictions": ["vegetariano"],
+        "receta": [
+            ("Salsa de tomate", 100),
+            ("Muzzarella", 200),
+            ("Tomate en rodajas", 80),
+            ("Ajo", 5),
+            ("Albahaca", 5),
+        ],
+    },
+    {
+        "name": "Pizza Fugazzeta",
+        "description": "Doble muzzarella con abundante cebolla.",
+        "price": 9800.0,
+        "preparation_time_minutes": 20,
+        "dietary_restrictions": ["vegetariano"],
+        "receta": [
+            ("Muzzarella", 300),
+            ("Cebolla", 150),
+        ],
+    },
+    {
+        "name": "Pizza Especial",
+        "description": "Salsa de tomate, muzzarella, jamón y morrones.",
+        "price": 10500.0,
+        "preparation_time_minutes": 22,
+        "dietary_restrictions": [],
+        "receta": [
+            ("Salsa de tomate", 100),
+            ("Muzzarella", 220),
+            ("Jamón", 100),
+            ("Morrones", 60),
+        ],
+    },
+    {
+        "name": "Pizza Calabresa",
+        "description": "Muzzarella con longaniza calabresa y aceitunas negras.",
+        "price": 10200.0,
+        "preparation_time_minutes": 22,
+        "dietary_restrictions": [],
+        "receta": [
+            ("Salsa de tomate", 100),
+            ("Muzzarella", 220),
+            ("Longaniza calabresa", 120),
+            ("Aceitunas negras", 40),
+        ],
+    },
+    {
+        "name": "Pizza Roquefort",
+        "description": "Muzzarella con generosas porciones de queso roquefort.",
+        "price": 10800.0,
+        "preparation_time_minutes": 20,
+        "dietary_restrictions": ["vegetariano"],
+        "receta": [
+            ("Muzzarella", 220),
+            ("Roquefort", 100),
+        ],
+    },
+]
+
+
 def agregar_receta(db: Session, producto: Product, ingredientes: dict[str, Ingredient], receta: list[tuple[str, float]]):
     """Cada línea es (ingrediente, cantidad por unidad de producto, en la unidad del ingrediente)."""
     for nombre, cantidad in receta:
-        existe = (
-            db.query(ProductIngredient)
-            .filter_by(product_id=producto.id, ingredient_id=ingredientes[nombre].id)
-            .first()
+        get_or_create(
+            db,
+            ProductIngredient,
+            defaults={"quantity": cantidad},
+            product_id=producto.id,
+            ingredient_id=ingredientes[nombre].id,
         )
-        if existe:
-            continue
-        db.add(
-            ProductIngredient(
-                product_id=producto.id,
-                ingredient_id=ingredientes[nombre].id,
-                quantity=cantidad,
-            )
-        )
+
+
+def _crear_producto_con_receta(
+    db: Session, categoria: Category, ingredientes: dict[str, Ingredient], datos: dict
+) -> None:
+    """Crea el producto con su receta; si ya existía no lo toca."""
+    datos = dict(datos)
+    receta = datos.pop("receta")
+    producto, creado = get_or_create(
+        db,
+        Product,
+        name=datos.pop("name"),
+        defaults={**datos, "category_id": categoria.id},
+    )
+    if creado:
+        agregar_receta(db, producto, ingredientes, receta)
 
 
 def seed_pizzas(db: Session, categoria: Category, ingredientes: dict[str, Ingredient]):
-    pizzas = [
-        {
-            "name": "Pizza Muzzarella",
-            "description": "La clásica: salsa de tomate, muzzarella y albahaca fresca.",
-            "price": 8500.0,
-            "preparation_time_minutes": 20,
-            "dietary_restrictions": ["vegetariano"],
-            "receta": [
-                ("Salsa de tomate", 100),
-                ("Muzzarella", 250),
-                ("Albahaca", 5),
-            ],
-        },
-        {
-            "name": "Pizza Napolitana",
-            "description": "Muzzarella, tomate en rodajas, ajo y albahaca.",
-            "price": 9500.0,
-            "preparation_time_minutes": 22,
-            "dietary_restrictions": ["vegetariano"],
-            "receta": [
-                ("Salsa de tomate", 100),
-                ("Muzzarella", 200),
-                ("Tomate en rodajas", 80),
-                ("Ajo", 5),
-                ("Albahaca", 5),
-            ],
-        },
-        {
-            "name": "Pizza Fugazzeta",
-            "description": "Doble muzzarella con abundante cebolla.",
-            "price": 9800.0,
-            "preparation_time_minutes": 20,
-            "dietary_restrictions": ["vegetariano"],
-            "receta": [
-                ("Muzzarella", 300),
-                ("Cebolla", 150),
-            ],
-        },
-        {
-            "name": "Pizza Especial",
-            "description": "Salsa de tomate, muzzarella, jamón y morrones.",
-            "price": 10500.0,
-            "preparation_time_minutes": 22,
-            "dietary_restrictions": [],
-            "receta": [
-                ("Salsa de tomate", 100),
-                ("Muzzarella", 220),
-                ("Jamón", 100),
-                ("Morrones", 60),
-            ],
-        },
-        {
-            "name": "Pizza Calabresa",
-            "description": "Muzzarella con longaniza calabresa y aceitunas negras.",
-            "price": 10200.0,
-            "preparation_time_minutes": 22,
-            "dietary_restrictions": [],
-            "receta": [
-                ("Salsa de tomate", 100),
-                ("Muzzarella", 220),
-                ("Longaniza calabresa", 120),
-                ("Aceitunas negras", 40),
-            ],
-        },
-        {
-            "name": "Pizza Roquefort",
-            "description": "Muzzarella con generosas porciones de queso roquefort.",
-            "price": 10800.0,
-            "preparation_time_minutes": 20,
-            "dietary_restrictions": ["vegetariano"],
-            "receta": [
-                ("Muzzarella", 220),
-                ("Roquefort", 100),
-            ],
-        },
-    ]
-
-    for datos in pizzas:
-        receta = datos.pop("receta")
-        nombre = datos.pop("name")
-        producto, creado = get_or_create(
-            db,
-            Product,
-            name=nombre,
-            defaults={**datos, "category_id": categoria.id},
-        )
-        if not creado:
-            continue
-        db.flush()
-        agregar_receta(db, producto, ingredientes, receta)
+    for datos in PIZZAS:
+        _crear_producto_con_receta(db, categoria, ingredientes, datos)
 
 
 def seed_bebidas(db: Session, categoria: Category):

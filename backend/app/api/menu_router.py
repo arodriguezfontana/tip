@@ -8,7 +8,7 @@ from app.services import catalog_service
 router = APIRouter()
 
 
-@router.get("/products", response_model=list[ProductResponse])
+@router.get("/products")
 def list_available_products(db: Session = Depends(get_db)) -> list[ProductResponse]:
     """Endpoint público: devuelve los productos disponibles para pedir desde la web del cliente."""
     return [ProductResponse.from_model(product) for product in catalog_service.list_available_products(db)]

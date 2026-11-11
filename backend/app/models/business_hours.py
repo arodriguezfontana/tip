@@ -1,4 +1,7 @@
-from sqlalchemy import CheckConstraint, Column, Integer, Time
+from datetime import time
+
+from sqlalchemy import CheckConstraint, Integer, Time
+from sqlalchemy.orm import Mapped, mapped_column
 
 from app.db.base_class import Base
 
@@ -17,8 +20,8 @@ class BusinessHours(Base):
         CheckConstraint("opens_at <> closes_at", name="ck_business_hours_range"),
     )
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     # 0 = lunes ... 6 = domingo (igual que datetime.weekday()).
-    day_of_week = Column(Integer, nullable=False)
-    opens_at = Column(Time, nullable=False)
-    closes_at = Column(Time, nullable=False)
+    day_of_week: Mapped[int] = mapped_column(Integer, nullable=False)
+    opens_at: Mapped[time] = mapped_column(Time, nullable=False)
+    closes_at: Mapped[time] = mapped_column(Time, nullable=False)

@@ -15,12 +15,12 @@ def _token_for(user: User) -> TokenResponse:
     return TokenResponse(access_token=auth_service.issue_token(user), role=user.role)
 
 
-@router.post("/login", response_model=TokenResponse)
+@router.post("/login")
 def login(payload: LoginRequest, db: Session = Depends(get_db)) -> TokenResponse:
     return _token_for(auth_service.authenticate_user(db, payload.email, payload.password))
 
 
-@router.post("/register", response_model=TokenResponse, status_code=status.HTTP_201_CREATED)
+@router.post("/register", status_code=status.HTTP_201_CREATED)
 def register(payload: CustomerRegisterRequest, db: Session = Depends(get_db)) -> TokenResponse:
     """Registro público de clientes de la web. Devuelve el token para dejar la sesión iniciada."""
     user = auth_service.register_customer(
@@ -34,7 +34,7 @@ def register(payload: CustomerRegisterRequest, db: Session = Depends(get_db)) ->
     return _token_for(user)
 
 
-@router.post("/refresh", response_model=TokenResponse)
+@router.post("/refresh")
 def refresh_admin_token(current_admin: User = Depends(get_current_admin)) -> TokenResponse:
     """Renueva el token del administrador para que el panel no cierre la sesión mientras se usa."""
     return _token_for(current_admin)
