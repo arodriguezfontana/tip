@@ -1,4 +1,5 @@
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
+import { orderMatchesSearch } from '@/utils/orderSearch';
 import type { AdminOrder, OrderStatus, PreparationSector, SectorFilter, WebOrderItem } from '@/types/order';
 
 const DEFAULT_SECTOR = 'cocina';
@@ -64,11 +65,13 @@ export function countActiveOrdersBySector(orders: AdminOrder[]): SectorCounts {
   return { total: active.length, pizzeria: countFor('pizzeria'), cocina: countFor('cocina'), barra: countFor('barra') };
 }
 
-function ordersOfStatus(orders: AdminOrder[], status: OrderStatus, sector: SectorFilter): AdminOrder[] {
+function ordersOfStatus(orders: AdminOrder[], status: OrderStatus, sector: SectorFilter, searchTerm: string): AdminOrder[] {
   const ofStatus = orders
     .filter((order) => order.status === status)
     .sort((a, b) => new Date(a.created_at).getTime() - new Date(b.created_at).getTime());
-  return sector === 'todos' ? ofStatus : ofStatus.filter((order) => orderTouchesSector(order, sector));
+  const ofSector = sector === 'todos' ? ofStatus : ofStatus.filter((order) => orderTouchesSector(order, sector));
+  // Con una búsqueda activa solo quedan los pedidos que coinciden, en la columna de su estado.
+  return searchTerm ? ofSector.filter((order) => orderMatchesSearch(order, searchTerm)) : ofSector;
 }
 
 function matchesPendingFilter(order: AdminOrder, filter: PendingFilter): boolean {
@@ -80,15 +83,18 @@ export interface ColumnOptions {
   pendingFilter: PendingFilter;
   pages: ColumnPages;
   pageSize: number;
+  /** Texto del buscador; vacío si no se busca nada. */
+  searchTerm: string;
 }
 
 /** Las columnas del tablero (una por estado activo) con los pedidos de la página que se está viendo. */
 export function buildColumns(orders: AdminOrder[], options: ColumnOptions): BoardColumn[] {
   return ACTIVE_ORDER_STATUSES.map((status) => {
-    const ofStatus = ordersOfStatus(orders, status, options.selectedSector);
+    const ofStatus = ordersOfStatus(orders, status, options.selectedSector, options.searchTerm);
     // El contador cuenta todos los pedidos del estado; el filtro Ahora/Programados solo afecta la lista.
-    const visible =
-      status === 'Pendiente' ? ofStatus.filter((order) => matchesPendingFilter(order, options.pendingFilter)) : ofStatus;
+    // Al buscar se muestran también los programados, para no esconder un pedido que sí coincide.
+    const filtersByPending = status === 'Pendiente' && !options.searchTerm;
+    const visible = filtersByPending ? ofStatus.filter((order) => matchesPendingFilter(order, options.pendingFilter)) : ofStatus;
     const totalPages = Math.ceil(visible.length / options.pageSize) || 1;
     const currentPage = Math.min(options.pages[status] || 1, totalPages);
     const start = (currentPage - 1) * options.pageSize;

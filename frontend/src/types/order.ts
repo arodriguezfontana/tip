@@ -162,6 +162,7 @@ export interface WebOrderItem {
 
 export interface WebOrderCreated {
   id: number;
+  shift_number: number;
   status: OrderStatus;
   customer_name: string;
   customer_phone: string | null;
@@ -175,6 +176,8 @@ export interface WebOrderCreated {
   is_paid: boolean;
   /** Link de Checkout Pro de MercadoPago al que se redirige al cliente (solo si eligió MercadoPago). */
   payment_url: string | null;
+  /** Solo en pedidos de mostrador: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 export interface CheckoutFormErrors {
@@ -209,6 +212,8 @@ export type OrderChannel = 'telegram' | 'whatsapp';
 
 export interface AdminOrder {
   id: number;
+  /** Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna). */
+  shift_number: number;
   customer_name: string;
   shipping_address: string;
   total_amount: number;
@@ -246,6 +251,8 @@ export interface AdminOrder {
   items_prepared_count?: number;
   is_all_prepared?: boolean;
   sectors?: (PreparationSector | string)[];
+  /** Solo al confirmar el pedido: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */

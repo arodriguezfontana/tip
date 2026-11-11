@@ -1,3 +1,5 @@
+import { CloseIcon, SearchIcon } from '@/components/Icons';
+
 const PAGE_SIZES = [3, 5, 7];
 
 function SpeakerIcon({ muted }: { muted: boolean }) {
@@ -26,6 +28,10 @@ interface BoardToolbarProps {
   /** Color del tema del local (para el botón de tomar pedido). */
   themeHex?: string;
   pageSize: number;
+  /** Texto del buscador de comandas (por #, cliente, dirección o teléfono). */
+  searchInput: string;
+  onSearchChange: (value: string) => void;
+  onSearchClear: () => void;
   onPageSizeChange: (size: number) => void;
   onToggleSimulation: () => void;
   soundEnabled: boolean;
@@ -39,6 +45,9 @@ export function BoardToolbar({
   onTakeOrder,
   themeHex,
   pageSize,
+  searchInput,
+  onSearchChange,
+  onSearchClear,
   onPageSizeChange,
   onToggleSimulation,
   soundEnabled,
@@ -56,6 +65,32 @@ export function BoardToolbar({
       </div>
 
       <div className="flex items-center gap-4">
+        <div className="relative">
+          <SearchIcon className="w-4 h-4 text-gray-400 absolute left-2.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+          <input
+            type="text"
+            value={searchInput}
+            onChange={(event) => onSearchChange(event.target.value)}
+            onKeyDown={(event) => {
+              if (event.key === 'Escape') onSearchClear();
+            }}
+            placeholder="Buscar por #, cliente, dirección o teléfono"
+            aria-label="Buscar comandas"
+            className="w-64 xl:w-80 rounded-xl border border-gray-200 bg-gray-50 pl-8 pr-8 py-1.5 text-xs focus:outline-none focus:ring-2 focus:ring-black"
+          />
+          {searchInput && (
+            <button
+              type="button"
+              onClick={onSearchClear}
+              aria-label="Borrar búsqueda"
+              title="Borrar búsqueda"
+              className="absolute right-1.5 top-1/2 -translate-y-1/2 p-1 rounded-lg text-gray-500 hover:bg-gray-200"
+            >
+              <CloseIcon className="w-3.5 h-3.5" />
+            </button>
+          )}
+        </div>
+
         {onTakeOrder && (
           <button
             type="button"

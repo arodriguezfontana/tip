@@ -18,6 +18,7 @@ import { MenuImagenView } from '@/components/MenuImagenView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
+import { ImpresorasView } from '@/components/ImpresorasView';
 import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { PinModal } from '@/components/PinModal';
 import { PinSecurityProvider } from '@/context/PinSecurityContext';
@@ -163,6 +164,11 @@ function AdminDashboardContent() {
           {activeView === 'ingredientes' && <IngredientesView />}
           {activeView === 'menu-imagen' && <MenuImagenView />}
           {activeView === 'horarios' && <HorariosView />}
+          {activeView === 'impresoras' && (
+            <div className="lg:h-full lg:overflow-y-auto pr-1">
+              <ImpresorasView />
+            </div>
+          )}
           {activeView === 'configuracion-web' && (
             <div className="lg:h-full lg:overflow-y-auto pr-1">
               <ConfiguracionWebView

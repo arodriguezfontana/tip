@@ -62,6 +62,7 @@ beforeEach(() => {
   promos.fetchAvailablePromotions.mockResolvedValue([]);
   orders.createCounterOrder.mockResolvedValue({
     id: 777,
+    shift_number: 777,
     status: 'Confirmado',
     customer_name: 'Paula',
     customer_phone: '1144445555',

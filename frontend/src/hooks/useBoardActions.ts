@@ -13,6 +13,7 @@ import { FINISHED_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
 import { getErrorMessage } from '@/utils/errors';
+import { printErrorMessage } from '@/utils/printing';
 import { updateOrder, withItemPrepared, withSectorPrepared } from '@/utils/orderBoard';
 
 interface BoardActionsParams {
@@ -55,7 +56,8 @@ export function useBoardActions({ orders, activeDrivers, isSimulating, setOrders
     try {
       const updated = await updateOrderStatus(orderId, newStatus, estimatedMinutes);
       setOrders((prev) => replaceOrDrop(prev, orderId, updated));
-      setError(null);
+      // El pedido ya se confirmó: si la comanda no salió, se avisa sin deshacer nada.
+      setError(updated.print_error ? printErrorMessage(updated.shift_number) : null);
     } catch (err) {
       setError(getErrorMessage(err, 'No se pudo actualizar el estado del pedido.'));
     }

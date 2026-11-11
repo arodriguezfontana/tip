@@ -889,7 +889,7 @@ def _datos_faltantes(
     if not _telefono_valido(telefono):
         faltantes.append("un teléfono de contacto válido" if telefono else "un teléfono de contacto")
     if falta_direccion:
-        faltantes.append("tu dirección de envío")
+        faltantes.append("tu dirección de envío completa (calle, número y entre qué calles queda)")
     if resueltos.hay_ambiguos:
         faltantes.append("cuál de los productos que te consulté arriba querés")
     if resueltos.hay_cantidades_invalidas:
@@ -976,7 +976,8 @@ def calcular_y_preparar_pedido(
             solo: no pases la promo ni sus productos por tu cuenta, salvo que el cliente haya nombrado la promo.
         customer_name: Nombre del cliente.
         customer_phone: Teléfono de contacto del cliente.
-        shipping_address: Dirección de envío (solo para envíos a domicilio).
+        shipping_address: Dirección de envío completa (solo para envíos a domicilio): calle, número y entre qué
+            calles queda (ej: "Belgrano 95, entre Mitre y San Martín").
         metodo_entrega: "retiro" o "domicilio".
         hora_programada: Hora para la que se programa el pedido (ej: "21:00"); vacío si es para ahora.
         dia_programado: Día para el que se programa el pedido, solo si el cliente lo indicó (ej: "mañana",

@@ -1,12 +1,13 @@
 import { useRef, useState } from 'react';
 import { createPortal } from 'react-dom';
-import { BotIcon } from '@/components/Icons';
+import { BotIcon, PrinterIcon } from '@/components/Icons';
 import { BillingSection } from '@/components/orderDetail/BillingSection';
 import { CancelOrderControl } from '@/components/orderDetail/CancelOrderControl';
 import { Row, Section } from '@/components/orderDetail/DetailLayout';
 import { ProductsSection } from '@/components/orderDetail/ProductsSection';
 import { useModalFocus } from '@/hooks/useModalFocus';
 import { useOrderDetail } from '@/hooks/useOrderDetail';
+import { useReprint } from '@/hooks/useReprint';
 import { ACTIVE_ORDER_STATUSES } from '@/types/order';
 import type { AdminOrder, OrderStatus } from '@/types/order';
 import { formatDate, formatTime } from '@/utils/dateTime';
@@ -92,6 +93,7 @@ export function OrderDetailModal({
   const [acknowledging, setAcknowledging] = useState(false);
   const [confirmingCancel, setConfirmingCancel] = useState(false);
   const [cancelling, setCancelling] = useState(false);
+  const { reprint, printingId, feedback: printFeedback } = useReprint();
   const closeButtonRef = useRef<HTMLButtonElement>(null);
   useModalFocus(closeButtonRef, onClose);
 
@@ -152,7 +154,7 @@ export function OrderDetailModal({
           <div className="space-y-1.5">
             <div className="flex flex-wrap items-center gap-2">
               <h2 id={titleId} className="text-xl font-bold text-gray-900">
-                Pedido #{order.id}
+                Pedido #{order.shift_number}
               </h2>
               <span className={`text-xs font-bold px-2 py-0.5 rounded-full ${STATUS_BADGE_CLASS[order.status]}`}>
                 {order.status}
@@ -222,7 +224,27 @@ export function OrderDetailModal({
           />
         </div>
 
-        <footer className="px-6 py-4 border-t border-gray-100 flex justify-end">
+        <footer className="px-6 py-4 border-t border-gray-100 flex flex-wrap items-center justify-end gap-3">
+          {printFeedback && (
+            <p
+              role={printFeedback.type === 'error' ? 'alert' : 'status'}
+              className={`mr-auto text-xs font-semibold ${printFeedback.type === 'error' ? 'text-red-700' : 'text-green-700'}`}
+            >
+              {printFeedback.message}
+            </p>
+          )}
+          {!simulated && (
+            <button
+              type="button"
+              onClick={() => void reprint(order)}
+              disabled={printingId === order.id}
+              aria-label="Reimprimir comanda"
+              title="Reimprimir comanda"
+              className="p-2.5 rounded-xl border border-gray-300 hover:bg-gray-50 text-gray-800 transition disabled:opacity-60"
+            >
+              <PrinterIcon className={`w-5 h-5 ${printingId === order.id ? 'animate-pulse' : ''}`} />
+            </button>
+          )}
           <button
             type="button"
             onClick={onClose}

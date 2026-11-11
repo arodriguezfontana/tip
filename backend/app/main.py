@@ -21,6 +21,7 @@ from app.api import (
     menu_router,
     mercadopago_router,
     order_router,
+    printer_router,
     product_router,
     promotion_image_router,
     promotion_router,
@@ -92,6 +93,7 @@ api_router.include_router(menu_image_router.router, prefix="/menu-image", tags=[
 api_router.include_router(menu_image_router.router, prefix="/menu-images", tags=["Menu images"])
 api_router.include_router(menu_router.router, prefix="/menu", tags=["Menu"])
 api_router.include_router(mercadopago_router.router, prefix="/mercadopago", tags=["MercadoPago"])
+api_router.include_router(printer_router.router, prefix="/printers", tags=["Printers"])
 api_router.include_router(product_router.router, prefix="/products", tags=["Products"])
 api_router.include_router(promotion_router.router, prefix="/promotions", tags=["Promotions"])
 api_router.include_router(promotion_image_router.router, prefix="/promotion-images", tags=["Promotion images"])

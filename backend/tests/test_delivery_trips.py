@@ -229,8 +229,8 @@ def test_si_google_maps_falla_el_viaje_sale_igual_sin_tiempos(client, db_session
 def test_el_aviso_sin_tiempo_solo_dice_que_esta_en_camino():
     from app.services.order_notification_service import OrderSnapshot, build_trip_message
 
-    sin_tiempo = OrderSnapshot(id=1, channel="telegram", chat_id="1", estimated_minutes=None, scheduled_for=None)
-    con_tiempo = OrderSnapshot(id=1, channel="telegram", chat_id="1", estimated_minutes=None, scheduled_for=None, eta_minutes=15)
+    sin_tiempo = OrderSnapshot(id=1, shift_number=1, channel="telegram", chat_id="1", estimated_minutes=None, scheduled_for=None)
+    con_tiempo = OrderSnapshot(id=1, shift_number=1, channel="telegram", chat_id="1", estimated_minutes=None, scheduled_for=None, eta_minutes=15)
 
     assert build_trip_message(sin_tiempo) == "¡Tu pedido está en camino! 🛵"
     assert "15 minutos" in build_trip_message(con_tiempo)

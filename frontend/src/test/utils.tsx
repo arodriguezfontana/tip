@@ -39,6 +39,7 @@ export function makeOrder(overrides: Partial<AdminOrder> = {}): AdminOrder {
 
   return {
     id: 101,
+    shift_number: overrides.id ?? 101,
     customer_name: 'Paula Gómez',
     shipping_address: 'Belgrano 95',
     total_amount: 17000,

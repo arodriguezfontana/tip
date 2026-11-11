@@ -38,7 +38,7 @@ export function OrderSuccess({
         </div>
       )}
 
-      <h2 className="text-xl font-bold text-gray-900 mb-1">Pedido #{order.id}</h2>
+      <h2 className="text-xl font-bold text-gray-900 mb-1">Pedido #{order.shift_number}</h2>
 
       <div className="mt-4 space-y-1 text-sm text-gray-700">
         <p>

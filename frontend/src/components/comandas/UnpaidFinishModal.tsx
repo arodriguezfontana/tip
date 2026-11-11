@@ -22,7 +22,7 @@ export function UnpaidFinishModal({ order, saving, onConfirm, onCancel }: Unpaid
   return (
     <Modal
       title="El pedido aún no está pago"
-      subtitle={`Pedido #${order.id} · ${order.customer_name}`}
+      subtitle={`Pedido #${order.shift_number} · ${order.customer_name}`}
       onClose={onCancel}
       closeDisabled={saving}
       width="md"

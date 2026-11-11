@@ -20,6 +20,7 @@ class OrderSnapshot:
     """
 
     id: int
+    shift_number: int
     channel: str | None
     chat_id: str | None
     estimated_minutes: int | None
@@ -32,6 +33,7 @@ class OrderSnapshot:
     def of(cls, order: Order) -> "OrderSnapshot":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             channel=order.channel,
             chat_id=order.chat_id,
             estimated_minutes=order.estimated_minutes,
@@ -52,12 +54,12 @@ def _mensaje_de_aceptacion(order: Order | OrderSnapshot, payment_instructions: s
         cuando = f"Lo vamos a tener listo para las {_horario_programado(order.scheduled_for)}."
     else:
         cuando = f"Tiempo estimado de entrega: {order.estimated_minutes} minutos aproximadamente."
-    mensaje = f"¡Tu pedido #{order.id} fue aceptado! ✅\n{cuando}"
+    mensaje = f"¡Tu pedido #{order.shift_number} fue aceptado! ✅\n{cuando}"
     return f"{mensaje}\n\n{payment_instructions}" if payment_instructions else mensaje
 
 
 def _mensaje_de_cancelacion(order: Order | OrderSnapshot) -> str:
-    mensaje = f"Lamentablemente tuvimos que cancelar tu pedido #{order.id}. ❌ Disculpá las molestias."
+    mensaje = f"Lamentablemente tuvimos que cancelar tu pedido #{order.shift_number}. ❌ Disculpá las molestias."
     if order.is_paid:
         return mensaje + "\nComo ya lo habías abonado, comunicate con el local para coordinar el reintegro."
     return mensaje + "\nSi tenés dudas, contactanos."

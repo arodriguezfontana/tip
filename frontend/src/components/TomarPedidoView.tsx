@@ -14,6 +14,7 @@ import type { DeliveryMethod, PaymentMethod } from '@/types/order';
 import { buildCounterOrderPayload, validateCounterOrder } from '@/utils/counterOrder';
 import type { CounterOrderErrors } from '@/utils/counterOrder';
 import { getErrorMessage } from '@/utils/errors';
+import { printErrorMessage } from '@/utils/printing';
 
 const CLOSED_CASH_MESSAGE =
   'No se pueden tomar ni facturar pedidos porque la caja no está abierta. Abrí la caja antes de continuar.';
@@ -39,6 +40,8 @@ export function TomarPedidoView() {
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
   const [lastOrderId, setLastOrderId] = useState<number | null>(null);
+  // El pedido se registró pero la comanda no salió por la impresora.
+  const [printFailed, setPrintFailed] = useState(false);
   const phoneInputRef = useRef<HTMLInputElement>(null);
 
   useEffect(() => {
@@ -90,6 +93,7 @@ export function TomarPedidoView() {
     setErrors(nextErrors);
     setSubmitError(null);
     setLastOrderId(null);
+    setPrintFailed(false);
     if (Object.keys(nextErrors).length > 0) return;
 
     if (isShiftOpen === false) {
@@ -101,7 +105,8 @@ export function TomarPedidoView() {
     try {
       const created = await createCounterOrder(buildCounterOrderPayload(form, order.lines));
       resetOrder();
-      setLastOrderId(created.id);
+      setLastOrderId(created.shift_number);
+      setPrintFailed(Boolean(created.print_error));
       phoneInputRef.current?.focus();
     } catch (err) {
       setSubmitError(getErrorMessage(err, 'No se pudo registrar el pedido. Intentá nuevamente.'));
@@ -112,6 +117,11 @@ export function TomarPedidoView() {
 
   return (
     <form onSubmit={handleConfirm} className="flex flex-col gap-4 lg:h-full" noValidate>
+      {lastOrderId !== null && printFailed && (
+        <div role="alert" className="rounded-xl bg-amber-50 border border-amber-300 text-amber-900 px-4 py-3 text-sm font-semibold">
+          {printErrorMessage(lastOrderId)}. Podés reimprimirla desde el Historial.
+        </div>
+      )}
       {lastOrderId !== null && (
         <div role="status" className="rounded-xl bg-green-50 text-green-800 px-4 py-3 text-sm flex items-center gap-2">
           <CheckIcon className="w-5 h-5 text-green-700 shrink-0" />

@@ -40,7 +40,7 @@ def _reference(order_id: int, balance: bool = False) -> str:
 def payment_received_message(order: Order) -> str:
     """Aviso al cliente de que se acreditó su pago por MercadoPago."""
     que = "el pago de la diferencia" if order.balance_payment_method == PaymentMethod.MERCADOPAGO.value else "tu pago"
-    return f"✅ ¡Recibimos {que} por MercadoPago para el pedido #{order.id}! ¡Muchas gracias!"
+    return f"✅ ¡Recibimos {que} por MercadoPago para el pedido #{order.shift_number}! ¡Muchas gracias!"
 
 
 def public_base_url() -> str | None:
@@ -126,7 +126,7 @@ def create_payment_preference(
     """
     total = float(order.amount_pending if balance else order.total_amount)
     external_ref = _reference(order.id, balance)
-    title = f"{'Diferencia del pedido' if balance else 'Pedido'} #{order.id} - {store_name}"
+    title = f"{'Diferencia del pedido' if balance else 'Pedido'} #{order.shift_number} - {store_name}"
 
     preference = None
     if settings.MERCADOPAGO_ACCESS_TOKEN:

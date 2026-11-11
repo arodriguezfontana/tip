@@ -131,9 +131,16 @@ function Pagination({ column, onPageChange }: { column: BoardColumn; onPageChang
 /** Lo que reciben las tarjetas de los pedidos: los repartidores y qué hacer con cada acción. */
 export type CardProps = Omit<ComponentProps<typeof ComandaCard>, 'order'>;
 
+/** Qué decir en una columna sin pedidos: según haya una búsqueda o un sector elegido. */
+function emptyColumnMessage(selectedSector: SectorFilter, searchTerm: string): string {
+  if (searchTerm) return 'Sin coincidencias';
+  return selectedSector === 'todos' ? 'Sin pedidos' : `Sin pedidos para ${SECTOR_CONFIG[selectedSector].label}`;
+}
+
 interface OrderColumnProps {
   column: BoardColumn;
   selectedSector: SectorFilter;
+  searchTerm: string;
   pendingFilter: PendingFilter;
   onPendingFilterChange: (filter: PendingFilter) => void;
   tripsToStart: TripsToStart;
@@ -147,6 +154,7 @@ interface OrderColumnProps {
 export function OrderColumn({
   column,
   selectedSector,
+  searchTerm,
   pendingFilter,
   onPendingFilterChange,
   tripsToStart,
@@ -156,8 +164,7 @@ export function OrderColumn({
   cardProps,
 }: OrderColumnProps) {
   const hasTripsToStart = tripsToStart.groups.length > 0 || tripsToStart.withoutDriver > 0;
-  const emptyMessage =
-    selectedSector === 'todos' ? 'Sin pedidos' : `Sin pedidos para ${SECTOR_CONFIG[selectedSector].label}`;
+  const emptyMessage = emptyColumnMessage(selectedSector, searchTerm);
   return (
     <div className="bg-gray-50 rounded-2xl p-3 border border-gray-100 flex flex-col lg:min-h-0">
       <ColumnHeader column={column} />

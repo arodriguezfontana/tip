@@ -1,8 +1,9 @@
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import type { SectorFilter } from '@/types/order';
 import { FIRST_PAGES } from '@/utils/orderBoard';
 import type { ColumnPages, PendingFilter } from '@/utils/orderBoard';
 
+const SEARCH_DEBOUNCE_MS = 250;
 const SECTOR_STORAGE_KEY = 'resto_comandas_sector';
 const SECTOR_FILTERS = new Set<SectorFilter>(['todos', 'pizzeria', 'cocina', 'barra']);
 
@@ -32,6 +33,22 @@ export function useBoardFilters() {
   const [pendingFilter, setPendingFilter] = useState<PendingFilter>('ahora');
   const [selectedSector, setSelectedSector] = useState<SectorFilter>(readSavedSector);
 
+  // Buscador: lo que se escribe se aplica al tablero con una pequeña demora para no filtrar en cada tecla.
+  const [searchInput, setSearchInput] = useState('');
+  const [searchTerm, setSearchTerm] = useState('');
+  useEffect(() => {
+    const timer = setTimeout(() => {
+      setSearchTerm(searchInput.trim());
+      setPages(FIRST_PAGES);
+    }, SEARCH_DEBOUNCE_MS);
+    return () => clearTimeout(timer);
+  }, [searchInput]);
+
+  const clearSearch = () => {
+    setSearchInput('');
+    setSearchTerm('');
+  };
+
   const changeSector = (sector: SectorFilter) => {
     setSelectedSector(sector);
     saveSector(sector);
@@ -53,6 +70,10 @@ export function useBoardFilters() {
     pages,
     pendingFilter,
     selectedSector,
+    searchInput,
+    setSearchInput,
+    searchTerm,
+    clearSearch,
     changeSector,
     changePendingFilter,
     changePage,

@@ -54,9 +54,11 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         pendingFilter: filters.pendingFilter,
         pages: filters.pages,
         pageSize: filters.pageSize,
+        searchTerm: filters.searchTerm,
       }),
-    [orders, filters.selectedSector, filters.pendingFilter, filters.pages, filters.pageSize]
+    [orders, filters.selectedSector, filters.pendingFilter, filters.pages, filters.pageSize, filters.searchTerm]
   );
+  const noSearchResults = Boolean(filters.searchTerm) && columns.every((column) => column.totalCount === 0);
   // Viajes por armar: pedidos a domicilio "En Camino" que todavía no salieron, agrupados por repartidor.
   const tripsToStart = useMemo(
     () => (isSimulating ? { groups: [], withoutDriver: 0 } : buildTripsToStart(orders)),
@@ -95,6 +97,9 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
         themeHex={themeHex}
         pageSize={filters.pageSize}
         onPageSizeChange={filters.setPageSize}
+        searchInput={filters.searchInput}
+        onSearchChange={filters.setSearchInput}
+        onSearchClear={filters.clearSearch}
         onToggleSimulation={toggleSimulation}
         soundEnabled={soundAlert.enabled}
         soundSupported={soundAlert.audioSupported}
@@ -114,6 +119,8 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
 
       {loading && !hasLoaded && orders.length === 0 ? (
         <PanelNote>Cargando comandas...</PanelNote>
+      ) : noSearchResults ? (
+        <PanelNote>{`No se encontraron comandas para '${filters.searchTerm}'.`}</PanelNote>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 lg:grid-rows-1 gap-4 items-start lg:items-stretch lg:flex-1 lg:min-h-0">
           {columns.map((column) => (
@@ -121,6 +128,7 @@ export function ComandasBoard({ onTakeOrder, themeColor }: ComandasBoardProps) {
               key={column.status}
               column={column}
               selectedSector={filters.selectedSector}
+              searchTerm={filters.searchTerm}
               pendingFilter={filters.pendingFilter}
               onPendingFilterChange={filters.changePendingFilter}
               tripsToStart={tripsToStart}
