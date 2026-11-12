@@ -85,9 +85,10 @@ class StoreConfigUpdate(BaseModel):
 
     @model_validator(mode="after")
     def validate_cash_pin(self) -> "StoreConfigUpdate":
-        if self.cash_pin_enabled:
-            if not self.cash_pin:
-                raise ValueError("Para proteger la caja se debe ingresar un PIN de 4 dígitos.")
-            if self.cash_pin == settings.ADMIN_PIN:
-                raise ValueError("El PIN de caja debe ser distinto al PIN de administración.")
+        if not self.cash_pin_enabled:
+            return self
+        if not self.cash_pin:
+            raise ValueError("Para proteger la caja se debe ingresar un PIN de 4 dígitos.")
+        if self.cash_pin == settings.ADMIN_PIN:
+            raise ValueError("El PIN de caja debe ser distinto al PIN de administración.")
         return self

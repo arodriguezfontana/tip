@@ -20,4 +20,3 @@ class PinStatusResponse(BaseModel):
     cash_pin_required: bool = False
     cash_blocked: bool = False
     cash_blocked_seconds_remaining: int = 0
-

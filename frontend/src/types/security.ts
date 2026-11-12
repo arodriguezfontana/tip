@@ -1,9 +1,5 @@
 export type PinType = 'admin' | 'cash';
 
-export interface PinVerificationRequest {
-  pin: string;
-}
-
 export interface PinVerificationResponse {
   token: string;
   expires_in: number;

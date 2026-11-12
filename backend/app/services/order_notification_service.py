@@ -43,8 +43,7 @@ class OrderSnapshot:
         )
 
 
-def _horario_programado(order: Order | OrderSnapshot) -> str:
-    programado = order.scheduled_for
+def _horario_programado(programado: datetime) -> str:
     if programado.tzinfo is None:  # la base lo guarda en UTC
         programado = programado.replace(tzinfo=timezone.utc)
     return f"{programado.astimezone(RESTAURANT_TZ):%H:%M}"
@@ -52,11 +51,18 @@ def _horario_programado(order: Order | OrderSnapshot) -> str:
 
 def _mensaje_de_aceptacion(order: Order | OrderSnapshot, payment_instructions: str | None) -> str:
     if order.scheduled_for is not None:
-        cuando = f"Lo vamos a tener listo para las {_horario_programado(order)}."
+        cuando = f"Lo vamos a tener listo para las {_horario_programado(order.scheduled_for)}."
     else:
         cuando = f"Tiempo estimado de entrega: {order.estimated_minutes} minutos aproximadamente."
     mensaje = f"¡Tu pedido #{order.shift_number} fue aceptado! ✅\n{cuando}"
     return f"{mensaje}\n\n{payment_instructions}" if payment_instructions else mensaje
+
+
+def _mensaje_de_cancelacion(order: Order | OrderSnapshot) -> str:
+    mensaje = f"Lamentablemente tuvimos que cancelar tu pedido #{order.shift_number}. ❌ Disculpá las molestias."
+    if order.is_paid:
+        return mensaje + "\nComo ya lo habías abonado, comunicate con el local para coordinar el reintegro."
+    return mensaje + "\nSi tenés dudas, contactanos."
 
 
 def build_status_message(
@@ -67,12 +73,7 @@ def build_status_message(
     if new_status == OrderStatus.REJECTED:
         return "Lamentablemente tu pedido fue rechazado. Contactanos si tenés dudas."
     if new_status == OrderStatus.CANCELLED:
-        mensaje = f"Lamentablemente tuvimos que cancelar tu pedido #{order.shift_number}. ❌ Disculpá las molestias."
-        if order.is_paid:
-            mensaje += "\nComo ya lo habías abonado, comunicate con el local para coordinar el reintegro."
-        else:
-            mensaje += "\nSi tenés dudas, contactanos."
-        return mensaje
+        return _mensaje_de_cancelacion(order)
     if new_status == OrderStatus.READY_FOR_PICKUP:
         return "¡Tu pedido está listo para retirar! 🎉 Ya podés pasar a buscarlo."
     return None
@@ -85,17 +86,19 @@ def build_trip_message(order: Order | OrderSnapshot) -> str:
     return f"¡Tu pedido está en camino! 🛵 Llegará a tu domicilio en aproximadamente {order.eta_minutes} minutos."
 
 
+async def _avisar_salida_del_viaje(order: OrderSnapshot) -> None:
+    try:
+        await enviar_mensaje(order.channel, order.chat_id, build_trip_message(order))
+    except Exception:
+        # Un aviso que falla no tiene que cortar los de los demás clientes del viaje.
+        logger.exception("No se pudo avisar la salida del viaje del pedido #%s.", order.id)
+
+
 async def notify_trip_dispatched(orders: list[OrderSnapshot]) -> None:
     """Avisa a todos los clientes del viaje, cada uno con su llegada estimada si se pudo calcular (los pedidos sin chat
     se saltean)."""
-    for order in orders:
-        if not order.channel or not order.chat_id:
-            continue
-        try:
-            await enviar_mensaje(order.channel, order.chat_id, build_trip_message(order))
-        except Exception:
-            # Un aviso que falla no tiene que cortar los de los demás clientes del viaje.
-            logger.exception("No se pudo avisar la salida del viaje del pedido #%s.", order.id)
+    for order in [order for order in orders if order.channel and order.chat_id]:
+        await _avisar_salida_del_viaje(order)
 
 
 async def notify_order_status_change(

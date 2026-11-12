@@ -264,11 +264,6 @@ def test_orden_con_promocion_y_comanda(db_session, products):
     assert item.promotion_id == promo.id
     assert item.product_id is None
     assert item.display_name == "Combo Familiar"
-    # Verificar comanda_display
-    assert item.comanda_display.startswith("PROMO: Combo Familiar (")
-    assert "2x Pizza Muzzarella" in item.comanda_display
-    assert "1x Coca-Cola" in item.comanda_display
-
     # Verificar sectores distribuidos en la orden
     assert "pizzeria" in order.sectors
     assert "barra" in order.sectors

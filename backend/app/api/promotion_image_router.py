@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 from app.api.deps import get_current_admin
 from app.api.uploads import image_body
 from app.db.session import get_db
-from app.models.user import User
 from app.schemas.promotion_schemas import PromotionImageOrder, PromotionImagesResponse
 from app.services import promotion_image_service
 
@@ -16,31 +15,32 @@ def _all(db: Session) -> PromotionImagesResponse:
     return PromotionImagesResponse.of(promotion_image_service.list_promotion_images(db))
 
 
-@router.get("", response_model=PromotionImagesResponse)
+@router.get("", dependencies=[Depends(get_current_admin)])
 def list_promotion_images(
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> PromotionImagesResponse:
     """Las imágenes de promociones para el panel de administración."""
     return _all(db)
 
 
-@router.post("", response_model=PromotionImagesResponse, status_code=http_status.HTTP_201_CREATED)
+@router.post(
+    "",
+    status_code=http_status.HTTP_201_CREATED,
+    dependencies=[Depends(get_current_admin)],
+)
 def add_promotion_image(
     image: bytes = Depends(image_body),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> PromotionImagesResponse:
     """Suma una imagen de promoción al final (JPG o PNG de hasta 5 MB)."""
     promotion_image_service.add_promotion_image(db, image)
     return _all(db)
 
 
-@router.put("/order", response_model=PromotionImagesResponse)
+@router.put("/order", dependencies=[Depends(get_current_admin)])
 def reorder_promotion_images(
     order: PromotionImageOrder,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> PromotionImagesResponse:
     """Cambia el orden de las imágenes de promociones."""
     promotion_image_service.reorder_promotion_images(db, order.ids)
@@ -58,23 +58,20 @@ def get_promotion_image_file(image_id: int, db: Session = Depends(get_db)) -> Re
     )
 
 
-@router.put("/{image_id}", response_model=PromotionImagesResponse)
+@router.put("/{image_id}", dependencies=[Depends(get_current_admin)])
 def replace_promotion_image(
     image_id: int,
     image: bytes = Depends(image_body),
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> PromotionImagesResponse:
     """Reemplaza una imagen de promoción."""
     promotion_image_service.replace_promotion_image(db, image_id, image)
     return _all(db)
 
 
-@router.delete("/{image_id}", status_code=http_status.HTTP_204_NO_CONTENT)
+@router.delete("/{image_id}", status_code=http_status.HTTP_204_NO_CONTENT, dependencies=[Depends(get_current_admin)])
 def delete_promotion_image(
     image_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> None:
     promotion_image_service.delete_promotion_image(db, image_id)
-

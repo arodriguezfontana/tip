@@ -1,6 +1,16 @@
 import { useCallback, useEffect, useState } from 'react';
 import type { PinType } from '@/types/security';
 import { fetchPinStatus, verifyAdminPin, verifyCashPin } from '@/services/securityService';
+import { getErrorMessage } from '@/utils/errors';
+
+const PIN_LENGTH = 4;
+// Tras varios intentos fallidos el servidor bloquea el PIN por 5 minutos.
+const LOCKOUT_SECONDS = 300;
+
+function isLockoutMessage(message: string): boolean {
+  const text = message.toLowerCase();
+  return text.includes('bloqueado temporalmente') || text.includes('3 intentos');
+}
 
 interface PinModalProps {
   isOpen: boolean;
@@ -75,7 +85,7 @@ function PinModalDialog({
 
   const handleSubmit = useCallback(
     async (pinToSubmit: string) => {
-      if (pinToSubmit.length !== 4 || loading || blockedSeconds > 0) return;
+      if (pinToSubmit.length !== PIN_LENGTH || loading || blockedSeconds > 0) return;
 
       setLoading(true);
       setErrorMsg(null);
@@ -86,17 +96,9 @@ function PinModalDialog({
         onSuccess(res.token);
       } catch (err: unknown) {
         setPin('');
-        const msg =
-          err && typeof err === 'object' && 'message' in err
-            ? String((err as { message: unknown }).message)
-            : 'PIN incorrecto.';
-
+        const msg = getErrorMessage(err, 'PIN incorrecto.');
         setErrorMsg(msg);
-
-        // Si el mensaje indica bloqueo temporal o 3 intentos
-        if (msg.toLowerCase().includes('bloqueado temporalmente') || msg.toLowerCase().includes('3 intentos')) {
-          setBlockedSeconds(300); // 5 minutos
-        }
+        if (isLockoutMessage(msg)) setBlockedSeconds(LOCKOUT_SECONDS);
       } finally {
         setLoading(false);
       }
@@ -106,14 +108,10 @@ function PinModalDialog({
 
   const handleDigit = useCallback(
     (digit: string) => {
-      if (blockedSeconds > 0 || loading) return;
-      if (pin.length < 4) {
-        const next = pin + digit;
-        setPin(next);
-        if (next.length === 4) {
-          handleSubmit(next);
-        }
-      }
+      if (blockedSeconds > 0 || loading || pin.length >= PIN_LENGTH) return;
+      const next = pin + digit;
+      setPin(next);
+      if (next.length === PIN_LENGTH) handleSubmit(next);
     },
     [blockedSeconds, handleSubmit, loading, pin]
   );

@@ -91,26 +91,40 @@ export function SearchableSelect({
     close();
   };
 
-  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
-    if (event.key === 'ArrowDown') {
-      event.preventDefault();
-      if (!open) setOpen(true);
-      else setHighlighted((index) => Math.min(index + 1, visibleOptions.length - 1));
-    } else if (event.key === 'ArrowUp') {
-      event.preventDefault();
-      setHighlighted((index) => Math.max(index - 1, 0));
-    } else if (event.key === 'Enter') {
-      if (!open) return;
-      // Evita que Enter envíe el formulario mientras se está eligiendo.
-      event.preventDefault();
-      const option = visibleOptions[highlighted];
-      if (option) choose(option);
-    } else if (event.key === 'Escape' && open) {
-      event.preventDefault();
-      event.stopPropagation();
-      close();
-    }
+  const handleArrowDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    if (open) setHighlighted((index) => Math.min(index + 1, visibleOptions.length - 1));
+    else setOpen(true);
   };
+
+  const handleArrowUp = (event: KeyboardEvent<HTMLInputElement>) => {
+    event.preventDefault();
+    setHighlighted((index) => Math.max(index - 1, 0));
+  };
+
+  const handleEnter = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!open) return;
+    // Evita que Enter envíe el formulario mientras se está eligiendo.
+    event.preventDefault();
+    const option = visibleOptions[highlighted];
+    if (option) choose(option);
+  };
+
+  const handleEscape = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (!open) return;
+    event.preventDefault();
+    event.stopPropagation();
+    close();
+  };
+
+  const keyHandlers: Record<string, (event: KeyboardEvent<HTMLInputElement>) => void> = {
+    ArrowDown: handleArrowDown,
+    ArrowUp: handleArrowUp,
+    Enter: handleEnter,
+    Escape: handleEscape,
+  };
+
+  const handleKeyDown = (event: KeyboardEvent<HTMLInputElement>) => keyHandlers[event.key]?.(event);
 
   return (
     <div className={`relative ${className}`}>

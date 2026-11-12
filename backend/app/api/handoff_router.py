@@ -23,8 +23,8 @@ def _empleado(user: User) -> str:
     return user.full_name or user.email
 
 
-@router.get("", response_model=list[HandoffSummaryResponse])
-def list_handoffs(current_user: User = Depends(get_current_admin)) -> list[HandoffSummaryResponse]:
+@router.get("", dependencies=[Depends(get_current_admin)])
+def list_handoffs() -> list[HandoffSummaryResponse]:
     """Conversaciones en las que el cliente pidió hablar con una persona (esperando o ya en atención)."""
     return [HandoffSummaryResponse.of(d) for d in derivaciones.listar()]
 
@@ -35,11 +35,10 @@ def _clave_del_chat(order: Order) -> str:
     return session_key(order.channel, order.chat_id)
 
 
-@router.get("/by-order/{order_id}", response_model=HandoffDetailResponse)
+@router.get("/by-order/{order_id}", dependencies=[Depends(get_current_admin)])
 def get_order_chat(
     order_id: int,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> HandoffDetailResponse:
     """Chat con el cliente de un pedido del bot. No pausa al bot: eso pasa recién cuando el empleado escribe.
 
@@ -65,7 +64,7 @@ def get_order_chat(
     return HandoffDetailResponse.of(transitoria)
 
 
-@router.post("/by-order/{order_id}/messages", response_model=HandoffDetailResponse)
+@router.post("/by-order/{order_id}/messages")
 async def send_order_chat_message(
     order_id: int,
     payload: HandoffMessageCreate,
@@ -93,20 +92,20 @@ async def send_order_chat_message(
     return HandoffDetailResponse.of(derivacion)
 
 
-@router.get("/{handoff_id}", response_model=HandoffDetailResponse)
-def get_handoff(handoff_id: int, current_user: User = Depends(get_current_admin)) -> HandoffDetailResponse:
+@router.get("/{handoff_id}", dependencies=[Depends(get_current_admin)])
+def get_handoff(handoff_id: int) -> HandoffDetailResponse:
     """Chat completo. Como solo lo consulta el chat abierto del empleado, también marca los mensajes como leídos."""
     derivaciones.marcar_leida(handoff_id)
     return HandoffDetailResponse.of(derivaciones.obtener(handoff_id))
 
 
-@router.post("/{handoff_id}/take", response_model=HandoffDetailResponse)
+@router.post("/{handoff_id}/take")
 def take_handoff(handoff_id: int, current_user: User = Depends(get_current_admin)) -> HandoffDetailResponse:
     """El empleado toma el control de la conversación."""
     return HandoffDetailResponse.of(derivaciones.tomar(handoff_id, _empleado(current_user)))
 
 
-@router.post("/{handoff_id}/messages", response_model=HandoffDetailResponse)
+@router.post("/{handoff_id}/messages")
 async def send_handoff_message(
     handoff_id: int,
     payload: HandoffMessageCreate,

@@ -4,10 +4,6 @@ export interface TopProduct {
   total_revenue: number;
 }
 
-export interface StatusDistributionResponse {
-  status_distribution: Record<string, number>;
-}
-
 export interface BestSellingDayResponse {
   best_selling_day: string | null;
   total_revenue: number | null;

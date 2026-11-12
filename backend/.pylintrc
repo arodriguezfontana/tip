@@ -1,0 +1,13 @@
+[MASTER]
+init-hook='import sys; sys.path.insert(0, ".")'
+
+[MESSAGES CONTROL]
+# Documentación y formato: los cubre ruff (E501 ignorado a propósito).
+# Métricas de diseño (argumentos, atributos, métodos) y modelos ORM sin métodos: avisos de estilo, no errores.
+# broad-exception-caught: los handlers del bot y las tareas en segundo plano deben capturar todo y registrar.
+# import-outside-toplevel: imports diferidos a propósito para evitar ciclos.
+disable=C0114,C0115,C0116,C0301,C0303,C0304,
+        R0801,R0902,R0903,R0904,R0913,R0914,R0917,
+        W0718,C0415,
+# Falsos positivos: pylint no entiende que func.now / func.count / func.sum de SQLAlchemy se generan dinámicamente.
+        E1102,E1111

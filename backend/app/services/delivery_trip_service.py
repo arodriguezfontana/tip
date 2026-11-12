@@ -11,7 +11,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.core.errors import BusinessRuleError, NotFoundError
 from app.db.session import transaction
-from app.models.delivery_driver import DeliveryTrip
+from app.models.delivery_driver import DeliveryDriver, DeliveryTrip
 from app.models.order import Order
 from app.repositories import delivery_driver_repository, order_repository
 from app.services import maps_service
@@ -37,6 +37,42 @@ def _estimate_route(db: Session, addresses: list[str]) -> tuple[list, list[int]]
     return stops, etas
 
 
+def _select_orders_for_trip(waiting: list[Order], order_ids: list[int] | None) -> list[Order]:
+    """Los pedidos que salen en el viaje: los indicados (en ese orden) o, si no se indican, todos los armados."""
+    if order_ids is None:
+        return waiting
+    by_id = {order.id: order for order in waiting}
+    missing = [order_id for order_id in order_ids if order_id not in by_id]
+    if missing:
+        raise BusinessRuleError(
+            "Algunos pedidos no están armando viaje con este repartidor (o ya salieron): "
+            + ", ".join(f"#{order_id}" for order_id in missing)
+            + "."
+        )
+    return [by_id[order_id] for order_id in dict.fromkeys(order_ids)]
+
+
+def _route_for(db: Session, driver: DeliveryDriver, orders: list[Order]) -> tuple[list, list[int], str | None]:
+    """(paradas, llegadas estimadas, motivo por el que no se pudo calcular la ruta)."""
+    try:
+        stops, etas = _estimate_route(db, [order.shipping_address for order in orders])
+    except maps_service.RouteUnavailableError as exc:
+        # Un fallo de Google no frena al repartidor: sale igual y los clientes reciben el aviso sin tiempo.
+        logger.warning("Viaje del repartidor #%s despachado sin tiempos estimados: %s", driver.id, exc)
+        return [], [], str(exc)
+    return stops, etas, None
+
+
+def _planned_stops(orders: list[Order], stops: list, etas: list[int]) -> list[tuple[Order, int, int | None]]:
+    """(pedido, número de parada, llegada estimada) en el orden del recorrido; sin ruta, en el orden en que se armó."""
+    if not stops:
+        return [(order, position, None) for position, order in enumerate(orders, start=1)]
+    return [
+        (orders[stop.index], position, eta)
+        for position, (stop, eta) in enumerate(zip(stops, etas, strict=True), start=1)
+    ]
+
+
 def dispatch_trip(
     db: Session, delivery_driver_id: int, order_ids: list[int] | None = None
 ) -> tuple[DeliveryTrip, str | None]:
@@ -49,43 +85,17 @@ def dispatch_trip(
     if driver is None:
         raise NotFoundError("Repartidor no encontrado.")
 
-    waiting = trip_orders_waiting(db, delivery_driver_id)
-    if order_ids is not None:
-        by_id = {order.id: order for order in waiting}
-        missing = [order_id for order_id in order_ids if order_id not in by_id]
-        if missing:
-            raise BusinessRuleError(
-                "Algunos pedidos no están armando viaje con este repartidor (o ya salieron): "
-                + ", ".join(f"#{order_id}" for order_id in missing)
-                + "."
-            )
-        waiting = [by_id[order_id] for order_id in dict.fromkeys(order_ids)]
-    if not waiting:
+    orders = _select_orders_for_trip(trip_orders_waiting(db, delivery_driver_id), order_ids)
+    if not orders:
         raise BusinessRuleError(f"{driver.name} no tiene pedidos armando viaje.")
 
-    warning = None
-    try:
-        stops, etas = _estimate_route(db, [order.shipping_address for order in waiting])
-    except maps_service.RouteUnavailableError as exc:
-        # Un fallo de Google no frena al repartidor: sale igual y los clientes reciben el aviso sin tiempo.
-        logger.warning("Viaje del repartidor #%s despachado sin tiempos estimados: %s", driver.id, exc)
-        warning = str(exc)
-        stops, etas = [], []
-
+    stops, etas, warning = _route_for(db, driver, orders)
     with transaction(db):
         trip = DeliveryTrip(delivery_driver_id=driver.id, total_minutes=etas[-1] if etas else None)
-        db.add(trip)
-        db.flush()
-        if stops:
-            for position, (stop, eta) in enumerate(zip(stops, etas, strict=True), start=1):
-                order = waiting[stop.index]
-                order.trip_id = trip.id
-                order.trip_stop = position
-                order.eta_minutes = eta
-        else:
-            for position, order in enumerate(waiting, start=1):
-                order.trip_id = trip.id
-                order.trip_stop = position
-                order.eta_minutes = None
+        delivery_driver_repository.add_trip(db, trip)
+        for order, position, eta in _planned_stops(orders, stops, etas):
+            order.trip_id = trip.id
+            order.trip_stop = position
+            order.eta_minutes = eta
     db.refresh(trip)
     return trip, warning

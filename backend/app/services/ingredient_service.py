@@ -1,11 +1,14 @@
 """Ingredientes del local, recetas de los productos y consumo de ingredientes de los pedidos."""
 
+import re
 from dataclasses import dataclass
 from datetime import datetime
+from decimal import Decimal
 
 from sqlalchemy.orm import Session
 
 from app.core.errors import ConflictError, NotFoundError
+from app.core.text import sin_acentos
 from app.db.session import transaction
 from app.models.menu import Ingredient, InvalidRecipeError, Product
 from app.repositories import ingredient_repository
@@ -72,8 +75,8 @@ def update_ingredient(db: Session, ingredient_id: int, name: str, unit: str, ext
     with transaction(db):
         ingredient.name = name
         ingredient.unit = unit
-        ingredient.extra_price = extra_price
-        ingredient.cost = cost
+        ingredient.extra_price = Decimal(str(extra_price))
+        ingredient.cost = Decimal(str(cost))
     db.refresh(ingredient)
     return IngredientUsage(ingredient=ingredient, products_count=len(ingredient.used_in_products))
 
@@ -104,6 +107,52 @@ def replace_recipe(db: Session, product_id: int, items: list[tuple[int, float]])
 # --- Consumo ------------------------------------------------------------------------------------------
 
 
+_QUITAR_PEDIDO_DE_EXCLUSION = re.compile(r"^(?:sin|quitale|quitame|sacale|sacame|no\s+le\s+pongas)\s+")
+
+
+def _removes_ingredient(modification: dict, ingredient_id: int, normalized_name: str) -> bool:
+    """La modificación es una exclusión del ingrediente (por su id o por su nombre)."""
+    if (modification.get("type") or modification.get("action")) not in ("negative", "remove"):
+        return False
+    if modification.get("ingredient_id") is not None and modification.get("ingredient_id") == ingredient_id:
+        return True
+    written_name = sin_acentos(str(modification.get("name") or modification.get("raw") or "").lower())
+    excluded = _QUITAR_PEDIDO_DE_EXCLUSION.sub("", written_name).strip(" []")
+    return bool(excluded) and (excluded in normalized_name or normalized_name in excluded)
+
+
+def _is_ingredient_excluded(row: ingredient_repository.ConsumptionRow) -> bool:
+    """El cliente pidió el plato sin ese ingrediente: no se descuenta del stock."""
+    normalized_name = sin_acentos(row.ingredient_name.lower())
+    return any(
+        _removes_ingredient(modification, row.ingredient_id, normalized_name)
+        for modification in row.item_modifications or []
+    )
+
+
+def _units_used(row: ingredient_repository.ConsumptionRow) -> float:
+    """Cantidad del ingrediente que usó el ítem: en una pizza mitad y mitad cada gusto aporta la mitad."""
+    is_half_and_half = row.secondary_product_id is not None and row.product_id != row.secondary_product_id
+    return float(row.item_quantity) * float(row.recipe_quantity) * (0.5 if is_half_and_half else 1.0)
+
+
+def consumption_totals(
+    db: Session, date_from: datetime | None, date_to: datetime | None, ingredient_id: int | None
+) -> list[tuple[int, str, str, float]]:
+    """(id, nombre, unidad, total) de cada ingrediente usado en los pedidos finalizados del período, según
+    las recetas actuales: unidades vendidas de cada producto × cantidad de su receta,
+    excluyendo los ingredientes que fueron quitados por modificaciones negativas."""
+    rows = ingredient_repository.consumption_rows(db, date_from, date_to, ingredient_id)
+    totals: dict[int, list] = {}
+    for row in (row for row in rows if not _is_ingredient_excluded(row)):
+        total = totals.setdefault(row.ingredient_id, [row.ingredient_name, row.ingredient_unit, 0.0])
+        total[2] += _units_used(row)
+    consumed = [
+        (ingredient_id, name, unit, round(amount, 4)) for ingredient_id, (name, unit, amount) in totals.items() if amount > 0
+    ]
+    return sorted(consumed, key=lambda consumption: consumption[1].lower())
+
+
 def ingredient_consumption(
     db: Session,
     date_from: datetime | None = None,
@@ -118,7 +167,7 @@ def ingredient_consumption(
 
     items = [
         IngredientConsumption(ingredient_id=id_, ingredient_name=name, unit=unit, total_quantity=total)
-        for id_, name, unit, total in ingredient_repository.consumption(db, date_from, date_to, ingredient_id)
+        for id_, name, unit, total in consumption_totals(db, date_from, date_to, ingredient_id)
     ]
     # Si se pidió un ingrediente que no se usó, igual se lo informa (con consumo cero).
     if selected is not None and not items:

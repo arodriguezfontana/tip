@@ -10,6 +10,8 @@ la vuelta no se cuenta para los tiempos de llegada de los clientes.
 import logging
 import math
 from dataclasses import dataclass
+from itertools import accumulate
+from typing import NoReturn
 
 import httpx
 
@@ -39,42 +41,55 @@ def _distance_km(a: tuple[float, float], b: tuple[float, float]) -> float:
     return 6371.0 * 2 * math.asin(math.sqrt(h))
 
 
-def _search(address: str, near: tuple[float, float] | None = None, area: str | None = None) -> list[dict]:
-    """Resultados crudos de la Geocoding API. `near` sesga la búsqueda a esa zona; `area` la restringe a un partido."""
+def _geocode_params(address: str, near: tuple[float, float] | None, area: str | None) -> dict:
     region = settings.GOOGLE_MAPS_REGION
     params = {"address": address, "language": "es", "key": settings.GOOGLE_MAPS_API_KEY}
-    components = []
+    components = [
+        *([f"country:{region.upper()}"] if region else []),
+        *([f"administrative_area:{area}"] if area else []),
+    ]
     if region:
         params["region"] = region
-        components.append(f"country:{region.upper()}")
-    if area:
-        components.append(f"administrative_area:{area}")
     if components:
         params["components"] = "|".join(components)
     if near:
         lat, lng = near
         params["bounds"] = f"{lat - _BIAS_DEGREES},{lng - _BIAS_DEGREES}|{lat + _BIAS_DEGREES},{lng + _BIAS_DEGREES}"
-    try:
-        data = httpx.get(settings.GOOGLE_MAPS_GEOCODE_URL, params=params, timeout=15.0).json()
-    except (httpx.HTTPError, ValueError) as exc:
-        logger.error("Error consultando Google Maps: %s", exc)
-        raise RouteUnavailableError("No se pudo consultar Google Maps. Probá de nuevo en un momento.") from exc
+    return params
 
+
+def _raise_geocode_error(status: str | None, data: dict) -> NoReturn:
+    logger.error("Google Maps (geocoding) respondió %s: %s", status, data.get("error_message"))
+    if status in ("REQUEST_DENIED", "OVER_DAILY_LIMIT", "OVER_QUERY_LIMIT"):
+        raise RouteUnavailableError(
+            "Google Maps rechazó la consulta (revisá la clave, que la Geocoding API esté habilitada y la cuota)."
+        )
+    raise RouteUnavailableError("Google Maps no pudo ubicar las direcciones del viaje.")
+
+
+def _geocode_results(data: dict) -> list[dict]:
+    """Resultados de una respuesta de la Geocoding API; falla si Google la rechazó o respondió algo inesperado."""
     status = data.get("status")
     if status == "ZERO_RESULTS":
         return []
     if status != "OK":
-        logger.error("Google Maps (geocoding) respondió %s: %s", status, data.get("error_message"))
-        if status in ("REQUEST_DENIED", "OVER_DAILY_LIMIT", "OVER_QUERY_LIMIT"):
-            raise RouteUnavailableError(
-                "Google Maps rechazó la consulta (revisá la clave, que la Geocoding API esté habilitada y la cuota)."
-            )
-        raise RouteUnavailableError("Google Maps no pudo ubicar las direcciones del viaje.")
+        _raise_geocode_error(status, data)
     results = data.get("results")
     if not isinstance(results, list):
         logger.error("Respuesta inesperada de Google Maps: %s", data)
         raise RouteUnavailableError("Google Maps respondió con un formato inesperado.")
     return results
+
+
+def _search(address: str, near: tuple[float, float] | None = None, area: str | None = None) -> list[dict]:
+    """Resultados crudos de la Geocoding API. `near` sesga la búsqueda a esa zona; `area` la restringe a un partido."""
+    params = _geocode_params(address, near, area)
+    try:
+        data = httpx.get(settings.GOOGLE_MAPS_GEOCODE_URL, params=params, timeout=15.0).json()
+    except (httpx.HTTPError, ValueError) as exc:
+        logger.error("Error consultando Google Maps: %s", exc)
+        raise RouteUnavailableError("No se pudo consultar Google Maps. Probá de nuevo en un momento.") from exc
+    return _geocode_results(data)
 
 
 def _point(result: dict) -> tuple[float, float]:
@@ -124,24 +139,27 @@ class RouteStop:
     leg_seconds: int
 
 
-def calculate_route(origin: str, destinations: list[str]) -> list[RouteStop]:
-    """Paradas en el orden óptimo del recorrido, cada una con el tiempo de manejo desde la anterior."""
-    if not settings.GOOGLE_MAPS_API_KEY:
+_DIRECCIONES_NO_ENCONTRADAS = (
+    "Google Maps no pudo ubicar alguna de las direcciones del viaje. Revisá las direcciones de los pedidos."
+)
+
+
+def _raise_route_error(status_code: int, data: object) -> NoReturn:
+    """Traduce el error con el que respondió la Routes API en un mensaje para el personal."""
+    error = data.get("error", {}) if isinstance(data, dict) else {}
+    status = error.get("status")
+    logger.error("Google Maps respondió %s %s: %s", status_code, status, error.get("message"))
+    if status in ("PERMISSION_DENIED", "UNAUTHENTICATED", "RESOURCE_EXHAUSTED"):
         raise RouteUnavailableError(
-            "Google Maps no está configurado: falta GOOGLE_MAPS_API_KEY, así que no se puede calcular la ruta."
+            "Google Maps rechazó la consulta (revisá la clave, que la Routes API esté habilitada y la cuota)."
         )
-    if not destinations:
-        return []
-    if len(destinations) > MAX_STOPS_PER_TRIP:
-        raise RouteUnavailableError(f"Un viaje admite hasta {MAX_STOPS_PER_TRIP} pedidos.")
+    if status in ("NOT_FOUND", "INVALID_ARGUMENT", "FAILED_PRECONDITION"):
+        raise RouteUnavailableError(_DIRECCIONES_NO_ENCONTRADAS)
+    raise RouteUnavailableError("Google Maps no pudo calcular la ruta del viaje.")
 
-    origin_results = _search(origin)
-    if not origin_results:
-        raise RouteUnavailableError("Google Maps no pudo ubicar la dirección del local. Revisala en la configuración.")
-    origin_point = _point(origin_results[0])
-    area = _area_of(origin_results[0])
-    stops_points = [_locate_near(destination, origin_point, area) for destination in destinations]
 
+def _request_route(origin_point: tuple[float, float], stops_points: list[tuple[float, float]]) -> dict:
+    """Consulta la Routes API por la vuelta completa al local pasando por las paradas, en el orden óptimo."""
     body = {
         "origin": _waypoint(origin_point),
         "destination": _waypoint(origin_point),
@@ -162,40 +180,48 @@ def calculate_route(origin: str, destinations: list[str]) -> list[RouteStop]:
     except (httpx.HTTPError, ValueError) as exc:
         logger.error("Error consultando Google Maps: %s", exc)
         raise RouteUnavailableError("No se pudo consultar Google Maps. Probá de nuevo en un momento.") from exc
-
     if response.status_code != 200:
-        error = data.get("error", {}) if isinstance(data, dict) else {}
-        status = error.get("status")
-        logger.error("Google Maps respondió %s %s: %s", response.status_code, status, error.get("message"))
-        if status in ("PERMISSION_DENIED", "UNAUTHENTICATED", "RESOURCE_EXHAUSTED"):
-            raise RouteUnavailableError(
-                "Google Maps rechazó la consulta (revisá la clave, que la Routes API esté habilitada y la cuota)."
-            )
-        if status in ("NOT_FOUND", "INVALID_ARGUMENT", "FAILED_PRECONDITION"):
-            raise RouteUnavailableError(
-                "Google Maps no pudo ubicar alguna de las direcciones del viaje. Revisá las direcciones de los pedidos."
-            )
-        raise RouteUnavailableError("Google Maps no pudo calcular la ruta del viaje.")
+        _raise_route_error(response.status_code, data)
+    return data
 
+
+def _stops_from_route(data: dict, stops_count: int) -> list[RouteStop]:
     routes = data.get("routes") if isinstance(data, dict) else None
     if not routes:
         # Sin ruta posible entre los puntos (la API responde vacío).
-        raise RouteUnavailableError(
-            "Google Maps no pudo ubicar alguna de las direcciones del viaje. Revisá las direcciones de los pedidos."
-        )
-
+        raise RouteUnavailableError(_DIRECCIONES_NO_ENCONTRADAS)
     try:
         route = routes[0]
-        order = route.get("optimizedIntermediateWaypointIndex") or list(range(len(destinations)))
+        order = route.get("optimizedIntermediateWaypointIndex") or list(range(stops_count))
         legs = route["legs"]
         # Hay un tramo por parada más el de la vuelta al local, que no interesa. La duración viene como "123s".
         return [
             RouteStop(index=order[i], leg_seconds=int(float(str(legs[i]["duration"]).rstrip("s"))))
-            for i in range(len(destinations))
+            for i in range(stops_count)
         ]
     except (KeyError, IndexError, TypeError, ValueError) as exc:
         logger.error("Respuesta inesperada de Google Maps: %s", data)
         raise RouteUnavailableError("Google Maps respondió con un formato inesperado.") from exc
+
+
+def calculate_route(origin: str, destinations: list[str]) -> list[RouteStop]:
+    """Paradas en el orden óptimo del recorrido, cada una con el tiempo de manejo desde la anterior."""
+    if not settings.GOOGLE_MAPS_API_KEY:
+        raise RouteUnavailableError(
+            "Google Maps no está configurado: falta GOOGLE_MAPS_API_KEY, así que no se puede calcular la ruta."
+        )
+    if not destinations:
+        return []
+    if len(destinations) > MAX_STOPS_PER_TRIP:
+        raise RouteUnavailableError(f"Un viaje admite hasta {MAX_STOPS_PER_TRIP} pedidos.")
+
+    origin_results = _search(origin)
+    if not origin_results:
+        raise RouteUnavailableError("Google Maps no pudo ubicar la dirección del local. Revisala en la configuración.")
+    origin_point = _point(origin_results[0])
+    area = _area_of(origin_results[0])
+    stops_points = [_locate_near(destination, origin_point, area) for destination in destinations]
+    return _stops_from_route(_request_route(origin_point, stops_points), len(destinations))
 
 
 def cumulative_eta_minutes(stops: list[RouteStop], tolerance_minutes: int) -> list[int]:
@@ -203,10 +229,8 @@ def cumulative_eta_minutes(stops: list[RouteStop], tolerance_minutes: int) -> li
 
     Cada parada suma el manejo hasta ella más la tolerancia de entrega de las paradas anteriores (lo que tarda el
     repartidor en entregar a cada cliente antes de seguir)."""
-    etas = []
-    elapsed_seconds = 0
-    for position, stop in enumerate(stops):
-        elapsed_seconds += stop.leg_seconds
-        total = elapsed_seconds + position * tolerance_minutes * 60
-        etas.append(max(1, math.ceil(total / 60)))
-    return etas
+    driving_seconds = list(accumulate(stop.leg_seconds for stop in stops))
+    return [
+        max(1, math.ceil((seconds + position * tolerance_minutes * 60) / 60))
+        for position, seconds in enumerate(driving_seconds)
+    ]

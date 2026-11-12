@@ -1,5 +1,6 @@
 import contextlib
 import logging
+from typing import Annotated
 from urllib.parse import urlencode
 
 from fastapi import APIRouter, BackgroundTasks, Depends, Request
@@ -25,7 +26,7 @@ router = APIRouter()
 async def mercadopago_webhook(
     request: Request,
     background_tasks: BackgroundTasks,
-    db: Session = Depends(get_db),
+    db: Annotated[Session, Depends(get_db)],
 ):
     """Webhook para notificaciones de pago de MercadoPago.
 
@@ -58,8 +59,8 @@ class PaymentConfirmationResponse(BaseModel):
     status: str | None
 
 
-@router.post("/confirm", response_model=PaymentConfirmationResponse)
-def mercadopago_confirm(payload: PaymentConfirmation, db: Session = Depends(get_db)) -> PaymentConfirmationResponse:
+@router.post("/confirm")
+def mercadopago_confirm(payload: PaymentConfirmation, db: Annotated[Session, Depends(get_db)]) -> PaymentConfirmationResponse:
     """Endpoint público al que llama la web cuando el cliente vuelve del checkout de MercadoPago.
 
     El estado se consulta directamente a MercadoPago con el id del pago, así que no alcanza con inventar
@@ -86,4 +87,3 @@ def mercadopago_return(request: Request) -> RedirectResponse:
 @router.get("/webhook")
 def mercadopago_webhook_ping():
     return {"status": "ok"}
-

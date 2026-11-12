@@ -27,3 +27,7 @@ class AuthenticationError(DomainError):
 
 class UnsupportedFileError(DomainError):
     """El archivo enviado no tiene un formato aceptado o es demasiado pesado."""
+
+
+class PermissionDeniedError(DomainError):
+    """El usuario está autenticado pero no puede hacer esto ahora (ej. un PIN incorrecto o bloqueado)."""

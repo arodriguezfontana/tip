@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/TopBar';
@@ -23,9 +23,8 @@ import { HandoffNotifications } from '@/components/HandoffNotifications';
 import { PinModal } from '@/components/PinModal';
 import { PinSecurityProvider } from '@/context/PinSecurityContext';
 import { usePinSecurity } from '@/hooks/usePinSecurity';
-import { fetchStoreConfig } from '@/services/storeConfigService';
+import { useStoreConfig } from '@/hooks/useStoreConfig';
 import { applyThemeColor } from '@/utils/theme';
-import type { StoreConfig } from '@/types/storeConfig';
 import type { PinType } from '@/types/security';
 import { panelBackground } from '@/utils/panelBackground';
 import { canKeepMenuOpen } from '@/utils/sidebarDock';
@@ -41,6 +40,9 @@ export default function AdminDashboardPage() {
   );
 }
 
+/** Secciones que piden el PIN de administración para abrirse. */
+const ADMIN_PIN_VIEWS: ViewKey[] = ['estadisticas', 'reporte-ingredientes'];
+
 function AdminDashboardContent() {
   const { logout } = useAuth();
   const navigate = useNavigate();
@@ -50,61 +52,33 @@ function AdminDashboardContent() {
   const [activeView, setActiveView] = useState<ViewKey>('comandas');
   // Con la columna de chats a la derecha, las secciones se corren solo si no entran a su izquierda.
   const [chatColumnVisible, setChatColumnVisible] = useState(false);
-  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  const { storeConfig, setStoreConfig } = useStoreConfig();
 
   const [pendingProtectedView, setPendingProtectedView] = useState<ViewKey | null>(null);
 
+  const cashPinEnabled = Boolean(storeConfig?.cash_pin_enabled);
+  const isProtectedByAdminPin = (view: ViewKey | null) => view !== null && ADMIN_PIN_VIEWS.includes(view);
   const needsAdminPin =
-    !isAdminUnlocked &&
-    (activeView === 'estadisticas' ||
-      activeView === 'reporte-ingredientes' ||
-      pendingProtectedView === 'estadisticas' ||
-      pendingProtectedView === 'reporte-ingredientes');
-
+    !isAdminUnlocked && (isProtectedByAdminPin(activeView) || isProtectedByAdminPin(pendingProtectedView));
   const needsCashPin =
-    !isCashUnlocked &&
-    Boolean(storeConfig?.cash_pin_enabled) &&
-    (activeView === 'caja' || pendingProtectedView === 'caja');
+    !isCashUnlocked && cashPinEnabled && (activeView === 'caja' || pendingProtectedView === 'caja');
 
   const pinModalOpen = needsAdminPin || needsCashPin;
   const pinModalType: PinType = needsAdminPin ? 'admin' : 'cash';
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchStoreConfig()
-      .then((config) => {
-        if (!cancelled) {
-          setStoreConfig(config);
-          applyThemeColor(config.theme_color);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
   };
 
+  // Estadísticas y el reporte de ingredientes piden el PIN de administración; el control de caja, el PIN de caja
+  // si está habilitado. Hasta que se ingresa, la sección queda pendiente.
+  const needsPinToOpen = (view: ViewKey) =>
+    (isProtectedByAdminPin(view) && !isAdminUnlocked) || (view === 'caja' && cashPinEnabled && !isCashUnlocked);
+
   const handleSelectView = (view: ViewKey) => {
-    // 1. Estadísticas o Reporte de ingredientes -> requiere PIN de admin
-    if ((view === 'estadisticas' || view === 'reporte-ingredientes') && !isAdminUnlocked) {
-      setPendingProtectedView(view);
-      if (!canKeepMenuOpen()) setMenuOpen(false);
-      return;
-    }
-
-    // 2. Control de caja -> requiere PIN de caja si está habilitado
-    if (view === 'caja' && storeConfig?.cash_pin_enabled && !isCashUnlocked) {
-      setPendingProtectedView(view);
-      if (!canKeepMenuOpen()) setMenuOpen(false);
-      return;
-    }
-
-    setActiveView(view);
+    if (needsPinToOpen(view)) setPendingProtectedView(view);
+    else setActiveView(view);
     if (!canKeepMenuOpen()) setMenuOpen(false);
   };
 
@@ -168,7 +142,7 @@ function AdminDashboardContent() {
               themeColor={storeConfig?.theme_color}
             />
           </div>
-          {activeView === 'historial' && <HistorialView themeColor={storeConfig?.theme_color} />}
+          {activeView === 'historial' && <HistorialView />}
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}

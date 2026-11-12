@@ -3,13 +3,21 @@
 from fastapi import FastAPI, Request, status
 from fastapi.responses import JSONResponse
 
-from app.core.errors import AuthenticationError, ConflictError, DomainError, NotFoundError, UnsupportedFileError
+from app.core.errors import (
+    AuthenticationError,
+    ConflictError,
+    DomainError,
+    NotFoundError,
+    PermissionDeniedError,
+    UnsupportedFileError,
+)
 
 # Del más específico al más general: se usa el primero que corresponda a la clase del error.
 _STATUS_BY_ERROR: list[tuple[type[DomainError], int]] = [
     (NotFoundError, status.HTTP_404_NOT_FOUND),
     (ConflictError, status.HTTP_409_CONFLICT),
     (AuthenticationError, status.HTTP_401_UNAUTHORIZED),
+    (PermissionDeniedError, status.HTTP_403_FORBIDDEN),
     (UnsupportedFileError, status.HTTP_415_UNSUPPORTED_MEDIA_TYPE),
     (DomainError, status.HTTP_400_BAD_REQUEST),
 ]

@@ -1,38 +1,15 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
+import { IngredientFields } from '@/components/ingredientes/IngredientFields';
+import { IngredientsTable } from '@/components/ingredientes/IngredientsTable';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { createIngredient, deleteIngredient, fetchIngredients, updateIngredient } from '@/services/ingredientService';
-import { INPUT_CLASS } from '@/styles/forms';
 import type { Ingredient, IngredientPayload } from '@/types/ingredient';
 import { getErrorMessage } from '@/utils/errors';
-import { formatCurrency } from '@/utils/currency';
+import { EMPTY_INGREDIENT, toIngredientRequest, validateIngredient } from '@/utils/ingredientForm';
 import { SUGGESTED_UNITS } from '@/utils/ingredients';
 
-function validate(payload: IngredientPayload): string | null {
-  if (!payload.name.trim()) return 'Ingresá el nombre del ingrediente.';
-  if (!payload.unit.trim()) return 'Ingresá la unidad de medida (ej. gramos o unidades).';
-  if (payload.cost !== undefined && (isNaN(payload.cost) || payload.cost < 0)) {
-    return 'El costo unitario debe ser mayor o igual a cero.';
-  }
-  if (payload.extra_price !== undefined && (isNaN(payload.extra_price) || payload.extra_price < 0)) {
-    return 'El precio extra debe ser mayor o igual a cero.';
-  }
-  return null;
-}
-
-function trimmed(payload: IngredientPayload): IngredientPayload {
-  const res: IngredientPayload = {
-    name: payload.name.trim(),
-    unit: payload.unit.trim(),
-  };
-  if (payload.cost !== undefined && !isNaN(payload.cost) && payload.cost > 0) {
-    res.cost = Number(payload.cost);
-  }
-  if (payload.extra_price !== undefined && !isNaN(payload.extra_price) && payload.extra_price > 0) {
-    res.extra_price = Number(payload.extra_price);
-  }
-  return res;
-}
+const NEW_INGREDIENT_CLASSES = { name: 'flex-1', unit: 'sm:w-32', cost: 'sm:w-28', extra: 'sm:w-28' };
 
 export function IngredientesView() {
   // Se vuelve a pedir el listado después de cada cambio (cambia en cuántos productos se usa cada uno).
@@ -44,24 +21,24 @@ export function IngredientesView() {
   } = useAsyncData(fetchIngredients, 'No se pudo cargar la lista de ingredientes.');
   const [actionError, setActionError] = useState<string | null>(null);
 
-  const [newIngredient, setNewIngredient] = useState<IngredientPayload>({ name: '', unit: '', cost: 0, extra_price: 0 });
+  const [newIngredient, setNewIngredient] = useState<IngredientPayload>(EMPTY_INGREDIENT);
   const [creating, setCreating] = useState(false);
 
   const [editingId, setEditingId] = useState<number | null>(null);
-  const [editDraft, setEditDraft] = useState<IngredientPayload>({ name: '', unit: '', cost: 0, extra_price: 0 });
+  const [editDraft, setEditDraft] = useState<IngredientPayload>(EMPTY_INGREDIENT);
   const [savingEdit, setSavingEdit] = useState(false);
 
-  const handleCreate = async (event: FormEvent) => {
+  const handleCreate = async (event: SubmitEvent) => {
     event.preventDefault();
     if (creating) return;
-    const error = validate(newIngredient);
+    const error = validateIngredient(newIngredient);
     setActionError(error);
     if (error) return;
 
     setCreating(true);
     try {
-      await createIngredient(trimmed(newIngredient));
-      setNewIngredient({ name: '', unit: newIngredient.unit, cost: 0, extra_price: 0 });
+      await createIngredient(toIngredientRequest(newIngredient));
+      setNewIngredient({ ...EMPTY_INGREDIENT, unit: newIngredient.unit });
       reload();
     } catch (err) {
       setActionError(getErrorMessage(err, 'No se pudo agregar el ingrediente.'));
@@ -83,13 +60,13 @@ export function IngredientesView() {
 
   const handleSaveEdit = async (id: number) => {
     if (savingEdit) return;
-    const error = validate(editDraft);
+    const error = validateIngredient(editDraft);
     setActionError(error);
     if (error) return;
 
     setSavingEdit(true);
     try {
-      await updateIngredient(id, trimmed(editDraft));
+      await updateIngredient(id, toIngredientRequest(editDraft));
       setEditingId(null);
       reload();
     } catch (err) {
@@ -110,6 +87,8 @@ export function IngredientesView() {
     }
   };
 
+  const isEmpty = ingredients.length === 0;
+
   return (
     <div className="flex flex-col gap-4 max-w-4xl mx-auto lg:h-full">
       <datalist id="ingredient-units">
@@ -128,54 +107,11 @@ export function IngredientesView() {
         </div>
 
         <form onSubmit={handleCreate} className="flex flex-col sm:flex-row gap-2" noValidate>
-          <input
-            type="text"
-            aria-label="Nombre del nuevo ingrediente"
-            placeholder="Nombre (ej. Harina 000)"
-            value={newIngredient.name}
-            onChange={(e) => setNewIngredient({ ...newIngredient, name: e.target.value })}
-            maxLength={100}
-            className={`${INPUT_CLASS} flex-1`}
-          />
-          <input
-            type="text"
-            aria-label="Unidad del nuevo ingrediente"
-            placeholder="Unidad (ej. gramos)"
-            list="ingredient-units"
-            value={newIngredient.unit}
-            onChange={(e) => setNewIngredient({ ...newIngredient, unit: e.target.value })}
-            maxLength={30}
-            className={`${INPUT_CLASS} sm:w-32`}
-          />
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            aria-label="Costo unitario del nuevo ingrediente"
-            placeholder="Costo ($)"
-            value={newIngredient.cost || ''}
-            onChange={(e) =>
-              setNewIngredient({
-                ...newIngredient,
-                cost: e.target.value === '' ? 0 : Number(e.target.value),
-              })
-            }
-            className={`${INPUT_CLASS} sm:w-28`}
-          />
-          <input
-            type="number"
-            min="0"
-            step="0.01"
-            aria-label="Precio extra del nuevo ingrediente"
-            placeholder="Precio extra ($)"
-            value={newIngredient.extra_price || ''}
-            onChange={(e) =>
-              setNewIngredient({
-                ...newIngredient,
-                extra_price: e.target.value === '' ? 0 : Number(e.target.value),
-              })
-            }
-            className={`${INPUT_CLASS} sm:w-28`}
+          <IngredientFields
+            value={newIngredient}
+            onChange={setNewIngredient}
+            subject="del nuevo ingrediente"
+            classes={NEW_INGREDIENT_CLASSES}
           />
           <button
             type="submit"
@@ -194,136 +130,23 @@ export function IngredientesView() {
       )}
 
       <div className="bg-white rounded-2xl border border-gray-100 shadow-xs overflow-hidden flex flex-col lg:min-h-48">
-        {loading && ingredients.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-16">Cargando ingredientes...</p>
-        ) : ingredients.length === 0 ? (
-          <p className="text-sm text-gray-500 text-center py-16">Todavía no cargaste ingredientes.</p>
-        ) : (
-          <div className="overflow-auto lg:min-h-0">
-            <table className="w-full text-left text-sm">
-              <thead className="sticky top-0 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                <tr>
-                  <th className="py-3 px-5">Ingrediente</th>
-                  <th className="py-3 px-5">Unidad</th>
-                  <th className="py-3 px-5">Costo unitario</th>
-                  <th className="py-3 px-5">Precio extra</th>
-                  <th className="py-3 px-5">Usado en</th>
-                  <th className="py-3 px-5 text-right">Acciones</th>
-                </tr>
-              </thead>
-              <tbody className="divide-y divide-gray-100">
-                {ingredients.map((ingredient) =>
-                  editingId === ingredient.id ? (
-                    <tr key={ingredient.id} className="bg-gray-50/50">
-                      <td className="py-2 px-5">
-                        <input
-                          type="text"
-                          aria-label="Nombre del ingrediente"
-                          value={editDraft.name}
-                          onChange={(e) => setEditDraft({ ...editDraft, name: e.target.value })}
-                          maxLength={100}
-                          className={`${INPUT_CLASS} w-full`}
-                        />
-                      </td>
-                      <td className="py-2 px-5">
-                        <input
-                          type="text"
-                          aria-label="Unidad del ingrediente"
-                          list="ingredient-units"
-                          value={editDraft.unit}
-                          onChange={(e) => setEditDraft({ ...editDraft, unit: e.target.value })}
-                          maxLength={30}
-                          className={`${INPUT_CLASS} w-full`}
-                        />
-                      </td>
-                      <td className="py-2 px-5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          aria-label="Costo unitario del ingrediente"
-                          value={editDraft.cost || ''}
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              cost: e.target.value === '' ? 0 : Number(e.target.value),
-                            })
-                          }
-                          className={`${INPUT_CLASS} w-full`}
-                        />
-                      </td>
-                      <td className="py-2 px-5">
-                        <input
-                          type="number"
-                          min="0"
-                          step="0.01"
-                          aria-label="Precio extra del ingrediente"
-                          value={editDraft.extra_price || ''}
-                          onChange={(e) =>
-                            setEditDraft({
-                              ...editDraft,
-                              extra_price: e.target.value === '' ? 0 : Number(e.target.value),
-                            })
-                          }
-                          className={`${INPUT_CLASS} w-full`}
-                        />
-                      </td>
-                      <td className="py-2 px-5 text-gray-500">{ingredient.products_count} productos</td>
-                      <td className="py-2 px-5 text-right whitespace-nowrap space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => handleSaveEdit(ingredient.id)}
-                          disabled={savingEdit}
-                          className="text-xs font-semibold rounded-lg bg-black text-white px-3 py-1.5 hover:bg-gray-800 disabled:opacity-60"
-                        >
-                          Guardar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => setEditingId(null)}
-                          className="text-xs font-semibold rounded-lg px-3 py-1.5 text-gray-600 hover:bg-gray-200"
-                        >
-                          Cancelar
-                        </button>
-                      </td>
-                    </tr>
-                  ) : (
-                    <tr key={ingredient.id} className="hover:bg-gray-50/50">
-                      <td className="py-3 px-5 font-semibold text-gray-900">{ingredient.name}</td>
-                      <td className="py-3 px-5 text-gray-600">{ingredient.unit}</td>
-                      <td className="py-3 px-5 text-gray-600 font-medium">
-                        {ingredient.cost ? formatCurrency(ingredient.cost) : '—'}
-                      </td>
-                      <td className="py-3 px-5 text-gray-600">
-                        {ingredient.extra_price ? formatCurrency(ingredient.extra_price) : '—'}
-                      </td>
-                      <td className="py-3 px-5 text-gray-500">
-                        {ingredient.products_count === 1 ? '1 producto' : `${ingredient.products_count} productos`}
-                      </td>
-                      <td className="py-3 px-5 text-right whitespace-nowrap space-x-2">
-                        <button
-                          type="button"
-                          onClick={() => startEditing(ingredient)}
-                          aria-label={`Editar ${ingredient.name}`}
-                          className="text-xs font-semibold rounded-lg px-3 py-1.5 text-gray-700 hover:bg-gray-200"
-                        >
-                          Editar
-                        </button>
-                        <button
-                          type="button"
-                          onClick={() => handleDelete(ingredient)}
-                          aria-label={`Eliminar ${ingredient.name}`}
-                          className="text-xs font-semibold rounded-lg px-3 py-1.5 text-red-600 hover:bg-red-50"
-                        >
-                          Eliminar
-                        </button>
-                      </td>
-                    </tr>
-                  )
-                )}
-              </tbody>
-            </table>
-          </div>
+        {isEmpty && (
+          <p className="text-sm text-gray-500 text-center py-16">
+            {loading ? 'Cargando ingredientes...' : 'Todavía no cargaste ingredientes.'}
+          </p>
+        )}
+        {!isEmpty && (
+          <IngredientsTable
+            ingredients={ingredients}
+            editingId={editingId}
+            draft={editDraft}
+            savingEdit={savingEdit}
+            onDraftChange={setEditDraft}
+            onStartEditing={startEditing}
+            onSaveEdit={handleSaveEdit}
+            onCancelEdit={() => setEditingId(null)}
+            onDelete={handleDelete}
+          />
         )}
       </div>
     </div>

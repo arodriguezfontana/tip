@@ -1,20 +1,22 @@
 import json
 import re
+from collections import Counter
 from collections.abc import Iterable
+from dataclasses import dataclass
 from datetime import datetime, timedelta, timezone
 from decimal import Decimal
 from enum import Enum
-from typing import TYPE_CHECKING, Any, ClassVar
+from typing import TYPE_CHECKING, Any, ClassVar, cast
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
-    Column,
     DateTime,
     ForeignKey,
     Integer,
     String,
+    Table,
     Text,
     UniqueConstraint,
     event,
@@ -26,7 +28,7 @@ from sqlalchemy import (
 from sqlalchemy import column as sa_column
 from sqlalchemy import table as sa_table
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import Session, object_session, relationship, validates
+from sqlalchemy.orm import Mapped, Session, mapped_column, object_session, relationship, validates
 from sqlalchemy.sql import func
 
 from app.core.channels import Channel
@@ -36,7 +38,10 @@ from app.core.phone import normalize_phone
 from app.db.base_class import Base
 
 if TYPE_CHECKING:
-    pass
+    from app.models.cash_shift import CashShift
+    from app.models.delivery_driver import DeliveryDriver, DeliveryTrip
+    from app.models.menu import Product
+    from app.models.promotion import Promotion
 
 
 class _StrEnum(str, Enum):
@@ -154,6 +159,151 @@ def format_half_and_half_name(p1_name: str, p2_name: str, size_hint: str = "") -
     return f"{base} [1/2 {f1} | 1/2 {f2}]"
 
 
+# Tipos de modificación que suman al precio unitario (los que quitan algo no cobran ni descuentan).
+_PRICED_MODIFICATION_TYPES = ("positive", "extra", "add")
+
+
+def modifications_extra_cost(modifications: list[dict]) -> Decimal:
+    """Lo que suman al precio unitario las modificaciones que agregan algo."""
+    return sum(
+        (
+            to_money(m.get("price", 0))
+            for m in modifications
+            if (m.get("type") in _PRICED_MODIFICATION_TYPES or m.get("action") == "add") and m.get("price")
+        ),
+        Decimal(0),
+    )
+
+
+def complete_line(line: tuple) -> tuple:
+    """(producto, cantidad, segundo producto, nombre propio, modificaciones, promoción) con None en lo que falte.
+
+    Las líneas de un pedido pueden traer solo (producto, cantidad) o todos sus datos.
+    """
+    product, quantity, secondary_product, custom_name, modifications, promotion = (*line, None, None, None, None)[:6]
+    return product, quantity, secondary_product, custom_name, list(modifications) if modifications else [], promotion
+
+
+def _line_key(
+    product_id: int | None,
+    secondary_product_id: int | None,
+    promotion_id: int | None,
+    custom_name: str | None,
+    modifications: list[dict] | None,
+) -> tuple:
+    """Identifica a las líneas iguales de un pedido: se suman en vez de repetirse."""
+    modifications_key = json.dumps(modifications, sort_keys=True) if modifications else ""
+    if promotion_id:
+        return ("promo", promotion_id, custom_name, modifications_key)
+    return (product_id, secondary_product_id, custom_name, modifications_key)
+
+
+@dataclass
+class _OrderLine:
+    """Producto, combinación de dos gustos o promoción que se pide, con su precio unitario actual."""
+
+    product: Any
+    secondary_product: Any
+    promotion: Any
+    custom_name: str | None
+    modifications: list[dict]
+    quantity: int
+    unit_price: Decimal
+
+    @classmethod
+    def from_tuple(cls, line: tuple) -> "_OrderLine":
+        """Arma la línea desde (producto, cantidad[, segundo producto, nombre propio, modificaciones, promoción])."""
+        product, quantity, secondary_product, custom_name, modifications, promotion = complete_line(line)
+        if quantity < 1:
+            raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
+        if promotion is not None:
+            custom_name = custom_name or promotion.name
+            return cls(product, secondary_product, promotion, custom_name, modifications, quantity, promotion.price)
+        if secondary_product:
+            custom_name = custom_name or format_half_and_half_name(product.name, secondary_product.name)
+            base_price = max(product.price, secondary_product.price)
+        else:
+            base_price = product.price
+        unit_price = base_price + modifications_extra_cost(modifications)
+        return cls(product, secondary_product, None, custom_name, modifications, quantity, unit_price)
+
+    @property
+    def key(self) -> tuple:
+        return _line_key(
+            self.product.id if self.product else None,
+            self.secondary_product.id if self.secondary_product else None,
+            self.promotion.id if self.promotion else None,
+            self.custom_name,
+            self.modifications,
+        )
+
+    @property
+    def label(self) -> str:
+        if self.custom_name:
+            return self.custom_name
+        if self.promotion:
+            return self.promotion.name
+        return self.product.name if self.product else ""
+
+    def unavailable_names(self) -> list[str]:
+        if self.promotion is not None:
+            return [] if self.promotion.is_available else [self.promotion.name]
+        products = (self.product, self.secondary_product)
+        return [p.name for p in products if p is not None and not p.is_available]
+
+    def to_order_item(self, added_later: bool = False) -> "OrderItem":
+        return OrderItem(
+            product_id=self.product.id if self.product else None,
+            secondary_product_id=self.secondary_product.id if self.secondary_product else None,
+            promotion_id=self.promotion.id if self.promotion else None,
+            product=self.product,
+            secondary_product=self.secondary_product,
+            promotion=self.promotion,
+            quantity=self.quantity,
+            unit_price=self.unit_price,
+            custom_name=self.custom_name,
+            modifications=self.modifications,
+            added_later=added_later,
+        )
+
+
+def _add_line(consolidated: dict[tuple, _OrderLine], line: _OrderLine) -> None:
+    """Suma la línea a otra igual que ya esté, o la agrega."""
+    existing = consolidated.get(line.key)
+    if existing is None:
+        consolidated[line.key] = line
+    else:
+        existing.quantity += line.quantity
+
+
+def _consolidate_lines(lines: Iterable[tuple], empty_message: str) -> dict[tuple, _OrderLine]:
+    """Las líneas pedidas, con las iguales sumadas. Falla si no hay ninguna o alguna tiene una cantidad inválida."""
+    consolidated: dict[tuple, _OrderLine] = {}
+    for line in map(_OrderLine.from_tuple, lines):
+        _add_line(consolidated, line)
+    if not consolidated:
+        raise InvalidOrderError(empty_message)
+    return consolidated
+
+
+def _require_available(lines: Iterable[_OrderLine]) -> None:
+    unavailable = [name for line in lines for name in line.unavailable_names()]
+    if unavailable:
+        raise InvalidOrderError(
+            f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
+        )
+
+
+def _require_within_max_quantity(lines: dict[tuple, _OrderLine], already_ordered: Counter) -> None:
+    exceeded = [
+        line.label for key, line in lines.items() if already_ordered[key] + line.quantity > MAX_QUANTITY_PER_ITEM
+    ]
+    if exceeded:
+        raise InvalidOrderError(
+            f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
+        )
+
+
 class Order(Base):
     __tablename__ = "orders"
     __table_args__ = (
@@ -179,60 +329,60 @@ class Order(Base):
         OrderStatus.CANCELLED: frozenset(),
     }
 
-    id = Column(Integer, primary_key=True, index=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
     # Turno de caja al que pertenece la numeración del pedido (0 si todavía no hubo ningún turno) y su número dentro de
     # él: es el "#N" que ven el personal y el cliente, y arranca de nuevo en 1 con cada turno que se abre. Un pedido que
     # entra con la caja cerrada sigue la numeración del último turno. El `id` sigue siendo la clave interna.
-    numbering_shift_id = Column(Integer, nullable=False)
-    shift_number = Column(Integer, nullable=False)
-    customer_name = Column(String(150), nullable=False)
-    shipping_address = Column(String(255), nullable=False)
+    numbering_shift_id: Mapped[int] = mapped_column(Integer, nullable=False)
+    shift_number: Mapped[int] = mapped_column(Integer, nullable=False)
+    customer_name: Mapped[str] = mapped_column(String(150), nullable=False)
+    shipping_address: Mapped[str] = mapped_column(String(255), nullable=False)
     # Total a pagar: suma de los productos más el costo de envío.
-    total_amount = Column(MoneyColumn, nullable=False)
-    shipping_cost = Column(MoneyColumn, nullable=False, default=0, server_default="0")
+    total_amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    shipping_cost: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, default=0, server_default="0")
     # Sin informar (None) en los pedidos del bot y de la web, que se cobran al entregar.
-    payment_method = Column(String(20), nullable=True)
-    is_paid = Column(Boolean, nullable=False, default=False, server_default=false())
+    payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    is_paid: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     # Parte del total ya cobrada cuando el pedido no está abonado del todo: pasa al agregarle productos a un
     # pedido que ya se había pagado. Con el pedido abonado (is_paid) se paga el total y este campo no se usa.
-    paid_amount = Column(MoneyColumn, nullable=False, default=0, server_default="0")
+    paid_amount: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, default=0, server_default="0")
     # Cómo se salda la diferencia de un pago parcial (efectivo al recibir o link de MercadoPago).
-    balance_payment_method = Column(String(20), nullable=True)
+    balance_payment_method: Mapped[str | None] = mapped_column(String(20), nullable=True)
     # Se agregaron productos y cocina todavía no lo vio (alerta en el tablero de comandas).
-    kitchen_update_pending = Column(Boolean, nullable=False, default=False, server_default=false())
-    status = Column(String(50), nullable=False, default=OrderStatus.PENDING.value)
-    delivery_method = Column(String(20), nullable=False, server_default=DeliveryMethod.DELIVERY.value)
+    kitchen_update_pending: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    status: Mapped[str] = mapped_column(String(50), nullable=False, default=OrderStatus.PENDING.value)
+    delivery_method: Mapped[str] = mapped_column(String(20), nullable=False, server_default=DeliveryMethod.DELIVERY.value)
     # Pedidos del bot: canal por el que habló el cliente y su chat en ese canal (para avisarle novedades).
-    channel = Column(String(20), nullable=True)
-    chat_id = Column(String(32), nullable=True)
-    customer_id = Column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
-    delivery_driver_id = Column(
+    channel: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    chat_id: Mapped[str | None] = mapped_column(String(32), nullable=True)
+    customer_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("users.id", ondelete="SET NULL"), nullable=True, index=True)
+    delivery_driver_id: Mapped[int | None] = mapped_column(
         Integer, ForeignKey("delivery_drivers.id", ondelete="SET NULL"), nullable=True, index=True
     )
-    cash_shift_id = Column(Integer, ForeignKey("cash_shifts.id", ondelete="SET NULL"), nullable=True, index=True)
-    source = Column(String(20), nullable=False, default=OrderSource.BOT.value, server_default=OrderSource.BOT.value)
-    customer_phone = Column(String(30), nullable=True)
-    notes = Column(Text, nullable=True)
-    estimated_minutes = Column(Integer, nullable=True)
+    cash_shift_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("cash_shifts.id", ondelete="SET NULL"), nullable=True, index=True)
+    source: Mapped[str] = mapped_column(String(20), nullable=False, default=OrderSource.BOT.value, server_default=OrderSource.BOT.value)
+    customer_phone: Mapped[str | None] = mapped_column(String(30), nullable=True)
+    notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    estimated_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # De dónde salió la demora estimada: del historial del local, la cargó el personal o es la estándar.
-    estimate_source = Column(String(10), nullable=True)
+    estimate_source: Mapped[str | None] = mapped_column(String(10), nullable=True)
     # Viaje en el que salió el pedido (None mientras el viaje se está armando), su parada y la llegada estimada.
-    trip_id = Column(Integer, ForeignKey("delivery_trips.id", ondelete="SET NULL"), nullable=True, index=True)
-    trip_stop = Column(Integer, nullable=True)
-    eta_minutes = Column(Integer, nullable=True)
+    trip_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("delivery_trips.id", ondelete="SET NULL"), nullable=True, index=True)
+    trip_stop: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    eta_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
     # Demora real: minutos desde que el pedido ingresó al sistema hasta que se finalizó. Se guarda al finalizarlo y es
     # la medida con la que se calcula la demora automática (ver delivery_time_service).
-    actual_minutes = Column(Integer, nullable=True)
-    scheduled_for = Column(DateTime(timezone=True), nullable=True)
-    mp_preference_id = Column(String(100), nullable=True)
-    mp_payment_id = Column(String(100), nullable=True)
-    created_at = Column(DateTime(timezone=True), server_default=func.now(), nullable=False)
+    actual_minutes: Mapped[int | None] = mapped_column(Integer, nullable=True)
+    scheduled_for: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), nullable=True)
+    mp_preference_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    mp_payment_id: Mapped[str | None] = mapped_column(String(100), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), server_default=func.now(), nullable=False)
 
-    items = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
-    delivery_driver = relationship("DeliveryDriver", back_populates="orders")
-    trip = relationship("DeliveryTrip", back_populates="orders")
-    cash_shift = relationship("CashShift", back_populates="orders", foreign_keys=[cash_shift_id])
-    status_events = relationship(
+    items: Mapped[list["OrderItem"]] = relationship("OrderItem", back_populates="order", cascade="all, delete-orphan")
+    delivery_driver: Mapped["DeliveryDriver | None"] = relationship("DeliveryDriver", back_populates="orders")
+    trip: Mapped["DeliveryTrip | None"] = relationship("DeliveryTrip", back_populates="orders")
+    cash_shift: Mapped["CashShift | None"] = relationship("CashShift", back_populates="orders", foreign_keys=[cash_shift_id])
+    status_events: Mapped[list["OrderStatusEvent"]] = relationship(
         "OrderStatusEvent", back_populates="order", cascade="all, delete-orphan", passive_deletes=True
     )
 
@@ -252,7 +402,7 @@ class Order(Base):
         if method == DeliveryMethod.DELIVERY and not (address or "").strip():
             raise InvalidOrderError("La dirección es obligatoria para envíos a domicilio.")
         self.delivery_method = method.value
-        self.shipping_address = PICKUP_ADDRESS if method == DeliveryMethod.PICKUP else address.strip()
+        self.shipping_address = PICKUP_ADDRESS if method == DeliveryMethod.PICKUP else (address or "").strip()
 
     # --- Productos y total --------------------------------------------------------------------------
 
@@ -262,94 +412,21 @@ class Order(Base):
         Valida las reglas comunes a todos los canales: que haya productos o promociones, que estén disponibles y que no
         se supere el máximo de unidades por producto. Las líneas de un mismo producto o promoción se suman.
         """
-        parsed_lines: list[tuple[Any, int, Any, str | None, list[dict], Any]] = []
-        for line in lines:
-            promotion = None
-            if len(line) == 2:
-                product, quantity = line
-                secondary_product, custom_name, mods = None, None, []
-            elif len(line) == 4:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = []
-            elif len(line) == 5:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if line[4] else []
-            else:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if line[4] else []
-                promotion = line[5] if len(line) > 5 else None
-            if quantity < 1:
-                raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name, mods, promotion))
-
-        if not parsed_lines:
-            raise InvalidOrderError("El pedido no tiene productos.")
-
-        consolidated: dict[tuple, tuple[Any, Any, str | None, Decimal, int, list[dict], Any]] = {}
-        for p1, qty, p2, cname, mods, promo in parsed_lines:
-            if promo is not None:
-                cname = cname or promo.name
-                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-                key = ("promo", promo.id, cname, mods_key)
-                price = promo.price
-            else:
-                cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-                key = (p1.id, p2.id if p2 else None, cname, mods_key)
-                base_price = max(p1.price, p2.price) if p2 else p1.price
-                extra_cost = sum(
-                    to_money(m.get("price", 0))
-                    for m in mods
-                    if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
-                )
-                price = base_price + extra_cost
-
-            if key in consolidated:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods, prev_promo = consolidated[key]
-                consolidated[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods, prev_promo)
-            else:
-                consolidated[key] = (p1, p2, cname, price, qty, mods, promo)
-
-        unavailable = []
-        for p1, p2, _, _, _, _, promo in consolidated.values():
-            if promo is not None:
-                if not promo.is_available:
-                    unavailable.append(promo.name)
-            else:
-                if p1 is not None and not p1.is_available:
-                    unavailable.append(p1.name)
-                if p2 is not None and not p2.is_available:
-                    unavailable.append(p2.name)
-        if unavailable:
-            raise InvalidOrderError(
-                f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
-            )
-
-        exceeded = []
-        for p1, _p2, cname, _, qty, _, promo in consolidated.values():
-            if qty > MAX_QUANTITY_PER_ITEM:
-                exceeded.append(cname or (promo.name if promo else (p1.name if p1 else "")))
-        if exceeded:
-            raise InvalidOrderError(
-                f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
-            )
-
-        self.items = [
-            OrderItem(
-                product_id=p1.id if p1 else None,
-                secondary_product_id=p2.id if p2 else None,
-                promotion_id=promo.id if promo else None,
-                product=p1,
-                secondary_product=p2,
-                promotion=promo,
-                quantity=qty,
-                unit_price=price,
-                custom_name=cname,
-                modifications=mods,
-            )
-            for p1, p2, cname, price, qty, mods, promo in consolidated.values()
-        ]
+        consolidated = _consolidate_lines(lines, "El pedido no tiene productos.")
+        _require_available(consolidated.values())
+        _require_within_max_quantity(consolidated, Counter())
+        self.items = [line.to_order_item() for line in consolidated.values()]
         self.total_amount = self.subtotal + (self.shipping_cost or Decimal(0))
+
+    def _ordered_quantities(self) -> Counter:
+        """Unidades que ya tiene el pedido de cada línea (ver _line_key)."""
+        ordered: Counter = Counter()
+        for item in self.items:
+            key = _line_key(
+                item.product_id, item.secondary_product_id, item.promotion_id, item.custom_name, item.modifications
+            )
+            ordered[key] += item.quantity
+        return ordered
 
     @property
     def subtotal(self) -> Decimal:
@@ -472,105 +549,13 @@ class Order(Base):
         if not self.is_within_modification_window(now):
             raise ModificationWindowClosedError()
 
-        parsed_lines: list[tuple[Any, int, Any, str | None, list[dict], Any]] = []
-        for line in lines:
-            promotion = None
-            if len(line) == 2:
-                product, quantity = line
-                secondary_product, custom_name, mods = None, None, []
-            elif len(line) == 4:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = []
-            elif len(line) == 5:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if line[4] else []
-            else:
-                product, quantity, secondary_product, custom_name = line[:4]
-                mods = list(line[4]) if line[4] else []
-                promotion = line[5] if len(line) > 5 else None
-            if quantity < 1:
-                raise InvalidOrderError("Hay una cantidad inválida en el pedido.")
-            parsed_lines.append((product, quantity, secondary_product, custom_name, mods, promotion))
-
-        if not parsed_lines:
-            raise InvalidOrderError("No hay productos para agregar.")
-
-        added: dict[tuple, tuple[Any, Any, str | None, Decimal, int, list[dict], Any]] = {}
-        for p1, qty, p2, cname, mods, promo in parsed_lines:
-            if promo is not None:
-                cname = cname or promo.name
-                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-                key = ("promo", promo.id, cname, mods_key)
-                price = promo.price
-            else:
-                cname = cname or (format_half_and_half_name(p1.name, p2.name) if p2 else None)
-                mods_key = json.dumps(mods, sort_keys=True) if mods else ""
-                key = (p1.id, p2.id if p2 else None, cname, mods_key)
-                base_price = max(p1.price, p2.price) if p2 else p1.price
-                extra_cost = sum(
-                    to_money(m.get("price", 0))
-                    for m in mods
-                    if (m.get("type") in ("positive", "extra", "add") or m.get("action") == "add") and m.get("price")
-                )
-                price = base_price + extra_cost
-
-            if key in added:
-                prev_p1, prev_p2, prev_name, prev_price, prev_qty, prev_mods, prev_promo = added[key]
-                added[key] = (prev_p1, prev_p2, prev_name, prev_price, prev_qty + qty, prev_mods, prev_promo)
-            else:
-                added[key] = (p1, p2, cname, price, qty, mods, promo)
-
-        unavailable = []
-        for p1, p2, _, _, _, _, promo in added.values():
-            if promo is not None:
-                if not promo.is_available:
-                    unavailable.append(promo.name)
-            else:
-                if p1 is not None and not p1.is_available:
-                    unavailable.append(p1.name)
-                if p2 is not None and not p2.is_available:
-                    unavailable.append(p2.name)
-        if unavailable:
-            raise InvalidOrderError(
-                f"Estos productos no están disponibles en este momento: {', '.join(dict.fromkeys(unavailable))}."
-            )
-
-        current_quantities: dict[tuple, int] = {}
-        for item in self.items:
-            mods_key = json.dumps(item.modifications, sort_keys=True) if item.modifications else ""
-            if item.promotion_id:
-                key = ("promo", item.promotion_id, item.custom_name, mods_key)
-            else:
-                key = (item.product_id, item.secondary_product_id, item.custom_name, mods_key)
-            current_quantities[key] = current_quantities.get(key, 0) + item.quantity
-
-        exceeded = []
-        for key, (p1, _p2, cname, _, qty, _, promo) in added.items():
-            if current_quantities.get(key, 0) + qty > MAX_QUANTITY_PER_ITEM:
-                exceeded.append(cname or (promo.name if promo else (p1.name if p1 else "")))
-        if exceeded:
-            raise InvalidOrderError(
-                f"Superaste la cantidad máxima ({MAX_QUANTITY_PER_ITEM} unidades) para: {', '.join(exceeded)}."
-            )
+        added = _consolidate_lines(lines, "No hay productos para agregar.")
+        _require_available(added.values())
+        _require_within_max_quantity(added, self._ordered_quantities())
 
         previous_total = to_money(self.total_amount)
         was_paid = bool(self.is_paid)
-        new_items = [
-            OrderItem(
-                product_id=p1.id if p1 else None,
-                secondary_product_id=p2.id if p2 else None,
-                promotion_id=promo.id if promo else None,
-                product=p1,
-                secondary_product=p2,
-                promotion=promo,
-                quantity=qty,
-                unit_price=price,
-                custom_name=cname,
-                modifications=mods,
-                added_later=True,
-            )
-            for p1, p2, cname, price, qty, mods, promo in added.values()
-        ]
+        new_items = [line.to_order_item(added_later=True) for line in added.values()]
         self.items.extend(new_items)
         cost = sum((item.subtotal for item in new_items), Decimal(0))
         self.total_amount = previous_total + cost
@@ -607,10 +592,10 @@ class Order(Base):
         if not self.can_transition_to(new_status):
             raise InvalidTransitionError(self.status, new_status.value)
 
-        if self.scheduled_for is not None:
-            if estimated_minutes is not None:
-                raise ScheduledOrderEstimateError()
-        elif new_status == OrderStatus.CONFIRMED and estimated_minutes is None:
+        is_scheduled = self.scheduled_for is not None
+        if is_scheduled and estimated_minutes is not None:
+            raise ScheduledOrderEstimateError()
+        if not is_scheduled and new_status == OrderStatus.CONFIRMED and estimated_minutes is None:
             estimated_minutes = current_delay_minutes
             estimate_source = EstimateSource.DEFAULT
 
@@ -638,36 +623,39 @@ class Order(Base):
 
     @property
     def sectors(self) -> list[str]:
-        seen = set()
-        res = []
-        for item in self.items:
-            for s in item.all_sectors:
-                if s not in seen:
-                    seen.add(s)
-                    res.append(s)
-        return res
+        """Sectores que intervienen en el pedido, sin repetir y en orden de aparición."""
+        return list(dict.fromkeys(sector for item in self.items for sector in item.all_sectors))
+
+
+def _modification_tag(modification: dict) -> str:
+    """La etiqueta con la que la comanda resalta una modificación (ej. "[SIN CEBOLLA]", "[EXTRA QUESO]")."""
+    if modification.get("tag"):
+        return modification["tag"]
+    name = modification.get("name", "").upper()
+    is_removal = modification.get("type") == "negative" or modification.get("action") == "remove"
+    return f"[SIN {name}]" if is_removal else f"[EXTRA {name}]"
 
 
 class OrderItem(Base):
     __tablename__ = "order_items"
 
-    id = Column(Integer, primary_key=True, index=True)
-    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
-    product_id = Column(Integer, ForeignKey("products.id"), nullable=True)
-    secondary_product_id = Column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
-    promotion_id = Column(Integer, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True)
-    custom_name = Column(String(255), nullable=True)
-    quantity = Column(Integer, nullable=False)
-    unit_price = Column(MoneyColumn, nullable=False)
-    is_prepared = Column(Boolean, nullable=False, default=False, server_default=false())
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False)
+    product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id"), nullable=True)
+    secondary_product_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("products.id", ondelete="SET NULL"), nullable=True)
+    promotion_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("promotions.id", ondelete="SET NULL"), nullable=True)
+    custom_name: Mapped[str | None] = mapped_column(String(255), nullable=True)
+    quantity: Mapped[int] = mapped_column(Integer, nullable=False)
+    unit_price: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    is_prepared: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
     # Se agregó después de registrado el pedido (cocina lo ve resaltado).
-    added_later = Column(Boolean, nullable=False, default=False, server_default=false())
-    modifications = Column(JSON, nullable=True, default=list)
+    added_later: Mapped[bool] = mapped_column(Boolean, nullable=False, default=False, server_default=false())
+    modifications: Mapped[Any | None] = mapped_column(JSON, nullable=True, default=list)
 
-    order = relationship("Order", back_populates="items")
-    product = relationship("Product", foreign_keys=[product_id])
-    secondary_product = relationship("Product", foreign_keys=[secondary_product_id])
-    promotion = relationship("Promotion", foreign_keys=[promotion_id])
+    order: Mapped["Order"] = relationship("Order", back_populates="items")
+    product: Mapped["Product | None"] = relationship("Product", foreign_keys=[product_id])
+    secondary_product: Mapped["Product | None"] = relationship("Product", foreign_keys=[secondary_product_id])
+    promotion: Mapped["Promotion | None"] = relationship("Promotion", foreign_keys=[promotion_id])
 
     @validates("unit_price")
     def _as_money(self, _key: str, value) -> Decimal:
@@ -685,14 +673,16 @@ class OrderItem(Base):
 
     @property
     def comanda_display(self) -> str:
+        """El ítem como se imprime en la comanda: la promo con sus productos, o el producto con sus modificaciones."""
         if self.promotion:
-            items_str = ", ".join(f"{it.quantity}x {it.product.name}" for it in self.promotion.items if it.product) if self.promotion.items else ""
-            return f"PROMO: {self.promotion.name}" + (f" ({items_str})" if items_str else "")
-        tags = " ".join(
-            m.get("tag") or (f"[SIN {m.get('name', '').upper()}]" if m.get("type") == "negative" or m.get("action") == "remove" else f"[EXTRA {m.get('name', '').upper()}]")
-            for m in (self.modifications or [])
-        ).strip()
-        return f"{self.display_name} {tags}".strip() if tags else self.display_name
+            return self._promotion_comanda_text(self.promotion)
+        tags = " ".join(_modification_tag(modification) for modification in (self.modifications or []))
+        return f"{self.display_name} {tags}".strip()
+
+    @staticmethod
+    def _promotion_comanda_text(promotion: "Promotion") -> str:
+        included = ", ".join(f"{it.quantity}x {it.product.name}" for it in promotion.items if it.product)
+        return f"PROMO: {promotion.name}" + (f" ({included})" if included else "")
 
     @property
     def subtotal(self) -> Decimal:
@@ -701,25 +691,18 @@ class OrderItem(Base):
     @property
     def all_sectors(self) -> list[str]:
         if self.promotion and self.promotion.items:
-            sectors = []
-            for it in self.promotion.items:
-                if it.product:
-                    sec = it.product.effective_sector
-                    if sec not in sectors:
-                        sectors.append(sec)
-            return sectors if sectors else ["cocina"]
+            return list(dict.fromkeys(self._promotion_sectors())) or ["cocina"]
         return [self.sector]
 
     @property
     def sector(self) -> str:
         if self.promotion and self.promotion.items:
-            sectors = [it.product.effective_sector for it in self.promotion.items if it.product]
-            if "cocina" in sectors:
-                return "cocina"
-            return sectors[0] if sectors else "cocina"
-        if self.product:
-            return self.product.effective_sector
-        return "cocina"
+            sectors = self._promotion_sectors()
+            return "cocina" if "cocina" in sectors or not sectors else sectors[0]
+        return self.product.effective_sector if self.product else "cocina"
+
+    def _promotion_sectors(self) -> list[str]:
+        return [it.product.effective_sector for it in (self.promotion.items if self.promotion else []) if it.product]
 
 
 class OrderStatusEvent(Base):
@@ -729,14 +712,14 @@ class OrderStatusEvent(Base):
 
     __tablename__ = "order_status_events"
 
-    id = Column(Integer, primary_key=True)
-    order_id = Column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
-    status = Column(String(50), nullable=False)
-    occurred_at = Column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
+    order_id: Mapped[int] = mapped_column(Integer, ForeignKey("orders.id", ondelete="CASCADE"), nullable=False, index=True)
+    status: Mapped[str] = mapped_column(String(50), nullable=False)
+    occurred_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False, default=lambda: datetime.now(timezone.utc))
     # Otros pedidos en cola (estado Confirmado) en el momento del cambio, sin contar a este.
-    queue_size = Column(Integer, nullable=False, default=0)
+    queue_size: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
 
-    order = relationship("Order", back_populates="status_events")
+    order: Mapped["Order"] = relationship("Order", back_populates="status_events")
 
 
 def _record_status_event(connection, order: "Order") -> None:
@@ -746,7 +729,7 @@ def _record_status_event(connection, order: "Order") -> None:
         .where(Order.__table__.c.status == OrderStatus.CONFIRMED.value, Order.__table__.c.id != order.id)
     ).scalar()
     connection.execute(
-        insert(OrderStatusEvent.__table__).values(
+        insert(cast(Table, OrderStatusEvent.__table__)).values(
             order_id=order.id,
             status=order.status,
             occurred_at=datetime.now(timezone.utc),
@@ -777,7 +760,8 @@ def _assign_shift_number(_mapper, connection, order: "Order") -> None:
             select(func.max(table.c.shift_number)).where(table.c.numbering_shift_id == order.numbering_shift_id)
         ).scalar()
         # Varios pedidos que se guardan en un mismo flush todavía no están en la base: se cuentan aparte.
-        assigned = object_session(order).info.setdefault(_SHIFT_NUMBERS_KEY, {})
+        session = object_session(order)
+        assigned = session.info.setdefault(_SHIFT_NUMBERS_KEY, {}) if session is not None else {}
         number = max(last or 0, assigned.get(order.numbering_shift_id, 0)) + 1
         assigned[order.numbering_shift_id] = number
         order.shift_number = number

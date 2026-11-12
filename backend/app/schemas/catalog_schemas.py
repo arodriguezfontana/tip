@@ -27,17 +27,13 @@ class ProductPayload(BaseModel):
     @classmethod
     def _limpiar_restricciones(cls, value: list[str]) -> list[str]:
         """Sin vacías ni repetidas (sin distinguir mayúsculas), conservando el orden."""
-        vistas: set[str] = set()
-        limpias = []
-        for restriccion in (r.strip() for r in value):
-            if not restriccion:
-                continue
-            if len(restriccion) > 40:
-                raise ValueError("Cada restricción alimentaria puede tener hasta 40 caracteres.")
-            if restriccion.lower() not in vistas:
-                vistas.add(restriccion.lower())
-                limpias.append(restriccion)
-        return limpias
+        restricciones = [r.strip() for r in value if r.strip()]
+        if any(len(restriccion) > 40 for restriccion in restricciones):
+            raise ValueError("Cada restricción alimentaria puede tener hasta 40 caracteres.")
+        primera_de_cada_una: dict[str, str] = {}
+        for restriccion in restricciones:
+            primera_de_cada_una.setdefault(restriccion.lower(), restriccion)
+        return list(primera_de_cada_una.values())
 
     def to_data(self) -> ProductData:
         return ProductData(**self.model_dump())
@@ -71,7 +67,7 @@ class AdminProductResponse(BaseModel):
             id=product.id,
             name=product.name,
             description=product.description,
-            price=product.price,
+            price=float(product.price),
             is_active=product.is_active,
             dietary_restrictions=product.dietary_restrictions or [],
             category=CategoryResponse.model_validate(product.category) if product.category else None,

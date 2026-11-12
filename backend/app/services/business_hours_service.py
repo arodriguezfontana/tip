@@ -83,29 +83,36 @@ def obtener_franjas(db: Session) -> list[Franja]:
     ]
 
 
+def _validar_franja(franja: Franja) -> None:
+    if not 0 <= franja.dia <= 6:
+        raise HorarioInvalidoError("Día de la semana inválido.")
+    if franja.apertura == franja.cierre:
+        raise HorarioInvalidoError(
+            f"La franja del {DIAS_SEMANA[franja.dia]} tiene la misma hora de apertura y de cierre."
+        )
+
+
+def _validar_que_no_se_superponen(actual: Franja, siguiente: Franja, cruza_de_semana: bool) -> None:
+    """`siguiente` es la franja que sigue a `actual`; si cruza de semana es la primera de la semana siguiente."""
+    inicio_siguiente = siguiente.inicio + (MINUTOS_POR_SEMANA if cruza_de_semana else 0)
+    if actual.fin > inicio_siguiente:
+        raise HorarioInvalidoError(
+            f"La franja del {DIAS_SEMANA[actual.dia]} de {actual.describir()} se superpone con "
+            f"la del {DIAS_SEMANA[siguiente.dia]} de {siguiente.describir()}."
+        )
+
+
 def validar_franjas(franjas: list[Franja]) -> None:
     if not franjas:
         raise HorarioInvalidoError("Cargá al menos una franja horaria de atención.")
-
     for franja in franjas:
-        if not 0 <= franja.dia <= 6:
-            raise HorarioInvalidoError("Día de la semana inválido.")
-        if franja.apertura == franja.cierre:
-            raise HorarioInvalidoError(
-                f"La franja del {DIAS_SEMANA[franja.dia]} tiene la misma hora de apertura y de cierre."
-            )
+        _validar_franja(franja)
 
     ordenadas = sorted(franjas, key=lambda f: f.inicio)
+    cantidad = len(ordenadas)
     for indice, actual in enumerate(ordenadas):
         # La última se compara con la primera de la semana siguiente, por si cruza del domingo al lunes.
-        es_la_ultima = indice == len(ordenadas) - 1
-        siguiente = ordenadas[0] if es_la_ultima else ordenadas[indice + 1]
-        inicio_siguiente = siguiente.inicio + (MINUTOS_POR_SEMANA if es_la_ultima else 0)
-        if actual.fin > inicio_siguiente:
-            raise HorarioInvalidoError(
-                f"La franja del {DIAS_SEMANA[actual.dia]} de {actual.describir()} se superpone con "
-                f"la del {DIAS_SEMANA[siguiente.dia]} de {siguiente.describir()}."
-            )
+        _validar_que_no_se_superponen(actual, ordenadas[(indice + 1) % cantidad], indice == cantidad - 1)
 
 
 def guardar_franjas(db: Session, franjas: list[Franja]) -> list[Franja]:
@@ -121,11 +128,13 @@ def guardar_franjas(db: Session, franjas: list[Franja]) -> list[Franja]:
 def _franja_que_contiene(franjas: list[Franja], momento: datetime) -> tuple[Franja, int] | None:
     """Franja abierta en ese momento y el minuto de la semana (ajustado si cruzó el domingo) en que cae."""
     minuto = _minuto_de_la_semana(momento)
-    for franja in franjas:
-        for candidato in (minuto, minuto + MINUTOS_POR_SEMANA):
-            if franja.inicio <= candidato < franja.fin:
-                return franja, candidato
-    return None
+    coincidencias = [
+        (franja, candidato)
+        for franja in franjas
+        for candidato in (minuto, minuto + MINUTOS_POR_SEMANA)
+        if franja.inicio <= candidato < franja.fin
+    ]
+    return coincidencias[0] if coincidencias else None
 
 
 def esta_abierto(franjas: list[Franja], momento: datetime) -> bool:
@@ -166,18 +175,19 @@ def estado_del_local(db: Session, ahora: datetime | None = None) -> EstadoLocal:
     )
 
 
+def _describir_dia(momento: datetime, dias_desde_hoy: int, con_fecha: bool) -> str:
+    if dias_desde_hoy == 0:
+        return "hoy"
+    if dias_desde_hoy == 1:
+        return "mañana"
+    dia = f"el {DIAS_SEMANA[momento.weekday()]}"
+    return f"{dia} {momento:%d/%m}" if con_fecha else dia
+
+
 def describir_momento(momento: datetime, ahora: datetime, con_fecha: bool = True) -> str:
     """'hoy a las 20:00', 'mañana a las 20:00' o 'el martes (13/10) a las 20:00'."""
     dias = (momento.date() - ahora.date()).days
-    if dias == 0:
-        dia = "hoy"
-    elif dias == 1:
-        dia = "mañana"
-    else:
-        dia = f"el {DIAS_SEMANA[momento.weekday()]}"
-        if con_fecha:
-            dia += f" {momento:%d/%m}"
-    return f"{dia} a las {momento:%H:%M}"
+    return f"{_describir_dia(momento, dias, con_fecha)} a las {momento:%H:%M}"
 
 
 def describir_horarios(franjas: list[Franja]) -> list[str]:
@@ -206,8 +216,5 @@ def proxima_fecha_abierta_a_la_hora(
     franjas: list[Franja], desde: date, hora: time, tzinfo, max_dias: int
 ) -> datetime | None:
     """Primer día a partir del siguiente a `desde` (hasta `max_dias`) en el que el local está abierto a esa hora."""
-    for dias in range(1, max_dias + 1):
-        candidato = datetime.combine(desde + timedelta(days=dias), hora, tzinfo=tzinfo)
-        if esta_abierto(franjas, candidato):
-            return candidato
-    return None
+    candidatos = (datetime.combine(desde + timedelta(days=dias), hora, tzinfo=tzinfo) for dias in range(1, max_dias + 1))
+    return next((candidato for candidato in candidatos if esta_abierto(franjas, candidato)), None)

@@ -41,7 +41,7 @@ class ProductResponse(BaseModel):
             id=product.id,
             name=product.name,
             description=product.description,
-            price=product.price,
+            price=float(product.price),
             dietary_restrictions=product.dietary_restrictions or [],
             category=CategoryResponse.model_validate(product.category),
             image_url=product_image_url(product),

@@ -10,66 +10,128 @@ interface BusinessGoalsFormProps {
   onSaved?: () => void;
 }
 
-function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsFormProps) {
-  const byType = useMemo(() => {
-    const map: Record<string, BusinessGoalItem> = {};
-    initialGoals.forEach((g) => {
-      map[g.period_type] = g;
-    });
-    return map;
-  }, [initialGoals]);
+type GoalPeriod = 'monthly' | 'weekly' | 'daily';
 
+interface GoalValues {
+  revenue: string;
+  orders: string;
+}
+
+const DEFAULT_GOALS: Record<GoalPeriod, { revenue: number; orders: number }> = {
+  monthly: { revenue: 5000000, orders: 300 },
+  weekly: { revenue: 1250000, orders: 75 },
+  daily: { revenue: 200000, orders: 15 },
+};
+
+const toNumber = (text: string) => Number(text) || 0;
+
+function initialValues(goals: BusinessGoalItem[]): Record<GoalPeriod, GoalValues> {
+  const valuesFor = (period: GoalPeriod): GoalValues => {
+    const saved = goals.find((goal) => goal.period_type === period);
+    return {
+      revenue: String(saved?.target_revenue ?? DEFAULT_GOALS[period].revenue),
+      orders: String(saved?.target_orders ?? DEFAULT_GOALS[period].orders),
+    };
+  };
+  return { monthly: valuesFor('monthly'), weekly: valuesFor('weekly'), daily: valuesFor('daily') };
+}
+
+/** Semanal = mensual / 4 y diaria = semanal / 6 (el local abre 6 días), con al menos 1 pedido por día. */
+function proportionalGoals(monthly: GoalValues): Pick<Record<GoalPeriod, GoalValues>, 'weekly' | 'daily'> {
+  const weeklyRevenue = Math.round(toNumber(monthly.revenue) / 4);
+  const weeklyOrders = Math.round(toNumber(monthly.orders) / 4);
+  return {
+    weekly: { revenue: String(weeklyRevenue), orders: String(weeklyOrders) },
+    daily: {
+      revenue: String(Math.round(weeklyRevenue / 6)),
+      orders: String(Math.max(1, Math.round(weeklyOrders / 6))),
+    },
+  };
+}
+
+const PERIODS: { period: GoalPeriod; title: string; boxClass: string; titleClass: string; note?: string }[] = [
+  {
+    period: 'monthly',
+    title: '📅 Meta Mensual (Último mes)',
+    boxClass: 'bg-amber-50/60 border-amber-200/70',
+    titleClass: 'text-amber-900',
+    note: 'Base principal',
+  },
+  { period: 'weekly', title: '📆 Meta Semanal (Última semana)', boxClass: 'bg-sky-50/60 border-sky-200/70', titleClass: 'text-sky-900' },
+  { period: 'daily', title: '☀️ Meta Diaria (Hoy)', boxClass: 'bg-emerald-50/60 border-emerald-200/70', titleClass: 'text-emerald-900' },
+];
+
+const INPUT_CLASS =
+  'w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black';
+
+interface GoalCardProps {
+  period: GoalPeriod;
+  title: string;
+  boxClass: string;
+  titleClass: string;
+  note?: string;
+  values: GoalValues;
+  onChange: (values: GoalValues) => void;
+}
+
+function GoalCard({ period, title, boxClass, titleClass, note, values, onChange }: GoalCardProps) {
+  return (
+    <div className={`rounded-2xl p-4 border ${boxClass}`}>
+      <div className="flex items-center justify-between mb-2">
+        <span className={`text-xs font-bold uppercase tracking-wider flex items-center gap-1.5 ${titleClass}`}>{title}</span>
+        {note && <span className="text-[11px] text-amber-700 font-medium">{note}</span>}
+      </div>
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+        <div>
+          <label htmlFor={`${period}-rev-input`} className="block text-xs font-medium text-gray-700 mb-1">
+            Facturación esperada ($)
+          </label>
+          <input
+            id={`${period}-rev-input`}
+            type="number"
+            min="0"
+            step="any"
+            value={values.revenue}
+            onChange={(e) => onChange({ ...values, revenue: e.target.value })}
+            className={INPUT_CLASS}
+          />
+          <p className="text-[11px] text-gray-400 mt-0.5">{formatCurrency(toNumber(values.revenue))}</p>
+        </div>
+        <div>
+          <label htmlFor={`${period}-orders-input`} className="block text-xs font-medium text-gray-700 mb-1">
+            Cantidad de pedidos
+          </label>
+          <input
+            id={`${period}-orders-input`}
+            type="number"
+            min="0"
+            value={values.orders}
+            onChange={(e) => onChange({ ...values, orders: e.target.value })}
+            className={INPUT_CLASS}
+          />
+          <p className="text-[11px] text-gray-400 mt-0.5">pedidos completados</p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsFormProps) {
+  const [values, setValues] = useState(() => initialValues(initialGoals));
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  const [monthlyRev, setMonthlyRev] = useState(() => String(byType.monthly?.target_revenue ?? 5000000));
-  const [monthlyOrders, setMonthlyOrders] = useState(() => String(byType.monthly?.target_orders ?? 300));
+  const handleAutoCalculate = () => setValues((current) => ({ ...current, ...proportionalGoals(current.monthly) }));
 
-  const [weeklyRev, setWeeklyRev] = useState(() => String(byType.weekly?.target_revenue ?? 1250000));
-  const [weeklyOrders, setWeeklyOrders] = useState(() => String(byType.weekly?.target_orders ?? 75));
-
-  const [dailyRev, setDailyRev] = useState(() => String(byType.daily?.target_revenue ?? 200000));
-  const [dailyOrders, setDailyOrders] = useState(() => String(byType.daily?.target_orders ?? 15));
-
-  const handleAutoCalculate = () => {
-    const mRev = Number(monthlyRev) || 0;
-    const mOrd = Number(monthlyOrders) || 0;
-
-    const wRev = Math.round(mRev / 4);
-    const wOrd = Math.round(mOrd / 4);
-
-    const dRev = Math.round(wRev / 6);
-    const dOrd = Math.max(1, Math.round(wOrd / 6));
-
-    setWeeklyRev(String(wRev));
-    setWeeklyOrders(String(wOrd));
-    setDailyRev(String(dRev));
-    setDailyOrders(String(dOrd));
-  };
-
-  const handleSubmit = async (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.SubmitEvent) => {
     e.preventDefault();
     setSaving(true);
     setError(null);
-
-    const goals: BusinessGoalItem[] = [
-      {
-        period_type: 'monthly',
-        target_revenue: Math.max(0, Number(monthlyRev) || 0),
-        target_orders: Math.max(0, Number(monthlyOrders) || 0),
-      },
-      {
-        period_type: 'weekly',
-        target_revenue: Math.max(0, Number(weeklyRev) || 0),
-        target_orders: Math.max(0, Number(weeklyOrders) || 0),
-      },
-      {
-        period_type: 'daily',
-        target_revenue: Math.max(0, Number(dailyRev) || 0),
-        target_orders: Math.max(0, Number(dailyOrders) || 0),
-      },
-    ];
-
+    const goals: BusinessGoalItem[] = PERIODS.map(({ period }) => ({
+      period_type: period,
+      target_revenue: Math.max(0, toNumber(values[period].revenue)),
+      target_orders: Math.max(0, toNumber(values[period].orders)),
+    }));
     try {
       await updateBusinessGoals({ goals });
       onSaved?.();
@@ -81,54 +143,25 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
     }
   };
 
+  const card = (index: number) => {
+    const { period, ...style } = PERIODS[index];
+    return (
+      <GoalCard
+        period={period}
+        {...style}
+        values={values[period]}
+        onChange={(next) => setValues((current) => ({ ...current, [period]: next }))}
+      />
+    );
+  };
+
   return (
     <form onSubmit={handleSubmit} className="mt-5 space-y-5">
       {error && (
-        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-medium border border-red-200">
-          {error}
-        </div>
+        <div className="p-3 rounded-xl bg-red-50 text-red-700 text-xs font-medium border border-red-200">{error}</div>
       )}
 
-      {/* Meta Mensual */}
-      <div className="bg-amber-50/60 rounded-2xl p-4 border border-amber-200/70">
-        <div className="flex items-center justify-between mb-2">
-          <span className="text-xs font-bold uppercase tracking-wider text-amber-900 flex items-center gap-1.5">
-            📅 Meta Mensual (Último mes)
-          </span>
-          <span className="text-[11px] text-amber-700 font-medium">Base principal</span>
-        </div>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="monthly-rev-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Facturación esperada ($)
-            </label>
-            <input
-              id="monthly-rev-input"
-              type="number"
-              min="0"
-              step="any"
-              value={monthlyRev}
-              onChange={(e) => setMonthlyRev(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">{formatCurrency(Number(monthlyRev) || 0)}</p>
-          </div>
-          <div>
-            <label htmlFor="monthly-orders-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Cantidad de pedidos
-            </label>
-            <input
-              id="monthly-orders-input"
-              type="number"
-              min="0"
-              value={monthlyOrders}
-              onChange={(e) => setMonthlyOrders(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">pedidos completados</p>
-          </div>
-        </div>
-      </div>
+      {card(0)}
 
       <div className="flex justify-end">
         <button
@@ -140,81 +173,8 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
         </button>
       </div>
 
-      {/* Meta Semanal */}
-      <div className="bg-sky-50/60 rounded-2xl p-4 border border-sky-200/70">
-        <span className="text-xs font-bold uppercase tracking-wider text-sky-900 mb-2 block">
-          📆 Meta Semanal (Última semana)
-        </span>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="weekly-rev-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Facturación esperada ($)
-            </label>
-            <input
-              id="weekly-rev-input"
-              type="number"
-              min="0"
-              step="any"
-              value={weeklyRev}
-              onChange={(e) => setWeeklyRev(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">{formatCurrency(Number(weeklyRev) || 0)}</p>
-          </div>
-          <div>
-            <label htmlFor="weekly-orders-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Cantidad de pedidos
-            </label>
-            <input
-              id="weekly-orders-input"
-              type="number"
-              min="0"
-              value={weeklyOrders}
-              onChange={(e) => setWeeklyOrders(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">pedidos completados</p>
-          </div>
-        </div>
-      </div>
-
-      {/* Meta Diaria */}
-      <div className="bg-emerald-50/60 rounded-2xl p-4 border border-emerald-200/70">
-        <span className="text-xs font-bold uppercase tracking-wider text-emerald-900 mb-2 block">
-          ☀️ Meta Diaria (Hoy)
-        </span>
-        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-          <div>
-            <label htmlFor="daily-rev-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Facturación esperada ($)
-            </label>
-            <input
-              id="daily-rev-input"
-              type="number"
-              min="0"
-              step="any"
-              value={dailyRev}
-              onChange={(e) => setDailyRev(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">{formatCurrency(Number(dailyRev) || 0)}</p>
-          </div>
-          <div>
-            <label htmlFor="daily-orders-input" className="block text-xs font-medium text-gray-700 mb-1">
-              Cantidad de pedidos
-            </label>
-            <input
-              id="daily-orders-input"
-              type="number"
-              min="0"
-              value={dailyOrders}
-              onChange={(e) => setDailyOrders(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-sm font-semibold focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            <p className="text-[11px] text-gray-400 mt-0.5">pedidos completados</p>
-          </div>
-        </div>
-      </div>
+      {card(1)}
+      {card(2)}
 
       <div className="flex items-center justify-end gap-3 pt-4 border-t border-gray-100">
         <button

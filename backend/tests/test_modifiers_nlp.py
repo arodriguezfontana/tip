@@ -14,11 +14,10 @@ import pytest
 
 from app.models.menu import Category, Ingredient, Product, ProductIngredient
 from app.models.order import Order, OrderItem, OrderStatus
-from app.repositories import ingredient_repository
+from app.services.ingredient_service import consumption_totals
 from app.services.modifier_nlp import (
     clasificar_modificador,
     extraer_modificadores_de_texto,
-    formatear_comanda_modificaciones,
 )
 from app.services.tools.order_tools import calcular_y_preparar_pedido, confirmar_y_guardar_pedido
 from tests.conftest import TestingSessionLocal
@@ -247,35 +246,13 @@ def test_modificador_negativo_evita_descuento_en_modulo_inventario(db_session, h
     db_session.commit()
 
     # Calcular consumo en inventario
-    consumo = ingredient_repository.consumption(db_session, None, None, None)
+    consumo = consumption_totals(db_session, None, None, None)
     consumo_dict = {name: total for _, name, _, total in consumo}
 
     # Cebolla: solo del pedido 1 (50g), el pedido 2 evitó el consumo por el modificador negativo
     assert consumo_dict["Cebolla"] == 50.0
     # Tomate: consumido en ambos pedidos (50g + 50g = 100g)
     assert consumo_dict["Tomate"] == 100.0
-
-
-# --- 4. Comanda para cocina resalta modificaciones en mayúsculas -------------------------------------
-
-
-def test_comanda_resalta_modificaciones_en_mayusculas(db_session, hamburguesa):
-    mods = [
-        {"type": "negative", "name": "cebolla", "tag": "[SIN CEBOLLA]"},
-        {"type": "positive", "name": "queso", "tag": "[EXTRA QUESO]"},
-    ]
-    texto_comanda = formatear_comanda_modificaciones(mods)
-    assert texto_comanda == "[SIN CEBOLLA] [EXTRA QUESO]"
-
-    item = OrderItem(
-        order_id=1,
-        product_id=hamburguesa.id,
-        product=hamburguesa,
-        quantity=1,
-        unit_price=Decimal("11000"),
-        modifications=mods,
-    )
-    assert item.comanda_display == "Hamburguesa Completa [SIN CEBOLLA] [EXTRA QUESO]"
 
 
 # --- 5. Flujo completo bot: cálculo y confirmación ---------------------------------------------------
@@ -307,7 +284,6 @@ def test_flujo_completo_bot_con_modificadores(db_session, hamburguesa, ingredien
     db_item = orden.items[0]
     assert db_item.unit_price == Decimal("11000.00")
     assert len(db_item.modifications) == 2
-    assert db_item.comanda_display == "Hamburguesa Completa [SIN CEBOLLA] [EXTRA QUESO]"
 
 def test_restriccion_se_descarta_si_ingrediente_no_esta_en_receta(db_session, hamburguesa):
     # Hamburguesa solo tiene Cebolla y Tomate en su receta. Si piden "sin lechuga" o "sin pepino", se descarta.

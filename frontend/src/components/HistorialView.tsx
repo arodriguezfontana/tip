@@ -10,7 +10,6 @@ import { OrderDetailModal } from '@/components/OrderDetailModal';
 import { PrinterIcon } from '@/components/Icons';
 import { useReprint } from '@/hooks/useReprint';
 
-import type { ThemeColor } from '@/types/storeConfig';
 import { PanelNote } from '@/components/ui/PanelNote';
 
 function statusBadgeClasses(status: string): string {
@@ -32,12 +31,7 @@ function formatDateTime(iso: string): string {
   });
 }
 
-interface HistorialViewProps {
-  themeColor?: ThemeColor;
-}
-
-export function HistorialView({ themeColor }: HistorialViewProps = {}) {
-  void themeColor;
+export function HistorialView() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
   const [customFrom, setCustomFrom] = useState('');
   const [customTo, setCustomTo] = useState('');

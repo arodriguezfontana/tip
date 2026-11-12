@@ -19,7 +19,7 @@ class ProductData:
     category_id: int
     is_active: bool
     dietary_restrictions: list[str]
-    allowed_extra_ids: list[int] = ()
+    allowed_extra_ids: tuple[int, ...] = ()
 
 
 # --- Consultas ----------------------------------------------------------------------------------------

@@ -49,25 +49,21 @@ export function PinSecurityProvider({ children }: { children: ReactNode }) {
   }, []);
 
   // Temporizador de 5 minutos de inactividad
-  const resetInactivityTimer = useCallback(() => {
-    if (timeoutRef.current) {
-      clearTimeout(timeoutRef.current);
-      timeoutRef.current = null;
-    }
+  const clearInactivityTimer = useCallback(() => {
+    if (timeoutRef.current) clearTimeout(timeoutRef.current);
+    timeoutRef.current = null;
+  }, []);
 
+  const resetInactivityTimer = useCallback(() => {
+    clearInactivityTimer();
     if (isAdminUnlocked || isCashUnlocked) {
-      timeoutRef.current = setTimeout(() => {
-        lockAll();
-      }, INACTIVITY_TIMEOUT_MS);
+      timeoutRef.current = setTimeout(lockAll, INACTIVITY_TIMEOUT_MS);
     }
-  }, [isAdminUnlocked, isCashUnlocked, lockAll]);
+  }, [clearInactivityTimer, isAdminUnlocked, isCashUnlocked, lockAll]);
 
   useEffect(() => {
     if (!isAdminUnlocked && !isCashUnlocked) {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-        timeoutRef.current = null;
-      }
+      clearInactivityTimer();
       return;
     }
 
@@ -81,12 +77,10 @@ export function PinSecurityProvider({ children }: { children: ReactNode }) {
     events.forEach((evt) => window.addEventListener(evt, handleUserActivity, { passive: true }));
 
     return () => {
-      if (timeoutRef.current) {
-        clearTimeout(timeoutRef.current);
-      }
+      if (timeoutRef.current) clearTimeout(timeoutRef.current);
       events.forEach((evt) => window.removeEventListener(evt, handleUserActivity));
     };
-  }, [isAdminUnlocked, isCashUnlocked, resetInactivityTimer]);
+  }, [clearInactivityTimer, isAdminUnlocked, isCashUnlocked, resetInactivityTimer]);
 
   const value: PinSecurityContextValue = {
     isAdminUnlocked,

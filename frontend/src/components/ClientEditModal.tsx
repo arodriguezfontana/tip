@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { INPUT_LG_CLASS, LABEL_CLASS } from '@/styles/forms';
 import type { Client } from '@/types/client';
@@ -18,7 +18,7 @@ export function ClientEditModal({ client, onClose, onSave }: ClientEditModalProp
   const [saving, setSaving] = useState(false);
   const [formError, setFormError] = useState<string | null>(null);
 
-  const handleSubmit = async (e: FormEvent) => {
+  const handleSubmit = async (e: SubmitEvent) => {
     e.preventDefault();
     if (saving) return;
 
