@@ -11,7 +11,8 @@ import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ControlCajaView } from '@/components/ControlCajaView';
 import { ClientesView } from '@/components/ClientesView';
 import { RepartidoresView } from '@/components/RepartidoresView';
-import { CatalogoView } from '@/components/CatalogoView';
+import { ProductosView } from '@/components/ProductosView';
+import { CategoriasView } from '@/components/CategoriasView';
 import { PromocionesView } from '@/components/PromocionesView';
 import { IngredientesView } from '@/components/IngredientesView';
 import { MenuImagenView } from '@/components/MenuImagenView';
@@ -147,7 +148,32 @@ function AdminDashboardContent() {
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
           {activeView === 'repartidores' && <RepartidoresView themeColor={storeConfig?.theme_color} />}
-          {activeView === 'productos' && <CatalogoView />}
+          {activeView === 'productos' && (
+            <div className="flex flex-col gap-4 lg:h-full">
+              <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1">
+                  <h1 className="text-lg font-bold text-gray-900">Productos</h1>
+                  <p className="text-xs text-gray-500">
+                    Organizá los productos del local y sus recetas. Lo que cambies acá se ve al instante en el menú web y en el chatbot.
+                  </p>
+                </div>
+              </div>
+              <ProductosView />
+            </div>
+          )}
+          {activeView === 'categorias' && (
+            <div className="flex flex-col gap-4 lg:h-full">
+              <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4">
+                <div className="flex-1">
+                  <h1 className="text-lg font-bold text-gray-900">Categorías</h1>
+                  <p className="text-xs text-gray-500">
+                    Organizá las categorías del menú y el sector de preparación de cada una.
+                  </p>
+                </div>
+              </div>
+              <CategoriasView />
+            </div>
+          )}
           {activeView === 'promociones' && (
             <div className="flex flex-col gap-4 lg:h-full">
               <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 flex flex-col sm:flex-row sm:items-center gap-4">

@@ -111,12 +111,8 @@ export function CategoriasView() {
                       <p className="font-semibold text-gray-900">{category.name}</p>
                       {category.sector && SECTOR_CONFIG[category.sector as PreparationSector] && (
                         <div className="mt-0.5">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              SECTOR_CONFIG[category.sector as PreparationSector].badgeClass
-                            }`}
-                          >
-                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0" />
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
+                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0 text-gray-500" />
                             <span>{SECTOR_CONFIG[category.sector as PreparationSector].label}</span>
                           </span>
                         </div>

@@ -7,79 +7,77 @@ interface TopProductsTableProps {
   topProducts: ReturnType<typeof useStats>['topProducts'];
 }
 
-/** 3 más vendidos (con ganancias), 3 más rentables y 3 promos más vendidas en 3 columnas. */
+/** 5 más vendidos (con ganancias), 5 más rentables y 5 promos más vendidas en 3 columnas. */
 export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
-  // 1. Top 3 más vendidos
-  const displayProducts = topProducts.slice(0, 3);
+  // 1. Top 5 más vendidos
+  const displayProducts = topProducts.slice(0, 5);
 
-  // 2. Top 3 más rentables (ordenados por margen % y ganancia)
+  // 2. Top 5 más rentables (ordenados por margen % y ganancia)
   const topRentables = useMemo(() => {
     if (!kpis?.top_products) return [];
     return [...kpis.top_products]
       .sort((a, b) => b.margin_pct - a.margin_pct || b.gross_profit - a.gross_profit)
-      .slice(0, 3);
+      .slice(0, 5);
   }, [kpis?.top_products]);
 
-  // 3. Top 3 promociones más vendidas
-  const topPromos = (kpis?.top_promotions ?? []).slice(0, 3);
+  // 3. Top 5 promociones más vendidas
+  const topPromos = (kpis?.top_promotions ?? []).slice(0, 5);
 
   return (
     <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-      {/* 1. Más Vendidos (Top 3) */}
+      {/* 1. Más Vendidos (Top 5) */}
       <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Más vendidos</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 por unidades pedidas.</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 5 por unidades pedidas.</p>
             </div>
           </div>
 
           {displayProducts.length === 0 ? (
             <p className="text-xs text-gray-500 py-2">No hay productos vendidos registrados en este período.</p>
           ) : (
-            <div className="overflow-x-auto">
-              <table className="w-full text-xs">
-                <thead>
-                  <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
-                    <th className="px-3 py-2 rounded-l-lg">Producto</th>
-                    <th className="px-3 py-2 text-right">Cantidad</th>
-                    <th className="px-3 py-2 text-right rounded-r-lg">
-                      {kpis?.top_products && kpis.top_products.length > 0 ? 'Ganancias' : 'Ingresos'}
-                    </th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-gray-100">
-                  {displayProducts.map((prod) => {
-                    const kpiProd = kpis?.top_products?.find((p) => p.product_name === prod.product_name);
-                    return (
-                      <tr key={prod.product_name} className="hover:bg-gray-50/70 transition-colors">
-                        <td className="px-3 py-2 font-medium text-gray-900">{prod.product_name}</td>
-                        <td className="px-3 py-2 text-right text-gray-600 font-semibold">{prod.total_quantity}</td>
-                        <td className="px-3 py-2 text-right font-medium text-gray-900">
-                          {kpiProd ? (
-                            <span className="font-semibold text-emerald-700">{formatCurrency(kpiProd.gross_profit)}</span>
-                          ) : (
-                            formatCurrency(prod.total_revenue)
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-                </tbody>
-              </table>
+            <div className="space-y-2">
+              {displayProducts.map((prod) => {
+                const kpiProd = kpis?.top_products?.find((p) => p.product_name === prod.product_name);
+                return (
+                  <div
+                    key={prod.product_name}
+                    className="flex items-center justify-between p-2 rounded-xl bg-gray-50/70 border border-gray-100 text-xs"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{prod.product_name}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        {kpiProd ? (
+                          <>
+                            <span>Ganancias</span>: <strong className="text-emerald-700">{formatCurrency(kpiProd.gross_profit)}</strong>
+                          </>
+                        ) : (
+                          <>
+                            <span>Ingresos</span>: <strong className="text-gray-900">{formatCurrency(prod.total_revenue)}</strong>
+                          </>
+                        )}
+                      </p>
+                    </div>
+                    <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-blue-50 text-blue-800 border border-blue-200">
+                      {prod.total_quantity} pedidos
+                    </span>
+                  </div>
+                );
+              })}
             </div>
           )}
         </div>
       </div>
 
-      {/* 2. Más Rentables (Top 3) */}
+      {/* 2. Más Rentables (Top 5) */}
       <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Más rentables</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 con mayor margen y ganancia.</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 5 con mayor margen y ganancia.</p>
             </div>
           </div>
 
@@ -116,13 +114,13 @@ export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
         </div>
       </div>
 
-      {/* 3. Promociones Más Vendidas (Top 3) */}
+      {/* 3. Promociones Más Vendidas (Top 5) */}
       <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
         <div>
           <div className="flex items-center justify-between mb-3">
             <div>
               <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Promociones más vendidas</p>
-              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 combos y promociones pedidas.</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 5 combos y promociones pedidas.</p>
             </div>
           </div>
 

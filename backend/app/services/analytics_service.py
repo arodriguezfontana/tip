@@ -484,7 +484,7 @@ def calculate_dashboard_kpis(
         best_selling_day=_best_selling_day_summary(db, date_from, date_to, previous_period),
         status_distribution=status_dist,
         top_products=_top_products_kpis(db, date_from, date_to, previous_period),
-        top_promotions=_top_promotions_kpis(db, date_from, date_to, limit=3),
+        top_promotions=_top_promotions_kpis(db, date_from, date_to, limit=5),
     )
 
 
@@ -588,7 +588,7 @@ REGLAS ESTRICTAS DE RESPUESTA:
    - "operational_weaknesses": Lista de EXACTAMENTE 3 debilidades o aspectos a mejorar.
    - "highlights": Lista de EXACTAMENTE 3 oportunidades o puntos fuertes del período.
    - "recommendations": Lista de EXACTAMENTE 6 recomendaciones generales de acción prácticas para mejorar ventas, ganar más margen, perder menos dinero por cancelaciones y optimizar tiempos (sin numeración ordinal en el texto).
-   - "spending_recommendations": Lista de EXACTAMENTE 4 a 5 recomendaciones de compras y control de gastos (sin numeración ordinal) indicando qué insumos comprar más por alta rotación, qué comprar menos o regular por baja rotación y cómo optimizar costos de materias primas.
+   - "spending_recommendations": Lista de EXACTAMENTE 6 recomendaciones de compras, insumos y control de gastos (sin numeración ordinal) teniendo en cuenta el uso en recetas, el gasto unitario, total y el uso total, indicando qué insumos comprar más por alta rotación, qué comprar menos o regular por baja rotación y cómo optimizar costos de materias primas.
 
 Respondé en español ÚNICAMENTE con un objeto JSON válido con este esquema exacto:
 {{
@@ -615,7 +615,9 @@ Respondé en español ÚNICAMENTE con un objeto JSON válido con este esquema ex
     "Recomendación compras 1",
     "Recomendación compras 2",
     "Recomendación compras 3",
-    "Recomendación compras 4"
+    "Recomendación compras 4",
+    "Recomendación compras 5",
+    "Recomendación compras 6"
   ]
 }}
 """
@@ -831,31 +833,57 @@ def _rule_based_spending_recommendations(
             "Comprar menos en baja rotación: regular la adquisición de insumos perecederos para platos secundarios o de menor venta para no inmovilizar capital."
         )
 
-    # 3. Control de gastos en insumo de mayor costo monetario
+    # 3. Control de gastos en insumo de mayor gasto total monetario
+    highest_spent_found = False
+    spent_list: list[tuple[str, float, str, float]] = []
     if consumed and db is not None:
         try:
             ing_ids = {c[0] for c in consumed}
             ingredients = ingredient_repository.get_many(db, ing_ids)
             spent_list = [
-                (c[1], c[3] * float(ingredients[c[0]].cost or 0), c[2])
+                (c[1], c[3] * float(ingredients[c[0]].cost or 0), c[2], float(ingredients[c[0]].cost or 0))
                 for c in consumed
                 if c[0] in ingredients and (ingredients[c[0]].cost or 0) > 0
             ]
             if spent_list:
                 highest_spent = sorted(spent_list, key=lambda s: s[1], reverse=True)[0]
                 if highest_spent[1] > 0:
+                    highest_spent_found = True
                     recs.append(
-                        f"Control de gastos en '{highest_spent[0]}': representó el mayor gasto en materias primas (${highest_spent[1]:,.2f}). Compará listas de precios entre distintos proveedores para proteger el margen."
+                        f"Control del insumo con mayor gasto total: '{highest_spent[0]}' demandó el mayor gasto en materias primas (${highest_spent[1]:,.2f}, con costo unitario de ${highest_spent[3]:,.2f}/{highest_spent[2]}). Compará listas de precios entre distintos proveedores para proteger el margen."
                     )
         except Exception:
             pass
 
-    if len(recs) < 3 and kpi_data.cogs.current > 0:
+    if not highest_spent_found:
+        if kpi_data.cogs.current > 0:
+            recs.append(
+                f"Control del costo total de insumos: el gasto en mercadería fue de ${kpi_data.cogs.current:,.2f}. Negociá listas de precios con proveedores para reducir el gasto total por lote de compra."
+            )
+        else:
+            recs.append(
+                "Control de gasto total de insumos: registrar los costos unitarios de cada insumo en el catálogo para monitorear el gasto acumulado en materias primas."
+            )
+
+    # 4. Insumo con mayor costo unitario registrado
+    expensive_found = False
+    if spent_list:
+        try:
+            highest_unit_cost = sorted(spent_list, key=lambda s: s[3], reverse=True)[0]
+            if highest_unit_cost[3] > 0:
+                expensive_found = True
+                recs.append(
+                    f"Optimizar rendimiento del insumo de mayor costo unitario: '{highest_unit_cost[0]}' tiene el costo unitario más elevado (${highest_unit_cost[3]:,.2f}/{highest_unit_cost[2]}). Controlá el pesaje en cocina para que cada unidad rinda exactamente lo presupuestado en la receta."
+                )
+        except Exception:
+            pass
+
+    if not expensive_found:
         recs.append(
-            f"Control de costos de mercadería: el gasto total de insumos fue de ${kpi_data.cogs.current:,.2f}. Pedí listas de precios a proveedores alternativos para reducir el costo por lote."
+            "Optimizar materias primas de alto valor unitario: registrar y actualizar el costo unitario de ingredientes premium para evitar desvíos entre el costo teórico y el gasto real de reposición."
         )
 
-    # 4. Platos con margen bajo o ajuste de recetas
+    # 5. Platos con margen bajo o ajuste de recetas
     low_margin_p = min(kpi_data.top_products, key=lambda p: p.margin_pct) if kpi_data.top_products else None
     if low_margin_p and low_margin_p.margin_pct < 60:
         recs.append(
@@ -866,12 +894,12 @@ def _rule_based_spending_recommendations(
             "Estandarizar porciones en cocina: controlar el pesaje de ingredientes clave al despachar platos para evitar desvíos entre el costo teórico y el gasto real."
         )
 
-    # 5. Mermas y rotación de depósito
+    # 6. Mermas y rotación de depósito
     recs.append(
         "Control de mermas y almacenamiento: aplicar sistema FIFO (primero en entrar, primero en salir) en heladera y depósito para insumos frescos de alta rotación."
     )
 
-    return recs[:5]
+    return recs[:6]
 
 
 def _rule_based_insight(

@@ -216,7 +216,7 @@ def best_selling_products(
 
 
 def best_selling_promotions(
-    db: Session, date_from: datetime | None, date_to: datetime | None, limit: int = 3
+    db: Session, date_from: datetime | None, date_to: datetime | None, limit: int = 5
 ) -> list[tuple[str, int, float]]:
     """(nombre, unidades, facturación) de las promociones más vendidas en pedidos que cuentan como venta."""
     from app.models.promotion import Promotion

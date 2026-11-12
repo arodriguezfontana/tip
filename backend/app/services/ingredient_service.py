@@ -27,6 +27,8 @@ class IngredientConsumption:
     ingredient_name: str
     unit: str
     total_quantity: float
+    unit_cost: float = 0.0
+    total_cost: float = 0.0
 
 
 @dataclass(frozen=True)
@@ -164,14 +166,25 @@ def ingredient_consumption(
     Se calcula con las recetas actuales: unidades vendidas de cada producto × cantidad de su receta.
     """
     selected = _get_ingredient(db, ingredient_id) if ingredient_id is not None else None
+    consumed = consumption_totals(db, date_from, date_to, ingredient_id)
+    ingredient_ids = {id_ for id_, _, _, _ in consumed}
+    ingredients_map = ingredient_repository.get_many(db, ingredient_ids) if ingredient_ids else {}
 
     items = [
-        IngredientConsumption(ingredient_id=id_, ingredient_name=name, unit=unit, total_quantity=total)
-        for id_, name, unit, total in consumption_totals(db, date_from, date_to, ingredient_id)
+        IngredientConsumption(
+            ingredient_id=id_,
+            ingredient_name=name,
+            unit=unit,
+            total_quantity=total,
+            unit_cost=float(ingredients_map[id_].cost or 0) if id_ in ingredients_map else 0.0,
+            total_cost=round(total * (float(ingredients_map[id_].cost or 0) if id_ in ingredients_map else 0.0), 2),
+        )
+        for id_, name, unit, total in consumed
     ]
     # Si se pidió un ingrediente que no se usó, igual se lo informa (con consumo cero).
     if selected is not None and not items:
-        items = [IngredientConsumption(selected.id, selected.name, selected.unit, 0.0)]
+        unit_cost = float(selected.cost or 0)
+        items = [IngredientConsumption(selected.id, selected.name, selected.unit, 0.0, unit_cost, 0.0)]
 
     return ConsumptionReport(
         completed_orders=ingredient_repository.count_consuming_orders(db, date_from, date_to),

@@ -19,7 +19,7 @@ export function AiAdviceSection({
   const debilidades = (aiData?.operational_weaknesses ?? aiData?.warnings ?? []).slice(0, 3);
   const oportunidades = (aiData?.highlights ?? []).slice(0, 3);
   const recomendaciones = (aiData?.recommendations ?? []).slice(0, 6);
-  const gastosRecomendaciones = (aiData?.spending_recommendations ?? []).slice(0, 5);
+  const gastosRecomendaciones = (aiData?.spending_recommendations ?? []).slice(0, 6);
 
   const hasMetrics = Boolean(
     aiData?.operational_metrics &&
@@ -160,12 +160,15 @@ export function AiAdviceSection({
 
             {/* Recomendaciones Generales: 6 recomendaciones sin números */}
             <div className="bg-sky-50/70 border border-sky-200/70 rounded-xl p-4">
-              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-2.5">
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
                 <span className="text-xs font-bold uppercase tracking-wide text-sky-900">
                   Recomendaciones
                 </span>
-                <span className="text-[11px] text-sky-700 font-semibold">Ventas, margen y rentabilidad</span>
+                <span className="text-[11px] text-sky-700 font-semibold">Sugerencias como para venta</span>
               </div>
+              <p className="text-[11px] text-sky-800/80 mb-2.5">
+                Sugerencias para venta, margen y rentabilidad:
+              </p>
               <ul className="space-y-2 text-xs text-sky-950 font-medium">
                 {recomendaciones.map((r, i) => (
                   <li key={i} className="flex items-start gap-2">

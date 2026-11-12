@@ -12,7 +12,7 @@ export function StoreDataSection({ storeName, setStoreName, contactPhone, setCon
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-5">
       <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">
-        Datos del Local y Contacto
+        Datos del Local
       </h2>
 
       <div className="grid grid-cols-1 md:grid-cols-2 gap-5">

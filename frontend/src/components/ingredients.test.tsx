@@ -51,8 +51,8 @@ const COCA: AdminProduct = {
 const REPORT: IngredientConsumptionReport = {
   completed_orders: 3,
   items: [
-    { ingredient_id: 1, ingredient_name: 'Muzzarella', unit: 'gramos', total_quantity: 1250.5 },
-    { ingredient_id: 2, ingredient_name: 'Salsa de tomate', unit: 'gramos', total_quantity: 500 },
+    { ingredient_id: 1, ingredient_name: 'Muzzarella', unit: 'gramos', total_quantity: 1250.5, unit_cost: 10, total_cost: 12505 },
+    { ingredient_id: 2, ingredient_name: 'Salsa de tomate', unit: 'gramos', total_quantity: 500, unit_cost: 5, total_cost: 2500 },
   ],
   products_without_recipe: ['Coca-Cola 500ml'],
 };
@@ -280,7 +280,9 @@ describe('ReporteIngredientesView', () => {
       ingredientId: undefined,
     });
     expect(plain(within(row('Muzzarella')).getAllByRole('cell')[1].textContent)).toBe('1.250,5 gramos');
-    expect(screen.getByText('Pedidos finalizados').nextElementSibling).toHaveTextContent('3');
+    expect(screen.queryByText('Pedidos finalizados')).not.toBeInTheDocument();
+    expect(screen.getByText('Gasto total en ingredientes')).toBeInTheDocument();
+    expect(screen.getByText(/15\.005/)).toBeInTheDocument();
     expect(screen.queryByText(/no tienen receta/)).toBeNull();
   });
 

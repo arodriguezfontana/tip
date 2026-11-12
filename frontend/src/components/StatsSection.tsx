@@ -62,7 +62,7 @@ export function StatsSection() {
     : true;
 
   return (
-    <div className="flex flex-col gap-6 lg:h-full">
+    <div className="flex flex-col gap-6 lg:h-full pb-16">
       {/* Barra superior con filtros */}
       <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
         <div>

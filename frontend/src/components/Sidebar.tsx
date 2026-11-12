@@ -11,6 +11,7 @@ export type ViewKey =
   | 'clientes'
   | 'repartidores'
   | 'productos'
+  | 'categorias'
   | 'promociones'
   | 'ingredientes'
   | 'menu-imagen'
@@ -34,7 +35,8 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
   {
     title: 'Catálogo',
     items: [
-      { key: 'productos', label: 'Productos y categorías' },
+      { key: 'productos', label: 'Productos' },
+      { key: 'categorias', label: 'Categorías' },
       { key: 'promociones', label: 'Promociones' },
       { key: 'ingredientes', label: 'Ingredientes' },
     ],
@@ -51,8 +53,8 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'horarios', label: 'Horarios' },
       { key: 'menu-imagen', label: 'Menú y promociones' },
-      { key: 'configuracion-web', label: 'Configuración' },
       { key: 'impresoras', label: 'Impresoras' },
+      { key: 'configuracion-web', label: 'Configuración' },
     ],
   },
 ];

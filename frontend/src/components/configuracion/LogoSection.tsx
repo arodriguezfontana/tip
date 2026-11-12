@@ -12,7 +12,7 @@ export function LogoSection({ logoUrl, fileInputRef, handleFileChange, handleRem
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
       <h2 className="text-base font-bold text-gray-900 border-b border-gray-100 pb-3">
-        Logo Principal
+        Logo
       </h2>
 
       <div className="flex flex-col sm:flex-row items-center gap-6">

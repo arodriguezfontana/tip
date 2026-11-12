@@ -17,10 +17,9 @@ export function PanelBackgroundSection({ panelBg, setPanelBg, panelBgImage, setP
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
       <div>
-        <h2 className="text-base font-bold text-gray-900">Fondo del Panel de Administración</h2>
+        <h2 className="text-base font-bold text-gray-900">Fondo del Panel</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Si el fondo blanco te cansa la vista, elegí un color liso, una imagen o subí una
-          propia. Las imágenes se desenfocan y se oscurecen para que todo se siga leyendo bien. Por defecto el fondo es liso.
+          Color o imagen de fondo del panel de control.
         </p>
       </div>
       <PanelBgPicker

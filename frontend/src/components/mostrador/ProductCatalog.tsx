@@ -39,9 +39,6 @@ function PromotionTile({ promo, quantity, onAdd }: { promo: Promotion; quantity:
           : 'border-amber-200/90 bg-gradient-to-b from-amber-50/40 to-white hover:border-amber-400 hover:shadow-md'
       }`}
     >
-      <span className="absolute top-1.5 left-1.5 text-[9px] font-extrabold uppercase px-1.5 py-0.2 rounded bg-amber-200 text-amber-900 shadow-2xs">
-        Promo
-      </span>
       <QuantityBadge quantity={quantity} />
       {promo.image_url ? (
         <img
@@ -115,13 +112,6 @@ function CategoryChips({ categories, promotionsCount, active, onChange }: Catego
           }`}
         >
           <span>Promociones</span>
-          <span
-            className={`text-[10px] font-extrabold px-1.5 py-0.2 rounded-full ${
-              promotionsActive ? 'bg-white/20 text-white' : 'bg-amber-200 text-amber-900'
-            }`}
-          >
-            {promotionsCount}
-          </span>
         </button>
       )}
     </div>
@@ -241,11 +231,8 @@ export function ProductCatalog({
       <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
         {visiblePromotions.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 flex items-center gap-1.5 mb-2">
-              <span>Promociones vigentes</span>
-              <span className="text-[10px] bg-amber-100 text-amber-800 px-1.5 py-0.2 rounded-full font-extrabold">
-                {visiblePromotions.length}
-              </span>
+            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-2">
+              Promociones
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">
               {visiblePromotions.map((promo) => (

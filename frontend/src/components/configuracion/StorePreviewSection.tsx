@@ -14,7 +14,7 @@ interface StorePreviewSectionProps {
 export function StorePreviewSection({ currentTheme, logoUrl, storeName, address, contactPhone, mpAlias }: StorePreviewSectionProps) {
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-3">
-      <h2 className="text-base font-bold text-gray-900">Vista Previa de la Web</h2>
+      <h2 className="text-base font-bold text-gray-900">Vista Previa</h2>
       <div className="rounded-xl overflow-hidden border border-gray-200 shadow-sm">
         {/* Cabecera simulada con el color elegido */}
         <div
