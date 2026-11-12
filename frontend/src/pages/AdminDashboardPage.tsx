@@ -10,7 +10,7 @@ import { StatsSection } from '@/components/StatsSection';
 import { TomarPedidoView } from '@/components/TomarPedidoView';
 import { ControlCajaView } from '@/components/ControlCajaView';
 import { ClientesView } from '@/components/ClientesView';
-import { RepartidoresView } from '@/components/RepartidoresView';
+import { RepartidoresSection } from '@/components/repartidores/RepartidoresSection';
 import { CatalogoView } from '@/components/CatalogoView';
 import { PromocionesView } from '@/components/PromocionesView';
 import { IngredientesView } from '@/components/IngredientesView';
@@ -146,7 +146,7 @@ function AdminDashboardContent() {
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
-          {activeView === 'repartidores' && <RepartidoresView themeColor={storeConfig?.theme_color} />}
+          {activeView === 'repartidores' && <RepartidoresSection themeColor={storeConfig?.theme_color} />}
           {activeView === 'productos' && <CatalogoView />}
           {activeView === 'promociones' && (
             <div className="flex flex-col gap-4 lg:h-full">

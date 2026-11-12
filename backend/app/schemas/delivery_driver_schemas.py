@@ -33,3 +33,35 @@ class DeliveryDriverResponse(BaseModel):
 
 class OrderAssignDriverPayload(BaseModel):
     delivery_driver_id: int | None = None
+
+
+class TripOrderResponse(BaseModel):
+    id: int
+    shift_number: int
+    customer_name: str
+    shipping_address: str
+    payment_method: str | None
+    total_amount: float
+    status: str
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class TripSummaryResponse(BaseModel):
+    id: int
+    dispatched_at: datetime
+    finished_at: datetime | None
+    is_in_progress: bool
+    stops_count: int
+    orders: list[TripOrderResponse]
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DriverActivityResponse(BaseModel):
+    trips_count: int
+    delivered_orders_count: int
+    cash_to_hand_over: float
+    trips: list[TripSummaryResponse]
+
+    model_config = ConfigDict(from_attributes=True)
