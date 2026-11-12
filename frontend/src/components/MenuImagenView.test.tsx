@@ -16,7 +16,7 @@ const item = (id: number, version = 100 + id): MenuImageItem => ({
   size_bytes: 2 * 1024 * 1024,
   updated_at: '2026-10-29T15:30:00Z',
 });
-const menu = (...ids: number[]): MenuImages => ({ images: ids.map((id) => item(id)), max_images: 3 });
+const menu = (...ids: number[]): MenuImages => ({ images: ids.map((id) => item(id)), max_images: 5 });
 
 const archivo = (nombre = 'menu.png', tipo = 'image/png', bytes = 1000) =>
   new File([new Uint8Array(bytes)], nombre, { type: tipo });
@@ -39,7 +39,7 @@ describe('MenuImagenView', () => {
     render(<MenuImagenView />);
 
     expect(await screen.findByText('Todavía no cargaste ninguna imagen del menú.')).toBeInTheDocument();
-    expect(screen.getByText('Imágenes del menú (0 de 3)')).toBeInTheDocument();
+    expect(screen.getByText('Imágenes del menú (0 de 5)')).toBeInTheDocument();
   });
 
   it('muestra todas las imágenes del menú en orden, con su peso y fecha', async () => {
@@ -49,7 +49,7 @@ describe('MenuImagenView', () => {
     const segunda = screen.getByRole('img', { name: 'Imagen 2 del menú' });
     expect(primera).toHaveAttribute('src', expect.stringContaining('/menu-image/1/file?v=101'));
     expect(segunda).toHaveAttribute('src', expect.stringContaining('/menu-image/2/file?v=102'));
-    expect(screen.getByText('Imágenes del menú (2 de 3)')).toBeInTheDocument();
+    expect(screen.getByText('Imágenes del menú (2 de 5)')).toBeInTheDocument();
     expect(screen.getAllByText(/2\.0 MB · actualizada el/)).toHaveLength(2);
   });
 
@@ -121,15 +121,15 @@ describe('MenuImagenView', () => {
   });
 
   it('con el máximo de imágenes no deja agregar más', async () => {
-    service.fetchMenuImages.mockResolvedValue(menu(1, 2, 3));
+    service.fetchMenuImages.mockResolvedValue(menu(1, 2, 3, 4, 5));
     render(<MenuImagenView />);
 
-    expect(await screen.findByText(/ya tiene el máximo de 3 imágenes/)).toBeInTheDocument();
+    expect(await screen.findByText(/ya tiene el máximo de 5 imágenes/)).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: 'Elegir imagen (JPG o PNG)' })).not.toBeInTheDocument();
   });
 
   it('cambia el orden de las imágenes', async () => {
-    service.reorderMenuImages.mockResolvedValue({ images: [item(2), item(1)], max_images: 3 });
+    service.reorderMenuImages.mockResolvedValue({ images: [item(2), item(1)], max_images: 5 });
     render(<MenuImagenView />);
     const user = userEvent.setup();
     await screen.findByRole('img', { name: 'Imagen 1 del menú' });
@@ -145,7 +145,7 @@ describe('MenuImagenView', () => {
   });
 
   it('reemplaza una imagen puntual', async () => {
-    service.replaceMenuImage.mockResolvedValue({ images: [item(1), item(2, 999)], max_images: 3 });
+    service.replaceMenuImage.mockResolvedValue({ images: [item(1), item(2, 999)], max_images: 5 });
     render(<MenuImagenView />);
     const user = userEvent.setup();
     await screen.findByRole('img', { name: 'Imagen 2 del menú' });

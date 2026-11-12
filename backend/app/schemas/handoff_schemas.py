@@ -19,10 +19,8 @@ class HandoffMessageResponse(BaseModel):
 
 def _ultimo_mensaje(derivacion: Derivacion) -> "HandoffMessageResponse | None":
     """Último mensaje del cliente o del empleado (sin avisos del sistema ni respuestas del bot), para la lista."""
-    for mensaje in reversed(derivacion.mensajes):
-        if mensaje.autor in (AutorMensaje.CLIENTE, AutorMensaje.EMPLEADO):
-            return HandoffMessageResponse.of(mensaje)
-    return None
+    propios = [m for m in derivacion.mensajes if m.autor in (AutorMensaje.CLIENTE, AutorMensaje.EMPLEADO)]
+    return HandoffMessageResponse.of(propios[-1]) if propios else None
 
 
 class HandoffSummaryResponse(BaseModel):
@@ -33,8 +31,13 @@ class HandoffSummaryResponse(BaseModel):
     customer_username: str | None = None
     customer_phone: str | None = None
     reason: str | None
-    status: Literal["waiting", "in_progress"]
+    # "bot": nadie intervino el chat (solo se ve el historial de un pedido); "in_progress": bot pausado.
+    status: Literal["waiting", "in_progress", "bot"]
     handled_by: str | None
+    # El local escribió desde la app de Meta Business Suite y no hay un empleado del panel a cargo.
+    external: bool = False
+    # Cuándo vuelve el bot si no hay más mensajes (reactivación automática). None si no está pausado.
+    expires_at: datetime | None = None
     requested_at: datetime
     unread_count: int = 0
     last_message: HandoffMessageResponse | None = None
@@ -50,6 +53,8 @@ class HandoffSummaryResponse(BaseModel):
             reason=derivacion.motivo,
             status=derivacion.estado.value,
             handled_by=derivacion.atendida_por,
+            external=derivacion.externa,
+            expires_at=None if derivacion.transitoria else derivacion.vence_en,
             requested_at=derivacion.solicitada_en,
             unread_count=derivacion.sin_leer,
             last_message=_ultimo_mensaje(derivacion),

@@ -1,7 +1,6 @@
 import hashlib
 import hmac
 import logging
-from dataclasses import dataclass
 
 from fastapi import APIRouter, Header, HTTPException, Query, Request
 from fastapi.responses import PlainTextResponse
@@ -11,6 +10,7 @@ from app.core.config import settings
 from app.services.bot_service import bot_service
 from app.services.channels import obtener_canal
 from app.services.channels.whatsapp import WhatsAppChannel
+from app.services.channels.whatsapp_webhook import MensajeRecibido, mensajes_recibidos, mensajes_salientes
 
 logger = logging.getLogger(__name__)
 
@@ -41,37 +41,16 @@ def verificar_webhook(
     return PlainTextResponse(hub_challenge or "")
 
 
-@dataclass(frozen=True)
-class _MensajeRecibido:
-    telefono: str
-    message_id: str | None
-    nombre: str | None
-    # Cada mensaje trae texto o, si es un mensaje de voz, el id del audio en Meta.
-    texto: str | None = None
-    audio_id: str | None = None
-
-
-def _mensajes_recibidos(data: dict):
-    """Mensajes de texto y de voz recibidos en la notificación (lo demás, como imágenes o ubicaciones, se ignora)."""
-    for entrada in data.get("entry") or []:
-        for cambio in entrada.get("changes") or []:
-            valor = cambio.get("value") or {}
-            nombres = {
-                contacto.get("wa_id"): (contacto.get("profile") or {}).get("name")
-                for contacto in valor.get("contacts") or []
-            }
-            for mensaje in valor.get("messages") or []:
-                telefono = mensaje.get("from")
-                if not telefono:
-                    continue
-                datos = {"telefono": telefono, "message_id": mensaje.get("id"), "nombre": nombres.get(telefono)}
-                texto = (mensaje.get("text") or {}).get("body")
-                # Las notas de voz y los audios adjuntos llegan como "audio" (.ogg o .mp4).
-                audio_id = (mensaje.get("audio") or {}).get("id")
-                if mensaje.get("type") == "text" and texto:
-                    yield _MensajeRecibido(**datos, texto=texto)
-                elif mensaje.get("type") == "audio" and audio_id:
-                    yield _MensajeRecibido(**datos, audio_id=audio_id)
+def _atender_mensaje_recibido(canal: object, mensaje: MensajeRecibido) -> None:
+    if isinstance(canal, WhatsAppChannel) and mensaje.message_id:
+        canal.recordar_mensaje_recibido(mensaje.telefono, mensaje.message_id)
+    # En WhatsApp el chat es el teléfono del cliente.
+    bot_service.registrar_perfil(Channel.WHATSAPP, mensaje.telefono, mensaje.nombre, telefono=mensaje.telefono)
+    if mensaje.texto:
+        bot_service.recibir_mensaje(Channel.WHATSAPP, mensaje.telefono, mensaje.texto)
+    elif mensaje.audio_id:
+        # Se transcribe en segundo plano: Meta espera la confirmación enseguida.
+        bot_service.recibir_audio(Channel.WHATSAPP, mensaje.telefono, mensaje.audio_id)
 
 
 @router.post("/webhook")
@@ -87,16 +66,12 @@ async def recibir_mensaje(request: Request, x_hub_signature_256: str | None = He
         return {"status": "ok"}
 
     canal = obtener_canal(Channel.WHATSAPP)
-    for mensaje in _mensajes_recibidos(data):
-        if isinstance(canal, WhatsAppChannel) and mensaje.message_id:
-            canal.recordar_mensaje_recibido(mensaje.telefono, mensaje.message_id)
-        # En WhatsApp el chat es el teléfono del cliente.
-        bot_service.registrar_perfil(Channel.WHATSAPP, mensaje.telefono, mensaje.nombre, telefono=mensaje.telefono)
-        if mensaje.texto:
-            bot_service.recibir_mensaje(Channel.WHATSAPP, mensaje.telefono, mensaje.texto)
-        elif mensaje.audio_id:
-            # Se transcribe en segundo plano: Meta espera la confirmación enseguida.
-            bot_service.recibir_audio(Channel.WHATSAPP, mensaje.telefono, mensaje.audio_id)
+    for mensaje in mensajes_recibidos(data):
+        _atender_mensaje_recibido(canal, mensaje)
+
+    for telefono, texto in mensajes_salientes(data):
+        # Un empleado respondió desde Meta Business Suite: el bot se pausa en ese chat.
+        bot_service.registrar_mensaje_saliente(Channel.WHATSAPP, telefono, texto)
 
     # Meta reintenta lo que no se confirma con 200 (también llegan avisos de entrega/lectura, que se ignoran).
     return {"status": "ok"}

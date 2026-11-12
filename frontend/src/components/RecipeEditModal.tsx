@@ -1,5 +1,5 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent } from 'react';
 import { Modal, ModalBody, ModalFooter } from '@/components/ui/Modal';
 import { SearchableSelect } from '@/components/ui/SearchableSelect';
 import { INPUT_CLASS } from '@/styles/forms';
@@ -46,7 +46,7 @@ export function RecipeEditModal({ product, ingredients, onClose, onSave }: Recip
     setNextKey((key) => key + 1);
   };
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (saving) return;
 

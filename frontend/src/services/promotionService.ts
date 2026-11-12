@@ -11,11 +11,6 @@ export async function fetchAvailablePromotions(): Promise<Promotion[]> {
   return data;
 }
 
-export async function getPromotion(id: number): Promise<Promotion> {
-  const { data } = await api.get<Promotion>(`/promotions/${id}`);
-  return data;
-}
-
 export async function createPromotion(payload: PromotionPayload): Promise<Promotion> {
   const { data } = await api.post<Promotion>('/promotions', payload);
   return data;

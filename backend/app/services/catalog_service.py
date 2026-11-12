@@ -19,6 +19,7 @@ class ProductData:
     category_id: int
     is_active: bool
     dietary_restrictions: list[str]
+    allowed_extra_ids: tuple[int, ...] = ()
 
 
 # --- Consultas ----------------------------------------------------------------------------------------
@@ -85,6 +86,10 @@ def _apply(db: Session, product: Product, data: ProductData) -> None:
         is_active=data.is_active,
         dietary_restrictions=data.dietary_restrictions,
     )
+    if hasattr(data, "allowed_extra_ids") and data.allowed_extra_ids is not None:
+        from app.repositories import ingredient_repository
+        allowed_ings = ingredient_repository.get_many(db, set(data.allowed_extra_ids))
+        product.replace_allowed_extras([allowed_ings[i] for i in data.allowed_extra_ids if i in allowed_ings])
 
 
 def create_product(db: Session, data: ProductData) -> Product:

@@ -1,5 +1,5 @@
 import type { RecipeItem } from '@/types/ingredient';
-import type { PreparationSector, ProductCategory } from '@/types/order';
+import type { IngredientExtra, PreparationSector, ProductCategory } from '@/types/order';
 
 /** Producto tal como lo ve el panel: incluye los no disponibles, los sin categoría y su receta. */
 export interface AdminProduct {
@@ -14,6 +14,7 @@ export interface AdminProduct {
   /** Ruta relativa a la API (ver productImageSrc). */
   image_url: string | null;
   recipe: RecipeItem[];
+  allowed_extras?: IngredientExtra[];
 }
 
 export interface ProductPayload {
@@ -23,6 +24,7 @@ export interface ProductPayload {
   category_id: number;
   is_active: boolean;
   dietary_restrictions: string[];
+  allowed_extra_ids?: number[];
 }
 
 /** Qué hacer con la imagen al guardar el formulario del producto. */

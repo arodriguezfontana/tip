@@ -2,12 +2,15 @@ import { api } from './api';
 import type {
   AdminOrder,
   CounterOrderPayload,
+  DeliveryTrip,
+  OrderDelayEstimate,
   OrderDetail,
   OrderStatus,
   PreparationSector,
   WebOrderCreated,
   WebOrderPayload,
 } from '@/types/order';
+import type { PrintResult } from '@/types/printer';
 
 export interface FetchOrdersParams {
   dateFrom?: Date;
@@ -36,6 +39,12 @@ export async function fetchOrderDetail(orderId: number, signal?: AbortSignal): P
   return data;
 }
 
+/** Cómo se va a estimar la demora si se acepta el pedido ahora (automática o manual). */
+export async function fetchOrderDelayEstimate(orderId: number, signal?: AbortSignal): Promise<OrderDelayEstimate> {
+  const { data } = await api.get<OrderDelayEstimate>(`/orders/${orderId}/estimate`, { signal });
+  return data;
+}
+
 export async function updateOrderStatus(
   orderId: number,
   status: OrderStatus,
@@ -45,6 +54,24 @@ export async function updateOrderStatus(
     status,
     ...(estimatedMinutes !== undefined ? { estimated_minutes: estimatedMinutes } : {}),
   });
+  return data;
+}
+
+/**
+ * Inicia el viaje de un repartidor: el servidor calcula una sola ruta con todos sus pedidos armados y avisa a cada
+ * cliente su llegada estimada. Sin `orderIds` salen todos los pedidos que tiene armados.
+ */
+export async function dispatchTrip(deliveryDriverId: number, orderIds?: number[]): Promise<DeliveryTrip> {
+  const { data } = await api.post<DeliveryTrip>('/orders/trips/dispatch', {
+    delivery_driver_id: deliveryDriverId,
+    ...(orderIds ? { order_ids: orderIds } : {}),
+  });
+  return data;
+}
+
+/** Vuelve a imprimir la comanda de un pedido. No lanza si la impresora falla: informa el resultado. */
+export async function reprintOrder(orderId: number): Promise<PrintResult> {
+  const { data } = await api.post<PrintResult>(`/orders/${orderId}/print`);
   return data;
 }
 

@@ -86,6 +86,14 @@ def list_promotion_images(db: Session) -> list[PromotionImage]:
     return list(db.scalars(select(PromotionImage).order_by(PromotionImage.position, PromotionImage.id)))
 
 
+def count_promotion_images(db: Session) -> int:
+    return db.scalar(select(func.count(PromotionImage.id))) or 0
+
+
+def last_promotion_image_position(db: Session) -> int | None:
+    return db.scalar(select(func.max(PromotionImage.position)))
+
+
 def get_promotion_image(db: Session, image_id: int) -> PromotionImage | None:
     return db.get(PromotionImage, image_id)
 
@@ -96,4 +104,3 @@ def add_promotion_image(db: Session, image: PromotionImage) -> None:
 
 def delete_promotion_image(db: Session, image: PromotionImage) -> None:
     db.delete(image)
-

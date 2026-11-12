@@ -33,4 +33,3 @@ class DeliveryDriverResponse(BaseModel):
 
 class OrderAssignDriverPayload(BaseModel):
     delivery_driver_id: int | None = None
-

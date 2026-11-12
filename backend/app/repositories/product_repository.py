@@ -1,7 +1,7 @@
 from sqlalchemy import func
 from sqlalchemy.orm import Query, Session, joinedload, selectinload
 
-from app.models.menu import Product, ProductImage, ProductIngredient
+from app.models.menu import Product, ProductAllowedExtra, ProductImage, ProductIngredient
 from app.repositories.common import name_taken as _name_taken
 
 
@@ -27,7 +27,12 @@ def list_available(db: Session) -> list[Product]:
     """Productos que se ofrecen a los clientes, agrupados por categoría."""
     return (
         db.query(Product)
-        .options(joinedload(Product.category), selectinload(Product.image))
+        .options(
+            joinedload(Product.category),
+            selectinload(Product.image),
+            selectinload(Product.recipe_items).joinedload(ProductIngredient.ingredient),
+            selectinload(Product.allowed_extra_items).joinedload(ProductAllowedExtra.ingredient),
+        )
         .filter(Product.is_available)
         .order_by(Product.category_id, Product.name)
         .all()
@@ -47,6 +52,7 @@ def _with_admin_details(db: Session) -> Query:
     return db.query(Product).options(
         joinedload(Product.category),
         joinedload(Product.recipe_items).joinedload(ProductIngredient.ingredient),
+        selectinload(Product.allowed_extra_items).joinedload(ProductAllowedExtra.ingredient),
         selectinload(Product.image),
     )
 

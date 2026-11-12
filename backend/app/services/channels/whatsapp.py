@@ -60,9 +60,9 @@ class WhatsAppChannel(CanalDeMensajeria):
 
     async def _enviar(self, payload: dict, timeout: float | None = None) -> None:
         headers = {"Authorization": f"Bearer {settings.WHATSAPP_ACCESS_TOKEN}"}
-        extra = {} if timeout is None else {"timeout": timeout}
         response = await self._cliente().post(
-            self._url, json={"messaging_product": "whatsapp", **payload}, headers=headers, **extra
+            self._url, json={"messaging_product": "whatsapp", **payload}, headers=headers,
+            timeout=httpx.USE_CLIENT_DEFAULT if timeout is None else timeout,
         )
         if response.is_error:
             # Meta explica el motivo en el cuerpo (ej. número fuera de la lista de prueba, token vencido).
@@ -129,36 +129,32 @@ class WhatsAppChannel(CanalDeMensajeria):
         vigente = version == imagen.version and time.monotonic() - subida_en < MEDIA_VIGENCIA_SEGUNDOS
         return media_id if vigente else None
 
+    async def _intentar_enviar_imagen(self, chat_id: str, media_id: str, pie: str) -> bool:
+        payload = {
+            "recipient_type": "individual",
+            "to": _destinatario(chat_id),
+            "type": "image",
+            "image": {"id": media_id, **({"caption": pie} if pie else {})},
+        }
+        try:
+            await self._enviar(payload)
+        except httpx.HTTPError as e:
+            logger.error("Error al enviar la imagen a WhatsApp: %s", e)
+            return False
+        self._ultimo_mensaje_recibido.pop(chat_id, None)
+        return True
+
     async def enviar_imagen(self, chat_id: str, imagen: ImagenParaEnviar, pie: str) -> bool:
         if not self._credenciales_completas:
             logger.error("WHATSAPP_ACCESS_TOKEN o WHATSAPP_PHONE_NUMBER_ID no están configurados.")
             return False
 
         media_id = self._imagen_vigente(imagen)
-        recien_subida = media_id is None
-        if media_id is None:
-            media_id = await self._subir_imagen(imagen)
-        for _ in range(2):
-            if media_id is None:
-                return False
-            payload = {
-                "recipient_type": "individual",
-                "to": _destinatario(chat_id),
-                "type": "image",
-                "image": {"id": media_id, **({"caption": pie} if pie else {})},
-            }
-            try:
-                await self._enviar(payload)
-                self._ultimo_mensaje_recibido.pop(chat_id, None)
-                return True
-            except httpx.HTTPError as e:
-                logger.error("Error al enviar la imagen a WhatsApp: %s", e)
-                if recien_subida:
-                    return False
-                # Puede haber vencido o dejado de existir en Meta: se sube de nuevo y se reintenta una vez.
-                recien_subida = True
-                media_id = await self._subir_imagen(imagen)
-        return False
+        if media_id is not None and await self._intentar_enviar_imagen(chat_id, media_id, pie):
+            return True
+        # Si no estaba subida, o si pudo haber vencido o dejado de existir en Meta, se sube de nuevo y se envía.
+        media_id = await self._subir_imagen(imagen)
+        return media_id is not None and await self._intentar_enviar_imagen(chat_id, media_id, pie)
 
     async def descargar_audio(self, media_id: str) -> AudioRecibido | None:
         """Baja un mensaje de voz: Meta da primero la URL del archivo (vigente unos minutos) y después el archivo."""

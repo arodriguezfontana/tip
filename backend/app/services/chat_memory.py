@@ -19,16 +19,23 @@ INACTIVIDAD_PARA_REINICIAR = timedelta(hours=2)
 MAX_MENSAJES_TRANSCRIPCION = 200
 
 
+# Herramientas cuyo resultado ya es el mensaje final para el cliente.
+_HERRAMIENTAS_CON_MENSAJE_FINAL = (
+    "agregar_items_al_pedido",
+    "cambiar_metodo_de_pago",
+    "guardar_nombre_del_cliente",
+    "derivar_a_empleado",
+)
+
+
 def _ahora() -> datetime:
     return datetime.now(timezone.utc)
 
 
 def _desde_ultimo_turno(historial: list[BaseMessage]) -> list[BaseMessage]:
     """Mensajes a partir del último mensaje del cliente (nunca deja un resultado de herramienta huérfano)."""
-    for indice in range(len(historial) - 1, -1, -1):
-        if isinstance(historial[indice], HumanMessage):
-            return historial[indice:]
-    return []
+    del_cliente = [i for i, mensaje in enumerate(historial) if isinstance(mensaje, HumanMessage)]
+    return historial[del_cliente[-1] :] if del_cliente else []
 
 
 def _describir_items(pedido: dict) -> str:
@@ -96,6 +103,40 @@ class SesionChat:
         self.cliente_registrado = True
         self.cliente_nuevo = False
 
+    def _recordar_datos_del_pedido(self, datos: dict) -> None:
+        """Del pedido que se está armando, guarda lo que ya se sabe del cliente."""
+        if datos.get("cliente"):
+            self.cliente["nombre"] = datos["cliente"]
+        if datos.get("telefono"):
+            self.cliente["telefono"] = datos["telefono"]
+        if datos.get("metodo_entrega") == "domicilio" and datos.get("direccion"):
+            self.cliente["direccion"] = datos["direccion"]
+
+    def _registrar_pedido_calculado(self, resultado: str) -> str | None:
+        """Guarda el pedido que armó la herramienta; devuelve el resumen para confirmar si ya tiene todos los datos."""
+        try:
+            respuesta = json.loads(resultado)
+            datos = respuesta["datos_temporales"]
+        except (ValueError, KeyError, TypeError):
+            return None
+        self.pedido_en_curso = datos
+        self.pedido_armado_en_este_turno = True
+        self._recordar_datos_del_pedido(datos)
+        return None if datos.get("faltan_datos") else respuesta.get("mensaje_para_usuario")
+
+    def _registrar_pedido_confirmado(self) -> None:
+        """El pedido en curso quedó registrado: pasa a ser el último pedido del cliente."""
+        if self.pedido_en_curso:
+            horario = self.pedido_en_curso.get("hora_programada")
+            dia = self.pedido_en_curso.get("dia_programado")
+            cuando = f"para las {horario}{f' del {dia}' if dia else ''}" if horario else "para ahora"
+            self.ultimo_pedido = (
+                f"{_describir_items(self.pedido_en_curso)} ({cuando}), "
+                "registrado y pendiente de que el local lo confirme"
+            )
+        self.pedido_en_curso = None
+        self.pedido_registrado_en_este_turno = True
+
     def registrar_resultado_herramienta(self, nombre: str, resultado: str) -> str | None:
         """Extrae de los resultados de las herramientas lo que vale la pena recordar.
 
@@ -103,48 +144,16 @@ class SesionChat:
         resultado ya es la respuesta final: el resumen completo para confirmar o el pedido registrado.
         """
         if nombre == "calcular_y_preparar_pedido":
-            try:
-                respuesta = json.loads(resultado)
-                datos = respuesta["datos_temporales"]
-            except (ValueError, KeyError, TypeError):
-                return None
-            self.pedido_en_curso = datos
-            self.pedido_armado_en_este_turno = True
-            if datos.get("cliente"):
-                self.cliente["nombre"] = datos["cliente"]
-            if datos.get("telefono"):
-                self.cliente["telefono"] = datos["telefono"]
-            if datos.get("metodo_entrega") == "domicilio" and datos.get("direccion"):
-                self.cliente["direccion"] = datos["direccion"]
-            if not datos.get("faltan_datos"):
-                return respuesta.get("mensaje_para_usuario")
-
-        elif nombre == "confirmar_y_guardar_pedido" and MARCA_PEDIDO_REGISTRADO in resultado:
-            if self.pedido_en_curso:
-                horario = self.pedido_en_curso.get("hora_programada")
-                dia = self.pedido_en_curso.get("dia_programado")
-                cuando = f"para las {horario}{f' del {dia}' if dia else ''}" if horario else "para ahora"
-                self.ultimo_pedido = (
-                    f"{_describir_items(self.pedido_en_curso)} ({cuando}), "
-                    "registrado y pendiente de que el local lo confirme"
-                )
-            self.pedido_en_curso = None
-            self.pedido_registrado_en_este_turno = True
+            return self._registrar_pedido_calculado(resultado)
+        if nombre == "confirmar_y_guardar_pedido" and MARCA_PEDIDO_REGISTRADO in resultado:
+            self._registrar_pedido_confirmado()
             return resultado
-
-        elif nombre in ("agregar_items_al_pedido", "cambiar_metodo_de_pago", "guardar_nombre_del_cliente"):
-            # El mensaje ya trae los montos y las opciones calculados por el sistema: sale tal cual.
-            return resultado
-
-        elif nombre == "enviar_menu_en_imagen" and resultado == MENSAJE_MENU_ENVIADO:
-            # La imagen ya salió con su pie de foto: solo queda invitarlo a pedir, sin otra llamada al modelo.
-            return resultado
-
-        elif nombre == "derivar_a_empleado":
-            # La conversación pasa a una persona: el aviso al cliente sale tal cual, sin otra llamada al modelo.
-            return resultado
-
-        return None
+        # El mensaje ya trae los montos y las opciones calculados por el sistema, o la conversación pasa a una
+        # persona, o la imagen ya salió con su pie de foto: sale tal cual, sin otra llamada al modelo.
+        sale_tal_cual = nombre in _HERRAMIENTAS_CON_MENSAJE_FINAL or (
+            nombre == "enviar_menu_en_imagen" and resultado == MENSAJE_MENU_ENVIADO
+        )
+        return resultado if sale_tal_cual else None
 
     def finalizar_turno(self) -> None:
         if self.pedido_registrado_en_este_turno:

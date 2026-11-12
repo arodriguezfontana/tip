@@ -1,5 +1,5 @@
 import { useEffect, useState } from 'react';
-import type { FormEvent, ReactNode } from 'react';
+import type { SubmitEvent, ReactNode } from 'react';
 import { useAuth } from '@/hooks/useAuth';
 import { validateCustomerData } from '@/utils/customerValidation';
 import { getErrorMessage } from '@/utils/errors';
@@ -11,6 +11,16 @@ export type CustomerAuthMode = 'login' | 'register';
 interface RegisterErrors extends CustomerDataErrors {
   email?: string;
   password?: string;
+}
+
+const MIN_PASSWORD_LENGTH = 8;
+
+function passwordErrors(password: string, mode: CustomerAuthMode): Pick<RegisterErrors, 'password'> {
+  if (!password) return { password: 'Ingresá tu contraseña.' };
+  if (mode === 'register' && password.length < MIN_PASSWORD_LENGTH) {
+    return { password: `La contraseña debe tener al menos ${MIN_PASSWORD_LENGTH} caracteres.` };
+  }
+  return {};
 }
 
 function Field({
@@ -69,18 +79,31 @@ export function CustomerAuthModal({
     setSubmitError(null);
   };
 
-  const validate = (): RegisterErrors => {
-    const nextErrors: RegisterErrors = {};
-    if (!email.trim()) nextErrors.email = 'Ingresá tu email.';
-    if (!password) nextErrors.password = 'Ingresá tu contraseña.';
+  const validate = (): RegisterErrors => ({
+    ...(email.trim() ? {} : { email: 'Ingresá tu email.' }),
+    ...passwordErrors(password, mode),
+    ...(mode === 'register' ? validateCustomerData({ full_name: fullName, phone, address }) : {}),
+  });
+
+  /** Inicia sesión o crea la cuenta. Devuelve el motivo si la cuenta no puede usarse acá, o null si todo salió bien. */
+  const authenticate = async (): Promise<string | null> => {
     if (mode === 'register') {
-      if (password && password.length < 8) nextErrors.password = 'La contraseña debe tener al menos 8 caracteres.';
-      Object.assign(nextErrors, validateCustomerData({ full_name: fullName, phone, address }));
+      await register({
+        email: email.trim(),
+        password,
+        full_name: fullName.trim(),
+        phone: phone.trim(),
+        address: address.trim(),
+      });
+      return null;
     }
-    return nextErrors;
+    const me = await login(email.trim(), password);
+    if (me.role === 'CUSTOMER') return null;
+    logout();
+    return 'Esta cuenta es de administración. Ingresá con una cuenta de cliente.';
   };
 
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (submitting) return;
 
@@ -91,23 +114,9 @@ export function CustomerAuthModal({
 
     setSubmitting(true);
     try {
-      if (mode === 'login') {
-        const me = await login(email.trim(), password);
-        if (me.role !== 'CUSTOMER') {
-          logout();
-          setSubmitError('Esta cuenta es de administración. Ingresá con una cuenta de cliente.');
-          return;
-        }
-      } else {
-        await register({
-          email: email.trim(),
-          password,
-          full_name: fullName.trim(),
-          phone: phone.trim(),
-          address: address.trim(),
-        });
-      }
-      onClose();
+      const rejection = await authenticate();
+      if (rejection) setSubmitError(rejection);
+      else onClose();
     } catch (err) {
       setSubmitError(
         getErrorMessage(err, mode === 'login' ? 'No se pudo iniciar sesión.' : 'No se pudo crear la cuenta.')

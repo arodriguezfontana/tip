@@ -12,18 +12,29 @@ class IngredientPayload(BaseModel):
 
     name: str = Field(..., min_length=1, max_length=100)
     unit: str = Field(..., min_length=1, max_length=30, description="Unidad de medida, ej. 'gramos' o 'unidades'.")
+    cost: float = Field(default=0.0, ge=0, description="Costo unitario aproximado del ingrediente.")
+    extra_price: float = Field(default=0.0, ge=0, description="Precio adicional opcional cuando se pide como extra.")
 
 
 class IngredientResponse(BaseModel):
     id: int
     name: str
     unit: str
+    cost: float = 0.0
+    extra_price: float = 0.0
     products_count: int = Field(..., description="Cantidad de productos en cuya receta figura.")
 
     @classmethod
     def from_usage(cls, usage: IngredientUsage) -> "IngredientResponse":
         ingredient = usage.ingredient
-        return cls(id=ingredient.id, name=ingredient.name, unit=ingredient.unit, products_count=usage.products_count)
+        return cls(
+            id=ingredient.id,
+            name=ingredient.name,
+            unit=ingredient.unit,
+            cost=float(ingredient.cost or 0.0),
+            extra_price=float(ingredient.extra_price or 0.0),
+            products_count=usage.products_count,
+        )
 
 
 class RecipeItemPayload(BaseModel):

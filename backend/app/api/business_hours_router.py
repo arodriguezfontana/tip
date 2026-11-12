@@ -5,7 +5,6 @@ from sqlalchemy.orm import Session
 
 from app.api.deps import get_current_admin
 from app.db.session import get_db
-from app.models.user import User
 from app.schemas.business_hours_schemas import BusinessHoursRange, BusinessHoursStatus, BusinessHoursUpdate
 from app.services.business_hours_service import EstadoLocal, Franja, estado_del_local, guardar_franjas
 
@@ -30,17 +29,16 @@ def _to_status(estado: EstadoLocal) -> BusinessHoursStatus:
     )
 
 
-@router.get("", response_model=BusinessHoursStatus)
+@router.get("")
 def get_business_hours(db: Session = Depends(get_db)) -> BusinessHoursStatus:
     """Endpoint público: horarios de atención y si el local está abierto para recibir pedidos."""
     return _to_status(estado_del_local(db))
 
 
-@router.put("", response_model=BusinessHoursStatus)
+@router.put("", dependencies=[Depends(get_current_admin)])
 def update_business_hours(
     payload: BusinessHoursUpdate,
     db: Session = Depends(get_db),
-    current_user: User = Depends(get_current_admin),
 ) -> BusinessHoursStatus:
     """Reemplaza los horarios de atención del local (los días sin franjas quedan cerrados)."""
     franjas = [

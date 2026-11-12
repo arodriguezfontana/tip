@@ -1,9 +1,21 @@
 import hashlib
+import re
 
 from pydantic import model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 from app.core.channels import Channel
+
+# Variables de configuración que necesita cada canal para funcionar.
+_CREDENCIALES_POR_CANAL = {
+    Channel.TELEGRAM: ("TELEGRAM_TOKEN",),
+    Channel.WHATSAPP: (
+        "WHATSAPP_ACCESS_TOKEN",
+        "WHATSAPP_PHONE_NUMBER_ID",
+        "WHATSAPP_VERIFY_TOKEN",
+        "WHATSAPP_APP_SECRET",
+    ),
+}
 
 
 class Settings(BaseSettings):
@@ -39,6 +51,7 @@ class Settings(BaseSettings):
 
     ADMIN_EMAIL: str
     ADMIN_PASSWORD: str
+    ADMIN_PIN: str = "1234"
 
     # WhatsApp Business Platform (Cloud API oficial de Meta). Ver backend/docs/whatsapp.md.
     WHATSAPP_ACCESS_TOKEN: str = ""
@@ -51,6 +64,7 @@ class Settings(BaseSettings):
 
     # Los mensajes que un cliente manda seguidos al bot se esperan este tiempo y se responden juntos, de una vez.
     # La espera se reinicia con cada mensaje nuevo, hasta el tope máximo desde el primero del grupo.
+    # Los tiempos de espera de mensajes seguidos de dev (5 s y 15 s), más los modelos de Gemini del bot.
     BOT_BATCH_WINDOW_SECONDS: float = 5.0
     BOT_BATCH_MAX_WAIT_SECONDS: float = 15.0
 
@@ -59,6 +73,21 @@ class Settings(BaseSettings):
     # por coma; vacío: sin respaldo). Cada modelo tiene su propia cuota gratuita. Ver gemini_models.py.
     BOT_LLM_MODEL: str = "gemini-3.5-flash-lite"
     BOT_LLM_FALLBACK_MODELS: str = "gemini-flash-lite-latest,gemini-3.1-flash-lite"
+
+    # Google Maps (Routes API) para calcular la ruta y los tiempos de llegada de los viajes de los repartidores.
+    GOOGLE_MAPS_API_KEY: str = ""
+    # Dirección de la API de rutas; solo se cambia en los tests e2e, que usan un servidor falso.
+    GOOGLE_MAPS_ROUTES_URL: str = "https://routes.googleapis.com/directions/v2:computeRoutes"
+    # API que ubica las direcciones de los pedidos (también se reemplaza en los e2e).
+    GOOGLE_MAPS_GEOCODE_URL: str = "https://maps.googleapis.com/maps/api/geocode/json"
+    # Una dirección que, aun la más cercana al local, queda más lejos que esto se rechaza (0 = sin límite).
+    DELIVERY_MAX_DISTANCE_KM: float = 50.0
+    # Sesgo regional de las direcciones (código de país).
+    GOOGLE_MAPS_REGION: str = "ar"
+    # Minutos que el repartidor tarda en entregar a cada cliente: se suman a la llegada de las paradas siguientes.
+    DELIVERY_STOP_TOLERANCE_MINUTES: int = 3
+    # Sin mensajes durante este tiempo, un chat intervenido por una persona vuelve al bot (10 minutos).
+    MANUAL_MODE_TIMEOUT_SECONDS: float = 600.0
 
     # Zona horaria del local: los horarios que pide el cliente ("para las 21:00") se interpretan en ella.
     RESTAURANT_TIMEZONE: str = "America/Argentina/Buenos_Aires"
@@ -82,23 +111,21 @@ class Settings(BaseSettings):
 
     @model_validator(mode="after")
     def _credenciales_de_los_canales_habilitados(self) -> "Settings":
-        requeridas = {
-            Channel.TELEGRAM: ("TELEGRAM_TOKEN",),
-            Channel.WHATSAPP: (
-                "WHATSAPP_ACCESS_TOKEN",
-                "WHATSAPP_PHONE_NUMBER_ID",
-                "WHATSAPP_VERIFY_TOKEN",
-                "WHATSAPP_APP_SECRET",
-            ),
-        }
         habilitados = self.canales_habilitados
         if not habilitados:
             raise ValueError("BOT_CHANNELS debe incluir al menos un canal (telegram, whatsapp).")
         for canal in habilitados:
-            faltan = [nombre for nombre in requeridas[canal] if not getattr(self, nombre)]
-            if faltan:
-                raise ValueError(f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}.")
+            self._exigir_credenciales(canal)
+        if not re.match(r"^\d{4}$", self.ADMIN_PIN):
+            raise ValueError("ADMIN_PIN debe ser un código numérico de 4 dígitos (ej. '1234').")
         return self
+
+    def _exigir_credenciales(self, canal: Channel) -> None:
+        faltan = [nombre for nombre in _CREDENCIALES_POR_CANAL[canal] if not getattr(self, nombre)]
+        if faltan:
+            raise ValueError(
+                f"El canal '{canal}' está habilitado en BOT_CHANNELS y falta configurar: {', '.join(faltan)}."
+            )
 
     @property
     def telegram_webhook_secret(self) -> str:
@@ -112,4 +139,4 @@ class Settings(BaseSettings):
         return hashlib.sha256(f"telegram-webhook:{self.TELEGRAM_TOKEN}".encode()).hexdigest()
 
 
-settings = Settings()
+settings = Settings()  # pyright: ignore[reportCallIssue]  # los campos obligatorios vienen del entorno

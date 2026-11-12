@@ -1,13 +1,15 @@
 import { useState } from 'react';
 import type { MouseEvent } from 'react';
-import { PAYMENT_METHOD_LABEL } from '@/types/order';
 import type { AdminOrder, OrderStatus, SectorFilter } from '@/types/order';
 import { formatCurrency } from '@/utils/currency';
 import { useElapsedTime } from '@/hooks/useElapsedTime';
+import { DriverAssignment } from '@/components/DriverAssignment';
+import { KitchenUpdateBanner } from '@/components/KitchenUpdateBanner';
+import { PaymentBadges } from '@/components/PaymentBadges';
+import { PendingOrderActions } from '@/components/PendingOrderActions';
 import { ALERT_THRESHOLD_MS, formatElapsed, getDelayLevel } from '@/utils/elapsedTime';
 import type { DelayLevel } from '@/utils/elapsedTime';
 import type { DeliveryDriver } from '@/types/deliveryDriver';
-import { BellIcon, DeliveryIcon, PaymentMethodIcon } from '@/components/Icons';
 
 const SOURCE_BADGE: Record<AdminOrder['source'], { label: string; className: string }> = {
   web: { label: 'Web', className: 'bg-emerald-50 text-emerald-700 border border-emerald-200' },
@@ -45,7 +47,11 @@ interface ComandaCardProps {
   onItemPreparedChange?: (orderId: number, itemId: number, isPrepared: boolean) => Promise<void>;
   /** Callback opcional de sector (para compatibilidad). */
   onSectorPrepared?: (orderId: number, sector: string, isPrepared: boolean) => Promise<void>;
+  /** En el modo simulación los pedidos no existen en el servidor: no se consulta la estimación de demora. */
+  simulated?: boolean;
 }
+
+export { ESTIMATE_REFRESH_INTERVAL_MS } from '@/hooks/useOrderEstimate';
 
 /** Evita que los clics en los controles de la tarjeta abran el detalle del pedido. */
 const stopPropagation = (event: MouseEvent) => event.stopPropagation();
@@ -58,18 +64,20 @@ export function ComandaCard({
   onAcknowledgeUpdate,
   activeDrivers = [],
   onOpenDetail,
+  simulated = false,
 }: ComandaCardProps) {
   const [pending, setPending] = useState(false);
-  const [markingPaid, setMarkingPaid] = useState(false);
-  const [acknowledging, setAcknowledging] = useState(false);
-  const [estimatedMinutesInput, setEstimatedMinutesInput] = useState('');
   const elapsedMs = useElapsedTime(order.created_at);
-  const isScheduled = order.scheduled_for != null;
+  // Un pedido a domicilio "En Camino" primero arma su viaje (en silencio) y recién sale cuando se inicia el viaje.
+  const isDeliveryOnTheWay = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !simulated;
+  const isDispatched = isDeliveryOnTheWay && order.trip_id != null;
+  const isBuildingTrip = isDeliveryOnTheWay && order.trip_id == null;
   const hasKitchenUpdate = Boolean(order.kitchen_update_pending);
   // Pago mixto: ya se cobró una parte y el resto (la diferencia) se cobra aparte, ej. en efectivo al repartidor.
   const hasPartialPayment = !order.is_paid && (order.paid_amount ?? 0) > 0;
   // Los pedidos a domicilio en camino llevan repartidor: el cartel permite asignarlo o cambiarlo.
-  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio';
+  // Con el viaje ya despachado el repartidor no se cambia (la ruta y los avisos ya salieron).
+  const canAssignDriver = order.status === 'En Camino' && order.delivery_method === 'domicilio' && !isDispatched;
 
   const isOverdue = order.status === 'Pendiente' && elapsedMs > ALERT_THRESHOLD_MS;
   const delayLevel = getDelayLevel(order, new Date(order.created_at).getTime() + elapsedMs);
@@ -78,9 +86,15 @@ export function ComandaCard({
     : delayLevel
       ? DELAY_BADGE_CLASS[delayLevel]
       : 'bg-gray-100 text-gray-600';
-  const parsedMinutes = Number(estimatedMinutesInput);
-  
-  const isValidMinutes = estimatedMinutesInput.trim() === '' || (Number.isInteger(parsedMinutes) && parsedMinutes > 0);
+
+  const handleAssignDriver = async (driverId: number | null) => {
+    setPending(true);
+    try {
+      await onAssignDriver?.(order.id, driverId);
+    } finally {
+      setPending(false);
+    }
+  };
 
   const handleClick = async (newStatus: OrderStatus, estimatedMinutes?: number) => {
     setPending(true);
@@ -106,13 +120,13 @@ export function ComandaCard({
                   event.stopPropagation();
                   onOpenDetail(order);
                 }}
-                aria-label={`Ver detalle del pedido #${order.id}`}
+                aria-label={`Ver detalle del pedido #${order.shift_number}`}
                 className="font-bold text-gray-900 text-sm rounded hover:underline focus:outline-none focus-visible:ring-2 focus-visible:ring-black"
               >
-                #{order.id}
+                #{order.shift_number}
               </button>
             ) : (
-              <span className="font-bold text-gray-900 text-sm">#{order.id}</span>
+              <span className="font-bold text-gray-900 text-sm">#{order.shift_number}</span>
             )}
             <span
               className={`text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-md ${
@@ -128,33 +142,7 @@ export function ComandaCard({
         </div>
 
         {hasKitchenUpdate && (
-          <div
-            role="alert"
-            onClick={stopPropagation}
-            className="flex items-center justify-between gap-2 rounded-xl bg-amber-100 border border-amber-300 px-3 py-2 text-xs font-bold text-amber-900 animate-pulse"
-          >
-            <span className="inline-flex items-center gap-1.5">
-              <BellIcon className="w-3.5 h-3.5 text-amber-700 shrink-0" />
-              Pedido actualizado: el cliente agregó productos
-            </span>
-            {onAcknowledgeUpdate && (
-              <button
-                type="button"
-                disabled={acknowledging}
-                onClick={async () => {
-                  setAcknowledging(true);
-                  try {
-                    await onAcknowledgeUpdate(order.id);
-                  } finally {
-                    setAcknowledging(false);
-                  }
-                }}
-                className="shrink-0 rounded-lg bg-amber-600 hover:bg-amber-700 disabled:opacity-60 text-white px-2.5 py-1 transition"
-              >
-                Visto
-              </button>
-            )}
-          </div>
+          <KitchenUpdateBanner onAcknowledge={onAcknowledgeUpdate && (() => onAcknowledgeUpdate(order.id))} />
         )}
 
         <div className="text-sm space-y-1">
@@ -170,66 +158,13 @@ export function ComandaCard({
           </p>
         </div>
 
-        {canAssignDriver ? (
-          /* Cartel que al tocarlo deja elegir el repartidor: un selector nativo transparente encima del texto. */
-          <div
-            onClick={stopPropagation}
-            className={`relative self-start text-xs font-semibold rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5 transition focus-within:ring-2 focus-within:ring-black ${
-              order.delivery_driver_name
-                ? 'text-blue-800 bg-blue-50 border border-blue-200/60 hover:bg-blue-100'
-                : 'text-blue-700 bg-white border border-dashed border-blue-300 hover:bg-blue-50'
-            } ${pending ? 'opacity-60' : ''}`}
-          >
-            <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
-            {order.delivery_driver_name ? (
-              <>
-                <span>Repartidor:</span>
-                <span className="font-bold">{order.delivery_driver_name}</span>
-              </>
-            ) : (
-              <span>Asignar repartidor</span>
-            )}
-            <span aria-hidden="true" className="text-[10px] opacity-70">
-              ▾
-            </span>
-            <select
-              aria-label={order.delivery_driver_name ? 'Cambiar repartidor' : 'Asignar repartidor'}
-              value={order.delivery_driver_id ?? ''}
-              disabled={pending}
-              onChange={async (e) => {
-                const val = e.target.value;
-                setPending(true);
-                try {
-                  await onAssignDriver?.(order.id, val ? Number(val) : null);
-                } finally {
-                  setPending(false);
-                }
-              }}
-              className="absolute inset-0 w-full h-full opacity-0 cursor-pointer disabled:cursor-wait"
-            >
-              <option value="" disabled={!order.delivery_driver_name}>
-                {order.delivery_driver_name ? 'Quitar asignación' : 'Elegí un repartidor'}
-              </option>
-              {/* Si el repartidor asignado ya no está activo igual se muestra como el elegido. */}
-              {order.delivery_driver_id != null && !activeDrivers.some((d) => d.id === order.delivery_driver_id) && (
-                <option value={order.delivery_driver_id}>{order.delivery_driver_name}</option>
-              )}
-              {activeDrivers.map((driver) => (
-                <option key={driver.id} value={driver.id}>
-                  {driver.name} ({driver.phone})
-                </option>
-              ))}
-            </select>
-          </div>
-        ) : (
-          order.delivery_driver_name && (
-            <p className="self-start text-xs font-semibold text-blue-800 bg-blue-50 border border-blue-200/60 rounded-lg px-2.5 py-1 inline-flex items-center gap-1.5">
-              <DeliveryIcon className="w-3.5 h-3.5 shrink-0" />
-              <span>Repartidor:</span>
-              <span className="font-bold">{order.delivery_driver_name}</span>
-            </p>
-          )
-        )}
+        <DriverAssignment
+          order={order}
+          activeDrivers={activeDrivers}
+          canAssign={canAssignDriver}
+          pending={pending}
+          onAssign={handleAssignDriver}
+        />
 
         <div className="flex flex-wrap items-center gap-2 text-xs">
           {order.scheduled_for ? (
@@ -244,102 +179,32 @@ export function ComandaCard({
             )
           )}
 
+          {isBuildingTrip && (
+            <span className="bg-blue-50 border border-blue-200 text-blue-800 px-2.5 py-1 rounded-xl font-semibold">
+              Armando viaje
+            </span>
+          )}
+          {isDispatched && (
+            <span className="bg-emerald-50 border border-emerald-200 text-emerald-800 px-2.5 py-1 rounded-xl font-semibold">
+              En viaje{order.eta_minutes != null ? ` · llega en ~${order.eta_minutes} min` : ''}
+            </span>
+          )}
+
           <span className="ml-auto font-bold text-black text-sm">{formatCurrency(order.total_amount)}</span>
         </div>
 
-        {/* Medio de pago y si ya está abonado; si está pendiente, un clic lo marca como abonado. */}
-        <div className="flex flex-wrap items-center gap-1.5 text-[11px]">
-          {hasPartialPayment && (
-            <>
-              <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
-                Pagado {order.payment_method ? PAYMENT_METHOD_LABEL[order.payment_method] : ''}: {formatCurrency(order.paid_amount ?? 0)}
-              </span>
-              <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
-                Cobrar {order.balance_payment_method ? PAYMENT_METHOD_LABEL[order.balance_payment_method] : 'diferencia'}:{' '}
-                {formatCurrency(order.pending_amount ?? 0)}
-              </span>
-            </>
-          )}
-          <span className={`bg-gray-50 border border-gray-200 text-gray-700 px-2 py-1 rounded-xl font-semibold whitespace-nowrap inline-flex items-center gap-1.5 ${hasPartialPayment ? 'hidden' : ''}`}>
-            {order.payment_method ? (
-              <>
-                <PaymentMethodIcon method={order.payment_method} className="w-3.5 h-3.5 shrink-0 @max-[205px]:hidden" />
-                {PAYMENT_METHOD_LABEL[order.payment_method]}
-              </>
-            ) : (
-              'Medio de pago sin definir'
-            )}
-          </span>
-
-          {order.is_paid ? (
-            <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
-              Abonado
-            </span>
-          ) : hasPartialPayment ? null : onMarkPaid ? (
-            <button
-              type="button"
-              disabled={markingPaid}
-              onClick={async (e) => {
-                e.stopPropagation();
-                setMarkingPaid(true);
-                try {
-                  await onMarkPaid(order.id, true);
-                } finally {
-                  setMarkingPaid(false);
-                }
-              }}
-              title="Hacé clic para marcar como abonado"
-              aria-label="Pago pendiente: marcar como abonado"
-              className="bg-amber-50 hover:bg-amber-100 disabled:opacity-60 text-amber-800 border border-amber-200 hover:border-amber-300 px-2 py-1 rounded-xl font-semibold whitespace-nowrap transition cursor-pointer"
-            >
-              Pago Pendiente
-            </button>
-          ) : (
-            <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
-              Pago Pendiente
-            </span>
-          )}
-        </div>
+        <PaymentBadges
+          order={order}
+          hasPartialPayment={hasPartialPayment}
+          onMarkPaid={onMarkPaid && (() => onMarkPaid(order.id, true))}
+        />
 
         {order.status === 'Pendiente' && (
-          <div className="space-y-2 pt-2 border-t border-gray-50" onClick={stopPropagation}>
-            {/* Los programados se entregan en su horario: no llevan demora estimada. */}
-            {!isScheduled && (
-              <input
-                type="number"
-                min={1}
-                step={1}
-                placeholder="Automática (15+ min) o manual"
-                value={estimatedMinutesInput}
-                onChange={(e) => setEstimatedMinutesInput(e.target.value)}
-                className="w-full rounded-xl border border-gray-200 px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black bg-gray-50/50"
-              />
-            )}
-            <div className="flex gap-2">
-              <button
-                type="button"
-                disabled={pending || !isValidMinutes}
-                onClick={() =>
-                  handleClick('Confirmado', isScheduled || estimatedMinutesInput.trim() === '' ? undefined : parsedMinutes)
-                }
-                className="flex-1 bg-green-600 hover:bg-green-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
-              >
-                Confirmar
-              </button>
-              <button
-                type="button"
-                disabled={pending}
-                onClick={() => handleClick('Rechazado')}
-                className="flex-1 bg-red-600 hover:bg-red-700 disabled:opacity-50 text-white py-2 rounded-xl text-xs font-bold transition shadow-xs"
-              >
-                Rechazar
-              </button>
-            </div>
-          </div>
+          <PendingOrderActions order={order} simulated={simulated} pending={pending} onAction={handleClick} />
         )}
 
         {order.status === 'Confirmado' && (
-          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
+          <div className="cursor-default pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}
@@ -351,8 +216,16 @@ export function ComandaCard({
           </div>
         )}
 
-        {(order.status === 'En Camino' || order.status === 'Listo para Retirar') && (
-          <div className="pt-2 border-t border-gray-50" onClick={stopPropagation}>
+        {isBuildingTrip && (
+          <p className="cursor-default pt-2 border-t border-gray-50 text-xs text-gray-500" onClick={stopPropagation}>
+            {order.delivery_driver_id != null
+              ? 'Esperando que inicies el viaje del repartidor.'
+              : 'Asignale un repartidor para armar el viaje.'}
+          </p>
+        )}
+
+        {(order.status === 'Listo para Retirar' || (order.status === 'En Camino' && !isBuildingTrip)) && (
+          <div className="cursor-default pt-2 border-t border-gray-50" onClick={stopPropagation}>
             <button
               type="button"
               disabled={pending}

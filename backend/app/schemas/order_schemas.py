@@ -1,4 +1,5 @@
 from datetime import datetime
+from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field, model_validator
 
@@ -12,6 +13,8 @@ WEB_PAYMENT_METHODS = (PaymentMethod.CASH, PaymentMethod.MERCADOPAGO)
 
 class OrderResponse(BaseModel):
     id: int
+    # Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna).
+    shift_number: int
     customer_name: str
     shipping_address: str
     total_amount: float
@@ -20,14 +23,24 @@ class OrderResponse(BaseModel):
     source: str
     # Canal de mensajería del pedido del bot (telegram, whatsapp); None si no vino de un chat.
     channel: str | None = None
+    # El pedido salió de un chat del bot y se puede hablar con el cliente desde el panel.
+    has_chat: bool = False
     customer_phone: str | None = None
     notes: str | None = None
     estimated_minutes: int | None
+    # De dónde salió la demora: "smart" (historial del local), "manual" (la indicó el personal) o "default".
+    estimate_source: str | None = None
+    # Demora real en minutos (desde que ingresó hasta que se finalizó); vacía mientras el pedido no terminó.
+    actual_minutes: int | None = None
     scheduled_for: datetime | None = None
     created_at: datetime
     item_count: int
     delivery_driver_id: int | None = None
     delivery_driver_name: str | None = None
+    # Viaje en el que salió el pedido, su parada y la llegada estimada; vacíos mientras el viaje se está armando.
+    trip_id: int | None = None
+    trip_stop: int | None = None
+    eta_minutes: int | None = None
     payment_method: PaymentMethod | None = None  # type: ignore[assignment]
     is_paid: bool = False
     # Pago parcial (se agregaron productos a un pedido ya abonado): lo cobrado, lo que falta y cómo se salda.
@@ -40,6 +53,8 @@ class OrderResponse(BaseModel):
     items_prepared_count: int = 0
     is_all_prepared: bool = False
     sectors: list[str] = Field(default_factory=list)
+    # Solo al confirmar: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @model_validator(mode="after")
     def _web_payment_methods(self) -> "OrderResponse":
@@ -50,31 +65,99 @@ class OrderResponse(BaseModel):
     def from_model(cls, order: Order) -> "OrderResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             customer_name=order.customer_name,
             shipping_address=order.shipping_address,
-            total_amount=order.total_amount,
+            total_amount=float(order.total_amount),
             status=order.status,
             delivery_method=order.delivery_method,
             source=order.source,
             channel=order.channel,
+            has_chat=bool(order.channel and order.chat_id),
             customer_phone=order.customer_phone,
             notes=order.notes,
             estimated_minutes=order.estimated_minutes,
+            estimate_source=order.estimate_source,
+            actual_minutes=order.actual_minutes,
             scheduled_for=order.scheduled_for,
             created_at=order.created_at,
             item_count=len(order.items),
             delivery_driver_id=order.delivery_driver_id,
             delivery_driver_name=order.delivery_driver.name if order.delivery_driver else None,
-            payment_method=order.payment_method,
+            trip_id=order.trip_id,
+            trip_stop=order.trip_stop,
+            eta_minutes=order.eta_minutes,
+            payment_method=PaymentMethod(order.payment_method) if order.payment_method else None,
             is_paid=bool(order.is_paid),
-            paid_amount=order.amount_paid,
-            pending_amount=order.amount_pending,
-            balance_payment_method=order.balance_payment_method,
+            paid_amount=float(order.amount_paid),
+            pending_amount=float(order.amount_pending),
+            balance_payment_method=PaymentMethod(order.balance_payment_method) if order.balance_payment_method else None,
             kitchen_update_pending=bool(order.kitchen_update_pending),
             items=[WebOrderItemResponse.from_model(item) for item in order.items] if order.items else [],
             items_prepared_count=order.items_prepared_count,
             is_all_prepared=order.is_all_prepared,
             sectors=order.sectors,
+        )
+
+
+class OrderDelayEstimateResponse(BaseModel):
+    """Cómo se estimará la demora al aceptar un pedido."""
+
+    # "smart": la calcula el sistema con el historial; "manual": la tiene que indicar el empleado.
+    mode: Literal["smart", "manual"]
+    # Demora calculada (solo en modo inteligente).
+    estimated_minutes: int | None = None
+    # Pedidos parecidos con los que se calculó, o los que hay hasta ahora, y los que se necesitan.
+    samples: int
+    min_samples: int
+    queue_size: int
+    # Demora estándar del local, para sugerirla al cargarla a mano.
+    suggested_minutes: int
+
+
+class TripDispatchPayload(BaseModel):
+    delivery_driver_id: int = Field(..., gt=0)
+    # Pedidos que salen en el viaje; si no se indican, salen todos los que el repartidor tiene armados.
+    order_ids: list[int] | None = Field(None, min_length=1)
+
+
+class TripStopResponse(BaseModel):
+    order_id: int
+    stop: int
+    address: str
+    customer_name: str
+    eta_minutes: int | None = None
+
+
+class TripResponse(BaseModel):
+    id: int
+    delivery_driver_id: int | None
+    delivery_driver_name: str | None
+    dispatched_at: datetime
+    total_minutes: int | None = None
+    # Por qué el viaje salió sin tiempos estimados (solo si no se pudo calcular la ruta).
+    warning: str | None = None
+    stops: list[TripStopResponse]
+
+    @classmethod
+    def from_model(cls, trip, warning: str | None = None) -> "TripResponse":
+        return cls(
+            id=trip.id,
+            delivery_driver_id=trip.delivery_driver_id,
+            delivery_driver_name=trip.driver.name if trip.driver else None,
+            dispatched_at=trip.dispatched_at,
+            total_minutes=trip.total_minutes,
+            warning=warning,
+            stops=[
+                TripStopResponse(
+                    order_id=o.id,
+                    stop=o.trip_stop,
+                    address=o.shipping_address,
+                    customer_name=o.customer_name,
+                    eta_minutes=o.eta_minutes,
+                )
+                for o in trip.orders
+            ],
         )
 
 
@@ -192,18 +275,17 @@ class WebOrderItemResponse(BaseModel):
 
     @classmethod
     def from_model(cls, item: OrderItem) -> "WebOrderItemResponse":
-        promo_products = []
-        if item.promotion and item.promotion.items:
-            for it in item.promotion.items:
-                if it.product:
-                    promo_products.append(
-                        PromotionProductDetail(
-                            product_id=it.product_id,
-                            product_name=it.product.name,
-                            quantity=it.quantity * item.quantity,
-                            sector=it.product.effective_sector,
-                        )
-                    )
+        promotion_items = item.promotion.items if item.promotion else []
+        promo_products = [
+            PromotionProductDetail(
+                product_id=it.product_id,
+                product_name=it.product.name,
+                quantity=it.quantity * item.quantity,
+                sector=it.product.effective_sector,
+            )
+            for it in promotion_items
+            if it.product
+        ]
         return cls(
             id=item.id,
             product_id=item.product_id,
@@ -211,8 +293,8 @@ class WebOrderItemResponse(BaseModel):
             is_promotion=item.promotion_id is not None,
             product_name=item.display_name,
             quantity=item.quantity,
-            unit_price=item.unit_price,
-            subtotal=item.subtotal,
+            unit_price=float(item.unit_price),
+            subtotal=float(item.subtotal),
             sector=item.sector,
             is_prepared=bool(item.is_prepared),
             added_later=bool(item.added_later),
@@ -225,6 +307,7 @@ class WebOrderItemResponse(BaseModel):
 
 class WebOrderCreatedResponse(BaseModel):
     id: int
+    shift_number: int
     status: str
     customer_name: str
     customer_phone: str | None
@@ -238,18 +321,21 @@ class WebOrderCreatedResponse(BaseModel):
     is_paid: bool = False
     # Link de Checkout Pro de MercadoPago al que se redirige al cliente para pagar (solo si eligió MercadoPago).
     payment_url: str | None = None
+    # Solo en pedidos de mostrador: motivo por el que la comanda no se pudo imprimir (el pedido se guardó igual).
+    print_error: str | None = None
 
     @classmethod
     def from_model(cls, order: Order, payment_url: str | None = None) -> "WebOrderCreatedResponse":
         return cls(
             id=order.id,
+            shift_number=order.shift_number,
             status=order.status,
             customer_name=order.customer_name,
             customer_phone=order.customer_phone,
             delivery_method=order.delivery_method,
             shipping_address=order.shipping_address,
             notes=order.notes,
-            total_amount=order.total_amount,
+            total_amount=float(order.total_amount),
             created_at=order.created_at,
             items=[WebOrderItemResponse.from_model(item) for item in order.items],
             payment_method=order.payment_method,
@@ -268,8 +354,8 @@ class OrderDetailResponse(OrderResponse):
     def from_model(cls, order: Order) -> "OrderDetailResponse":
         return cls(
             **OrderResponse.from_model(order).model_dump(),
-            subtotal=order.subtotal,
-            shipping_cost=order.shipping_cost or 0,
+            subtotal=float(order.subtotal),
+            shipping_cost=float(order.shipping_cost or 0),
         )
 
 

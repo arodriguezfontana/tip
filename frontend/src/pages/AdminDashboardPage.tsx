@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { useAuth } from '@/hooks/useAuth';
 import { TopBar } from '@/components/TopBar';
@@ -18,10 +18,14 @@ import { MenuImagenView } from '@/components/MenuImagenView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import { HorariosView } from '@/components/HorariosView';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
+import { ImpresorasView } from '@/components/ImpresorasView';
 import { HandoffNotifications } from '@/components/HandoffNotifications';
-import { fetchStoreConfig } from '@/services/storeConfigService';
+import { PinModal } from '@/components/PinModal';
+import { PinSecurityProvider } from '@/context/PinSecurityContext';
+import { usePinSecurity } from '@/hooks/usePinSecurity';
+import { useStoreConfig } from '@/hooks/useStoreConfig';
 import { applyThemeColor } from '@/utils/theme';
-import type { StoreConfig } from '@/types/storeConfig';
+import type { PinType } from '@/types/security';
 import { panelBackground } from '@/utils/panelBackground';
 import { canKeepMenuOpen } from '@/utils/sidebarDock';
 
@@ -29,32 +33,76 @@ import { canKeepMenuOpen } from '@/utils/sidebarDock';
 const CHAT_COLUMN_PADDING = 'chat-column-offset';
 
 export default function AdminDashboardPage() {
+  return (
+    <PinSecurityProvider>
+      <AdminDashboardContent />
+    </PinSecurityProvider>
+  );
+}
+
+/** Secciones que piden el PIN de administración para abrirse. */
+const ADMIN_PIN_VIEWS: ViewKey[] = ['estadisticas', 'reporte-ingredientes'];
+
+function AdminDashboardContent() {
   const { logout } = useAuth();
   const navigate = useNavigate();
+  const { isAdminUnlocked, unlockAdmin, isCashUnlocked, unlockCash } = usePinSecurity();
+
   const [menuOpen, setMenuOpen] = useState(false);
   const [activeView, setActiveView] = useState<ViewKey>('comandas');
   // Con la columna de chats a la derecha, las secciones se corren solo si no entran a su izquierda.
   const [chatColumnVisible, setChatColumnVisible] = useState(false);
-  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
+  const { storeConfig, setStoreConfig } = useStoreConfig();
 
-  useEffect(() => {
-    let cancelled = false;
-    fetchStoreConfig()
-      .then((config) => {
-        if (!cancelled) {
-          setStoreConfig(config);
-          applyThemeColor(config.theme_color);
-        }
-      })
-      .catch(() => {});
-    return () => {
-      cancelled = true;
-    };
-  }, []);
+  const [pendingProtectedView, setPendingProtectedView] = useState<ViewKey | null>(null);
+
+  const cashPinEnabled = Boolean(storeConfig?.cash_pin_enabled);
+  const isProtectedByAdminPin = (view: ViewKey | null) => view !== null && ADMIN_PIN_VIEWS.includes(view);
+  const needsAdminPin =
+    !isAdminUnlocked && (isProtectedByAdminPin(activeView) || isProtectedByAdminPin(pendingProtectedView));
+  const needsCashPin =
+    !isCashUnlocked && cashPinEnabled && (activeView === 'caja' || pendingProtectedView === 'caja');
+
+  const pinModalOpen = needsAdminPin || needsCashPin;
+  const pinModalType: PinType = needsAdminPin ? 'admin' : 'cash';
 
   const handleLogout = () => {
     logout();
     navigate('/login', { replace: true });
+  };
+
+  // Estadísticas y el reporte de ingredientes piden el PIN de administración; el control de caja, el PIN de caja
+  // si está habilitado. Hasta que se ingresa, la sección queda pendiente.
+  const needsPinToOpen = (view: ViewKey) =>
+    (isProtectedByAdminPin(view) && !isAdminUnlocked) || (view === 'caja' && cashPinEnabled && !isCashUnlocked);
+
+  const handleSelectView = (view: ViewKey) => {
+    if (needsPinToOpen(view)) setPendingProtectedView(view);
+    else setActiveView(view);
+    if (!canKeepMenuOpen()) setMenuOpen(false);
+  };
+
+  const handlePinSuccess = (token: string) => {
+    if (pinModalType === 'admin') {
+      unlockAdmin(token);
+    } else {
+      unlockCash(token);
+    }
+    if (pendingProtectedView) {
+      setActiveView(pendingProtectedView);
+      setPendingProtectedView(null);
+    }
+  };
+
+  const handlePinCancel = () => {
+    setPendingProtectedView(null);
+    // Si la vista activa requiere protección y no está desbloqueada, volver a comandas
+    if (
+      (!isAdminUnlocked && (activeView === 'estadisticas' || activeView === 'reporte-ingredientes')) ||
+      (!isCashUnlocked && activeView === 'caja' && storeConfig?.cash_pin_enabled)
+    ) {
+      setActiveView('comandas');
+    }
   };
 
   const background = panelBackground(storeConfig);
@@ -78,7 +126,11 @@ export default function AdminDashboardPage() {
         logoUrl={storeConfig?.logo_url}
         themeColor={storeConfig?.theme_color}
       />
-      <main className={`flex-1 px-4 py-6 lg:min-h-0 lg:overflow-y-auto transition-[padding] ${chatColumnVisible ? CHAT_COLUMN_PADDING : ''}`}>
+      <main
+        className={`flex-1 px-4 py-6 lg:min-h-0 lg:overflow-y-auto transition-[padding] ${
+          chatColumnVisible ? CHAT_COLUMN_PADDING : ''
+        } ${pinModalOpen ? 'filter blur-sm pointer-events-none select-none' : ''}`}
+      >
         <div className="max-w-6xl mx-auto lg:h-full">
           <div hidden={activeView !== 'tomar-pedido'} className="lg:h-full">
             <TomarPedidoView />
@@ -90,7 +142,7 @@ export default function AdminDashboardPage() {
               themeColor={storeConfig?.theme_color}
             />
           </div>
-          {activeView === 'historial' && <HistorialView themeColor={storeConfig?.theme_color} />}
+          {activeView === 'historial' && <HistorialView />}
           {activeView === 'estadisticas' && <StatsSection />}
           {activeView === 'reporte-ingredientes' && <ReporteIngredientesView />}
           {activeView === 'clientes' && <ClientesView />}
@@ -112,6 +164,11 @@ export default function AdminDashboardPage() {
           {activeView === 'ingredientes' && <IngredientesView />}
           {activeView === 'menu-imagen' && <MenuImagenView />}
           {activeView === 'horarios' && <HorariosView />}
+          {activeView === 'impresoras' && (
+            <div className="lg:h-full lg:overflow-y-auto pr-1">
+              <ImpresorasView />
+            </div>
+          )}
           {activeView === 'configuracion-web' && (
             <div className="lg:h-full lg:overflow-y-auto pr-1">
               <ConfiguracionWebView
@@ -129,14 +186,18 @@ export default function AdminDashboardPage() {
         open={menuOpen}
         onClose={() => setMenuOpen(false)}
         activeView={activeView}
-        onSelect={(view) => {
-          setActiveView(view);
-          if (!canKeepMenuOpen()) setMenuOpen(false);
-        }}
+        onSelect={handleSelectView}
         themeColor={storeConfig?.theme_color}
       />
 
       <HandoffNotifications onVisibleChange={setChatColumnVisible} />
+
+      <PinModal
+        isOpen={pinModalOpen}
+        pinType={pinModalType}
+        onSuccess={handlePinSuccess}
+        onCancel={handlePinCancel}
+      />
     </div>
   );
 }

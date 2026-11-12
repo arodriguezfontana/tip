@@ -1,7 +1,7 @@
 import { existsSync } from 'node:fs';
 import path from 'node:path';
 import { defineConfig, devices } from '@playwright/test';
-import { ADMIN_EMAIL, ADMIN_PASSWORD, API_PORT, API_URL, DATABASE_URL, WEB_PORT, WEB_URL } from './env';
+import { ADMIN_EMAIL, ADMIN_PASSWORD, API_PORT, API_URL, DATABASE_URL, MAPS_PORT, MAPS_URL, WEB_PORT, WEB_URL } from './env';
 
 /**
  * Levanta un entorno propio para los tests: backend en el puerto 8001 y frontend en el 5174,
@@ -59,7 +59,19 @@ export default defineConfig({
         TELEGRAM_WEBHOOK_SECRET: '',
         GOOGLE_API_KEY: 'e2e-google-api-key',
         PUBLIC_URL: '',
+        // Google Maps falso: la ruta de los viajes se calcula contra un servidor local, nunca contra Google.
+        GOOGLE_MAPS_API_KEY: 'e2e-google-maps-key',
+        GOOGLE_MAPS_ROUTES_URL: MAPS_URL,
+        GOOGLE_MAPS_GEOCODE_URL: `http://127.0.0.1:${MAPS_PORT}/geocode`,
       },
+    },
+    {
+      command: 'node scripts/fake_maps.mjs',
+      cwd: import.meta.dirname,
+      url: `${MAPS_URL}?health=1`,
+      timeout: 30_000,
+      reuseExistingServer: !process.env.CI,
+      env: { MAPS_PORT: String(MAPS_PORT) },
     },
     {
       command: `npm run dev -- --port ${WEB_PORT} --strictPort`,

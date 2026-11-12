@@ -5,15 +5,33 @@ import { TomarPedidoView } from '@/components/TomarPedidoView';
 import * as clientService from '@/services/clientService';
 import * as menuService from '@/services/menuService';
 import * as orderService from '@/services/orderService';
+import * as promotionService from '@/services/promotionService';
+import type { Promotion } from '@/types/promotion';
 import { COCA, FUGAZZETA, MUZZA } from '@/test/utils';
 
 vi.mock('@/services/menuService');
 vi.mock('@/services/orderService');
 vi.mock('@/services/clientService');
+vi.mock('@/services/promotionService');
 
 const menu = vi.mocked(menuService);
 const orders = vi.mocked(orderService);
 const clients = vi.mocked(clientService);
+const promos = vi.mocked(promotionService);
+
+const PROMO_COMBO: Promotion = {
+  id: 88,
+  name: 'Combo Pizzeros',
+  description: '2 Muzzas y 1 Cerveza',
+  price: 15000,
+  is_active: true,
+  is_available: true,
+  image_url: null,
+  items: [
+    { product_id: MUZZA.id, product_name: MUZZA.name, quantity: 2 },
+    { product_id: COCA.id, product_name: COCA.name, quantity: 1 },
+  ],
+};
 
 const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 
@@ -41,8 +59,10 @@ beforeEach(() => {
   vi.resetAllMocks();
   menu.fetchMenuProducts.mockResolvedValue([MUZZA, FUGAZZETA, COCA]);
   clients.lookupClientByPhone.mockResolvedValue(null);
+  promos.fetchAvailablePromotions.mockResolvedValue([]);
   orders.createCounterOrder.mockResolvedValue({
     id: 777,
+    shift_number: 777,
     status: 'Confirmado',
     customer_name: 'Paula',
     customer_phone: '1144445555',
@@ -230,5 +250,85 @@ describe('TomarPedidoView', () => {
     await user.click(within(await screen.findByRole('alert')).getByRole('button', { name: 'Reintentar' }));
 
     expect(await screen.findByRole('button', { name: /Pizza Muzzarella/ })).toBeInTheDocument();
+  });
+
+  describe('Promociones en tomar pedidos', () => {
+    it('muestra promociones en el catálogo y permite agregarlas y calcular el total', async () => {
+      promos.fetchAvailablePromotions.mockResolvedValue([PROMO_COMBO]);
+      render(<TomarPedidoView />);
+      const user = userEvent.setup();
+
+      // Se muestran el botón de categoría "Promociones" y la sección con la tarjeta
+      expect(await screen.findByRole('button', { name: /Promociones/ })).toBeInTheDocument();
+      expect(screen.getByText('Promociones vigentes')).toBeInTheDocument();
+      const promoBtn = screen.getByRole('button', { name: /Combo Pizzeros/ });
+      expect(promoBtn).toBeInTheDocument();
+
+      // Agregar promo al pedido
+      await user.click(promoBtn);
+
+      // Aparece en el resumen con badge Promo y su precio
+      expect(within(summary()).getByText('Combo Pizzeros')).toBeInTheDocument();
+      expect(within(summary()).getByText('Promo')).toBeInTheDocument();
+      expect(total()).toBe('$ 15.000,00');
+
+      // Sumar otra unidad de la promo
+      await user.click(screen.getByRole('button', { name: 'Sumar una unidad de Combo Pizzeros' }));
+      expect(total()).toBe('$ 30.000,00');
+
+      // Restar una unidad
+      await user.click(screen.getByRole('button', { name: 'Restar una unidad de Combo Pizzeros' }));
+      expect(total()).toBe('$ 15.000,00');
+    });
+
+    it('permite filtrar el catálogo por la categoría Promociones', async () => {
+      promos.fetchAvailablePromotions.mockResolvedValue([PROMO_COMBO]);
+      render(<TomarPedidoView />);
+      const user = userEvent.setup();
+
+      await screen.findByRole('button', { name: /Combo Pizzeros/ });
+
+      // Clic en la categoría Promociones
+      await user.click(screen.getByRole('button', { name: /Promociones/ }));
+
+      // No deben aparecer las pizzas regulares
+      const catalog = screen.getByRole('heading', { name: 'Productos' }).closest('section') as HTMLElement;
+      expect(within(catalog).queryByRole('button', { name: /Pizza Muzzarella/ })).not.toBeInTheDocument();
+      expect(within(catalog).getByRole('button', { name: /Combo Pizzeros/ })).toBeInTheDocument();
+    });
+
+    it('envía promotion_id en createCounterOrder al confirmar un pedido con promociones y productos', async () => {
+      promos.fetchAvailablePromotions.mockResolvedValue([PROMO_COMBO]);
+      render(<TomarPedidoView />);
+      const user = userEvent.setup();
+
+      await screen.findByRole('button', { name: /Combo Pizzeros/ });
+
+      await user.type(screen.getByLabelText('Teléfono *'), '11 5555-6666');
+      await user.type(screen.getByLabelText('Nombre *'), 'Martín');
+
+      // Agregar 1 promo y 1 producto
+      await user.click(screen.getByRole('button', { name: /Combo Pizzeros/ }));
+      await user.click(product(/Pizza Muzzarella/));
+
+      await user.click(screen.getByRole('radio', { name: 'Efectivo' }));
+      await user.click(screen.getByRole('checkbox', { name: 'Ya abonado' }));
+      await user.click(screen.getByRole('button', { name: 'Confirmar pedido' }));
+
+      expect(orders.createCounterOrder).toHaveBeenCalledWith({
+        customer_name: 'Martín',
+        customer_phone: '11 5555-6666',
+        delivery_method: 'retiro',
+        shipping_address: null,
+        notes: null,
+        payment_method: 'efectivo',
+        is_paid: true,
+        items: [
+          { promotion_id: 88, quantity: 1 },
+          { product_id: MUZZA.id, quantity: 1 },
+        ],
+      });
+      expect(await screen.findByRole('status')).toHaveTextContent('Pedido #777 registrado correctamente.');
+    });
   });
 });

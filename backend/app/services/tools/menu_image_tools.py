@@ -9,7 +9,6 @@ Aplica la regla de disponibilidad dinámica:
 
 import asyncio
 import logging
-from functools import partial
 from typing import Annotated
 
 from langchain_core.tools import InjectedToolArg, tool
@@ -18,7 +17,7 @@ from app.core.channels import Channel
 from app.db.session import SessionLocal
 from app.services import menu_image_service, store_config_service
 from app.services.channels import obtener_canal
-from app.services.channels.base import ImagenParaEnviar
+from app.services.tools.image_delivery import enviar_imagenes, enviar_si_hay_link, limpiar_link
 
 logger = logging.getLogger(__name__)
 
@@ -53,7 +52,7 @@ def _leer_link_menu() -> str | None:
     db = SessionLocal()
     try:
         config = store_config_service.get_or_create_store_config(db)
-        return config.menu_link.strip() if config.menu_link and config.menu_link.strip() else None
+        return limpiar_link(config.menu_link)
     except Exception:
         return None
     finally:
@@ -81,43 +80,14 @@ async def enviar_menu_en_imagen(
         return RESULTADO_SIN_IMAGEN
 
     canal_de_envio = obtener_canal(canal)
-    hay_imagenes = len(imagenes) > 0
-    hay_link = bool(menu_link)
-
-    # Caso 4: Ni imágenes ni link -> cae al menú en texto de la base de datos
-    if not hay_imagenes and not hay_link:
-        return RESULTADO_SIN_IMAGEN
-
-    # Caso 1: Solo link
-    if hay_link and not hay_imagenes:
-        mensaje = f"¡Acá podés ver nuestro menú completo!\n{menu_link}\n\n{MENSAJE_MENU_ENVIADO}"
-        await canal_de_envio.enviar_mensaje(chat_id, mensaje)
-        return MENSAJE_MENU_ENVIADO
-
-    # Caso 2 y 3: Hay imágenes (y opcionalmente link)
-    enviadas = 0
-    pie = f"{PIE_DE_FOTO}\nTambién podés ver nuestro menú online en: {menu_link}" if hay_link else PIE_DE_FOTO
-    for image_id, version, content_type in imagenes:
-        imagen = ImagenParaEnviar(version, content_type, partial(_leer_bytes, image_id), clave=image_id)
-        try:
-            if await canal_de_envio.enviar_imagen(chat_id, imagen, pie if enviadas == 0 else ""):
-                enviadas += 1
-                await asyncio.sleep(getattr(canal_de_envio, "segundos_de_entrega_de_imagen", 0))
-            elif enviadas == 0:
-                break
-        except Exception:
-            logger.exception("No se pudo enviar la imagen %s del menú al chat %s", image_id, chat_id)
-            if enviadas == 0:
-                break
-
+    pie = f"{PIE_DE_FOTO}\nTambién podés ver nuestro menú online en: {menu_link}" if menu_link else PIE_DE_FOTO
+    enviadas = await enviar_imagenes(canal_de_envio, chat_id, imagenes, _leer_bytes, pie, "del menú")
     if enviadas > 0:
-        if hay_link:
-            await canal_de_envio.enviar_mensaje(chat_id, f"Menú online: {menu_link}")
+        await enviar_si_hay_link(canal_de_envio, chat_id, menu_link, f"Menú online: {menu_link}")
         return MENSAJE_MENU_ENVIADO
 
-    if hay_link:
-        mensaje = f"¡Acá podés ver nuestro menú completo!\n{menu_link}\n\n{MENSAJE_MENU_ENVIADO}"
-        await canal_de_envio.enviar_mensaje(chat_id, mensaje)
+    # Sin imágenes (o si no se pudo mandar ninguna), el link solo; y sin link, el menú en texto.
+    mensaje = f"¡Acá podés ver nuestro menú completo!\n{menu_link}\n\n{MENSAJE_MENU_ENVIADO}"
+    if await enviar_si_hay_link(canal_de_envio, chat_id, menu_link, mensaje):
         return MENSAJE_MENU_ENVIADO
-
     return RESULTADO_SIN_IMAGEN

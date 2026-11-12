@@ -47,6 +47,7 @@ const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 function orderCreated(overrides: Partial<WebOrderCreated> = {}): WebOrderCreated {
   return {
     id: 321,
+    shift_number: 321,
     status: 'Pendiente',
     customer_name: 'Ana Gómez',
     customer_phone: '11 5555-1234',
@@ -156,6 +157,43 @@ describe('MenuPage', () => {
     expect(screen.getByText(/Ingresá un teléfono válido/)).toBeInTheDocument();
     expect(screen.getByText('Ingresá la dirección de entrega.')).toBeInTheDocument();
     expect(orders.createWebOrder).not.toHaveBeenCalled();
+  });
+
+  it('permite personalizar un plato agregando adicionales y exclusiones en el carrito', async () => {
+    // Configurar producto con recipe_ingredients y allowed_extras
+    const prodCustom = {
+      ...MUZZA,
+      recipe_ingredients: ['Salsa', 'Muzzarella', 'Orégano'],
+      allowed_extras: [
+        { id: 10, name: 'Cebolla', extra_price: 500 },
+        { id: 11, name: 'Panceta', extra_price: 1000 },
+      ],
+    };
+    menu.fetchMenuProducts.mockResolvedValue([prodCustom]);
+    renderWithProviders(<MenuPage />);
+    const user = userEvent.setup();
+    await screen.findByText('Pizza Muzzarella');
+
+    // Agregar al carrito
+    await user.click(screen.getByRole('button', { name: 'Agregar' }));
+    expect(screen.getByText('Tu carrito')).toBeInTheDocument();
+
+    // Abrir desplegable Adicionales
+    const adicBtn = screen.getByRole('button', { name: /Adicionales/i });
+    await user.click(adicBtn);
+
+    // Tildar restricción Sin Orégano
+    const sinOregano = screen.getByLabelText('Sin Orégano');
+    await user.click(sinOregano);
+    expect(screen.getByText('SIN ORÉGANO')).toBeInTheDocument();
+
+    // Tildar adicional + Cebolla (+$500)
+    const extraCebolla = screen.getByLabelText(/Cebolla/i);
+    await user.click(extraCebolla);
+    expect(screen.getByText('EXTRA CEBOLLA')).toBeInTheDocument();
+
+    // El precio debe sumar los 500 extras: base 8500 + 500 = 9000
+    expect(screen.getByText(/9\.?000.*c\/u/i)).toBeInTheDocument();
   });
 
   it('un invitado hace un pedido para retirar y ve la confirmación', async () => {

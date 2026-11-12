@@ -66,6 +66,7 @@ describe('OrderDetailModal', () => {
 
     const rows = await within(dialog).findAllByRole('row');
     expect(rows.map((row) => plain(row.textContent))).toEqual([
+      'Cant.ProductoTotal',
       '2Pizza Muzzarella$ 17.000,00',
       '1Coca-Cola 500ml$ 2.500,00',
     ]);
@@ -73,6 +74,23 @@ describe('OrderDetailModal', () => {
     expect(within(dialog).getByText('Pagado')).toBeInTheDocument();
     expect(within(dialog).getByText('Sin cargo')).toBeInTheDocument();
     expect(within(dialog).getByText('Total (abonado)')).toBeInTheDocument();
+  });
+
+  it('un pedido del bot ofrece abrir el chat con el cliente', async () => {
+    const opened = vi.fn();
+    window.addEventListener('restoit:open-order-chat', (e) => opened((e as CustomEvent<number>).detail));
+    const { onClose, user } = renderModal({ ...ORDER, source: 'bot', channel: 'whatsapp', has_chat: true });
+
+    await user.click(screen.getByRole('button', { name: /Abrir chat con el cliente/ }));
+
+    expect(opened).toHaveBeenCalledWith(55);
+    expect(onClose).toHaveBeenCalled();
+  });
+
+  it('un pedido que no salió de un chat no ofrece el chat', () => {
+    renderModal();
+
+    expect(screen.queryByRole('button', { name: /Abrir chat con el cliente/ })).not.toBeInTheDocument();
   });
 
   it('un pedido sin pago informado figura pendiente de pago', async () => {
@@ -294,10 +312,10 @@ describe('OrderDetailModal', () => {
       const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
 
       expect(await within(dialog).findByText('Hamburguesa Completa')).toBeInTheDocument();
-      expect(within(dialog).getByText('[SIN CEBOLLA]')).toBeInTheDocument();
-      expect(within(dialog).getByText('[EXTRA QUESO]')).toBeInTheDocument();
-      expect(within(dialog).getByText('[SIN CEBOLLA]')).toHaveClass('font-bold');
-      expect(within(dialog).getByText('[EXTRA QUESO]')).toHaveClass('font-bold');
+      expect(within(dialog).getByText('SIN CEBOLLA')).toBeInTheDocument();
+      expect(within(dialog).getByText('EXTRA QUESO')).toBeInTheDocument();
+      expect(within(dialog).getByText('SIN CEBOLLA')).toHaveClass('font-semibold');
+      expect(within(dialog).getByText('EXTRA QUESO')).toHaveClass('font-semibold');
     });
   });
 
@@ -353,6 +371,61 @@ describe('OrderDetailModal', () => {
       expect(within(dialog).getByText('Combo Pizzeros')).toBeInTheDocument();
       expect(within(dialog).getByText('2 Cervezas y 1 Muzza')).toBeInTheDocument();
       expect(within(dialog).getAllByText('$ 15.000,00').length).toBeGreaterThanOrEqual(1);
+    });
+
+    it('unifica 3 pizzas del mismo producto distinguiendo las que tienen extras y exclusiones sin mostrar nada para la normal', async () => {
+      service.fetchOrderDetail.mockResolvedValueOnce(
+        makeOrderDetail({
+          ...ORDER,
+          items: [
+            {
+              product_id: 10,
+              product_name: 'Pizza Muzzarella',
+              quantity: 1,
+              unit_price: 8500,
+              subtotal: 8500,
+              sector: 'pizzeria',
+              modifications: [],
+            },
+            {
+              product_id: 10,
+              product_name: 'Pizza Muzzarella',
+              quantity: 1,
+              unit_price: 9500,
+              subtotal: 9500,
+              sector: 'pizzeria',
+              modifications: [{ type: 'positive', name: 'jamon', tag: '[EXTRA JAMON]', price: 1000 }],
+            },
+            {
+              product_id: 10,
+              product_name: 'Pizza Muzzarella',
+              quantity: 1,
+              unit_price: 8500,
+              subtotal: 8500,
+              sector: 'pizzeria',
+              modifications: [{ type: 'negative', name: 'queso', tag: '[SIN QUESO]' }],
+            },
+          ],
+          subtotal: 26500,
+          total_amount: 26500,
+        })
+      );
+
+      renderModal();
+      const dialog = screen.getByRole('dialog', { name: 'Pedido #55' });
+
+      // Debe haber una sola fila unificada con cantidad 3
+      expect(await within(dialog).findByText('Pizzería')).toBeInTheDocument();
+      expect(within(dialog).getByText('3')).toBeInTheDocument();
+      expect(within(dialog).getByText('Pizza Muzzarella')).toBeInTheDocument();
+
+      // Debe mostrar las modificaciones distinguidas con su cantidad (1x) y sin corchetes
+      expect(within(dialog).getByText('EXTRA JAMON')).toBeInTheDocument();
+      expect(within(dialog).getByText('SIN QUESO')).toBeInTheDocument();
+      expect(within(dialog).getAllByText('1x').length).toBe(2);
+
+      // Y el total acumulado
+      expect(within(dialog).getAllByText('$ 26.500,00').length).toBeGreaterThanOrEqual(1);
     });
   });
 });

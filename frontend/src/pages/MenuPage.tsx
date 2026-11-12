@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react';
+import { useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
@@ -17,17 +17,15 @@ import { PizzaMitadYMitadModal } from '@/components/PizzaMitadYMitadModal';
 import { PizzaIcon } from '@/components/Icons';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
+import { useAvailablePromotions } from '@/hooks/useAvailablePromotions';
 import { useBusinessHours } from '@/hooks/useBusinessHours';
 import { useMenuProducts } from '@/hooks/useMenuProducts';
+import { useStoreConfig } from '@/hooks/useStoreConfig';
 import { groupByCategory } from '@/utils/productGrouping';
-import { fetchStoreConfig } from '@/services/storeConfigService';
-import { fetchAvailablePromotions } from '@/services/promotionService';
-import { applyThemeColor } from '@/utils/theme';
 import { clearPendingPaymentOrder, loadPendingPaymentOrder, savePendingPaymentOrder } from '@/utils/pendingPayment';
 import { groupWeeklySchedule } from '@/utils/businessHours';
-import { getThemeOption, type StoreConfig } from '@/types/storeConfig';
+import { getThemeOption } from '@/types/storeConfig';
 import type { CheckoutFormData, Product, WebOrderCreated } from '@/types/order';
-import type { Promotion } from '@/types/promotion';
 
 interface SubmittedOrder {
   order: WebOrderCreated;
@@ -43,8 +41,8 @@ export default function MenuPage() {
   const schedule = businessHours?.configured ? groupWeeklySchedule(businessHours.ranges) : [];
   const [authModalMode, setAuthModalMode] = useState<CustomerAuthMode | null>(null);
   const [submittedOrder, setSubmittedOrder] = useState<SubmittedOrder | null>(null);
-  const [storeConfig, setStoreConfig] = useState<StoreConfig | null>(null);
-  const [promotions, setPromotions] = useState<Promotion[]>([]);
+  const { storeConfig } = useStoreConfig();
+  const { promotions, reload: loadPromos } = useAvailablePromotions();
   const [halfAndHalfPizzas, setHalfAndHalfPizzas] = useState<Product[] | null>(null);
   // Al volver del checkout de MercadoPago la URL trae el pedido y el resultado del pago.
   const [searchParams, setSearchParams] = useSearchParams();
@@ -56,30 +54,6 @@ export default function MenuPage() {
     error: productsError,
     reload: loadProducts,
   } = useMenuProducts('No pudimos cargar el menú.');
-
-  const loadPromos = () => {
-    fetchAvailablePromotions()
-      .then((data) => setPromotions(data))
-      .catch(() => {});
-  };
-
-  useEffect(() => {
-    let cancelled = false;
-    fetchStoreConfig()
-      .then((data) => {
-        if (!cancelled) {
-          setStoreConfig(data);
-          if (data?.theme_color) {
-            applyThemeColor(data.theme_color);
-          }
-        }
-      })
-      .catch(() => {});
-    loadPromos();
-    return () => {
-      cancelled = true;
-    };
-  }, []);
 
   const showingConfirmation = Boolean(submittedOrder || returningOrderId);
   const productGroups = groupByCategory(products);

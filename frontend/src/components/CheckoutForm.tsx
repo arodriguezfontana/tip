@@ -1,16 +1,97 @@
 import { useState } from 'react';
-import type { FormEvent } from 'react';
+import type { SubmitEvent, ReactNode } from 'react';
 import { Link } from 'react-router-dom';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { redirectToCheckout } from '@/services/mercadopagoService';
 import { createWebOrder } from '@/services/orderService';
-import { formatCurrency } from '@/utils/currency';
-import { PHONE_PATTERN } from '@/utils/customerValidation';
+import { paymentHint, toWebOrderItem, validateCheckout } from '@/utils/checkout';
 import { getErrorMessage } from '@/utils/errors';
 import type { CustomerAuthMode } from '@/components/CustomerAuthModal';
 import { PAYMENT_METHOD_LABEL, WEB_PAYMENT_METHODS } from '@/types/order';
 import type { CheckoutFormData, CheckoutFormErrors, DeliveryMethod, WebOrderCreated, WebPaymentMethod } from '@/types/order';
+
+const INPUT_CLASS =
+  'w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black';
+const PRIMARY_BACKGROUND = { backgroundColor: 'var(--primary-color, #18181b)' };
+
+const DELIVERY_OPTIONS: { value: DeliveryMethod; label: string }[] = [
+  { value: 'domicilio', label: 'Envío a domicilio' },
+  { value: 'retiro', label: 'Retiro en el local' },
+];
+
+interface TextFieldProps {
+  id: string;
+  label: string;
+  value: string;
+  onChange: (value: string) => void;
+  error?: string;
+  type?: 'text' | 'tel';
+  autoComplete?: string;
+}
+
+/** Campo de texto con su etiqueta y el mensaje de error. */
+function TextField({ id, label, value, onChange, error, type = 'text', autoComplete }: TextFieldProps) {
+  return (
+    <div>
+      <label htmlFor={id} className="block text-sm font-medium text-gray-700 mb-1">
+        {label}
+      </label>
+      <input
+        id={id}
+        type={type}
+        autoComplete={autoComplete}
+        aria-invalid={Boolean(error)}
+        aria-describedby={error ? `${id}-error` : undefined}
+        value={value}
+        onChange={(e) => onChange(e.target.value)}
+        className={INPUT_CLASS}
+      />
+      {error && (
+        <p id={`${id}-error`} role="alert" className="text-xs text-red-600 mt-1">
+          {error}
+        </p>
+      )}
+    </div>
+  );
+}
+
+function optionClass(selected: boolean): string {
+  return `flex-1 py-2.5 font-medium transition ${selected ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'}`;
+}
+
+function AccountNotice({ isLoggedIn, onRequestAuth }: { isLoggedIn: boolean; onRequestAuth: (mode: CustomerAuthMode) => void }) {
+  if (isLoggedIn) {
+    return (
+      <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
+        Completamos tus datos desde tu cuenta. Podés modificarlos para este pedido sin cambiar tu{' '}
+        <Link to="/perfil" className="font-semibold underline hover:no-underline">
+          perfil
+        </Link>
+        .
+      </div>
+    );
+  }
+  const authButton = (mode: CustomerAuthMode, label: ReactNode) => (
+    <button
+      type="button"
+      onClick={() => onRequestAuth(mode)}
+      style={{ color: 'var(--primary-color, #18181b)' }}
+      className="font-semibold underline hover:no-underline"
+    >
+      {label}
+    </button>
+  );
+  return (
+    <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
+      <p>
+        {authButton('login', 'Iniciá sesión')} o {authButton('register', 'creá una cuenta')} para completar tus datos
+        automáticamente.
+      </p>
+      <p className="text-xs text-gray-500 mt-1">También podés completar el formulario y pedir como invitado.</p>
+    </div>
+  );
+}
 
 /**
  * Formulario de datos del pedido. Si el cliente tiene la sesión iniciada, arranca autocompletado
@@ -38,32 +119,15 @@ export function CheckoutForm({
   const [submitting, setSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  const validate = (): CheckoutFormErrors => {
-    const nextErrors: CheckoutFormErrors = {};
-    if (!name.trim()) {
-      nextErrors.name = 'Ingresá tu nombre.';
-    }
-    if (!phone.trim()) {
-      nextErrors.phone = 'Ingresá tu número de teléfono.';
-    } else if (!PHONE_PATTERN.test(phone.trim())) {
-      nextErrors.phone = 'Ingresá un teléfono válido (solo números, espacios, guiones o +).';
-    }
-    if (deliveryMethod === 'domicilio' && !address.trim()) {
-      nextErrors.address = 'Ingresá la dirección de entrega.';
-    }
-    return nextErrors;
-  };
-
-  const handleSubmit = async (event: FormEvent) => {
+  const handleSubmit = async (event: SubmitEvent) => {
     event.preventDefault();
     if (submitting) return;
 
-    const nextErrors = validate();
+    const form: CheckoutFormData = { name, phone, deliveryMethod, address, notes, paymentMethod };
+    const nextErrors = validateCheckout(form);
     setErrors(nextErrors);
     setSubmitError(null);
-    if (Object.keys(nextErrors).length > 0) {
-      return;
-    }
+    if (Object.keys(nextErrors).length > 0) return;
 
     setSubmitting(true);
     try {
@@ -73,16 +137,10 @@ export function CheckoutForm({
         delivery_method: deliveryMethod,
         shipping_address: deliveryMethod === 'domicilio' ? address.trim() : null,
         notes: notes.trim() || null,
-        items: items.map((item) => ({
-          product_id: item.promotion ? undefined : item.product?.id,
-          promotion_id: item.promotion ? item.promotion.id : undefined,
-          quantity: item.quantity,
-          secondary_product_id: item.secondary_product?.id,
-          custom_name: item.custom_name,
-        })),
+        items: items.map(toWebOrderItem),
         payment_method: paymentMethod,
       });
-      onSubmitSuccess(order, { name, phone, deliveryMethod, address, notes, paymentMethod });
+      onSubmitSuccess(order, form);
       // Con MercadoPago el pedido ya quedó registrado (pendiente de pago): ahora se paga en su checkout.
       if (order.payment_url) redirectToCheckout(order.payment_url);
     } catch (err) {
@@ -100,133 +158,46 @@ export function CheckoutForm({
         <p className="text-sm text-gray-500">Agregá productos al carrito para continuar.</p>
       ) : (
         <form onSubmit={handleSubmit} noValidate className="space-y-3">
-          {profile ? (
-            <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
-              Completamos tus datos desde tu cuenta. Podés modificarlos para este pedido sin cambiar tu{' '}
-              <Link to="/perfil" className="font-semibold underline hover:no-underline">
-                perfil
-              </Link>
-              .
-            </div>
-          ) : (
-            <div className="rounded-xl bg-gray-50 border border-gray-200 px-3 py-2 text-sm text-gray-700">
-              <p>
-                <button
-                  type="button"
-                  onClick={() => onRequestAuth('login')}
-                  style={{ color: 'var(--primary-color, #18181b)' }}
-                  className="font-semibold underline hover:no-underline"
-                >
-                  Iniciá sesión
-                </button>{' '}
-                o{' '}
-                <button
-                  type="button"
-                  onClick={() => onRequestAuth('register')}
-                  style={{ color: 'var(--primary-color, #18181b)' }}
-                  className="font-semibold underline hover:no-underline"
-                >
-                  creá una cuenta
-                </button>{' '}
-                para completar tus datos automáticamente.
-              </p>
-              <p className="text-xs text-gray-500 mt-1">
-                También podés completar el formulario y pedir como invitado.
-              </p>
-            </div>
-          )}
+          <AccountNotice isLoggedIn={Boolean(profile)} onRequestAuth={onRequestAuth} />
 
-          <div>
-            <label htmlFor="name" className="block text-sm font-medium text-gray-700 mb-1">
-              Nombre
-            </label>
-            <input
-              id="name"
-              type="text"
-              autoComplete="name"
-              aria-invalid={Boolean(errors.name)}
-              aria-describedby={errors.name ? 'name-error' : undefined}
-              value={name}
-              onChange={(e) => setName(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            {errors.name && (
-              <p id="name-error" role="alert" className="text-xs text-red-600 mt-1">
-                {errors.name}
-              </p>
-            )}
-          </div>
-
-          <div>
-            <label htmlFor="phone" className="block text-sm font-medium text-gray-700 mb-1">
-              Teléfono
-            </label>
-            <input
-              id="phone"
-              type="tel"
-              autoComplete="tel"
-              aria-invalid={Boolean(errors.phone)}
-              aria-describedby={errors.phone ? 'phone-error' : undefined}
-              value={phone}
-              onChange={(e) => setPhone(e.target.value)}
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black"
-            />
-            {errors.phone && (
-              <p id="phone-error" role="alert" className="text-xs text-red-600 mt-1">
-                {errors.phone}
-              </p>
-            )}
-          </div>
+          <TextField id="name" label="Nombre" value={name} onChange={setName} error={errors.name} autoComplete="name" />
+          <TextField
+            id="phone"
+            label="Teléfono"
+            type="tel"
+            value={phone}
+            onChange={setPhone}
+            error={errors.phone}
+            autoComplete="tel"
+          />
 
           <div>
             <span className="block text-sm font-medium text-gray-700 mb-1">Entrega</span>
             <div className="flex rounded-xl border border-gray-300 overflow-hidden text-sm">
-              <button
-                type="button"
-                aria-pressed={deliveryMethod === 'domicilio'}
-                onClick={() => setDeliveryMethod('domicilio')}
-                style={deliveryMethod === 'domicilio' ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                className={`flex-1 py-2.5 font-medium transition ${
-                  deliveryMethod === 'domicilio' ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                Envío a domicilio
-              </button>
-              <button
-                type="button"
-                aria-pressed={deliveryMethod === 'retiro'}
-                onClick={() => setDeliveryMethod('retiro')}
-                style={deliveryMethod === 'retiro' ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                className={`flex-1 py-2.5 font-medium transition ${
-                  deliveryMethod === 'retiro' ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                }`}
-              >
-                Retiro en el local
-              </button>
+              {DELIVERY_OPTIONS.map(({ value, label }) => (
+                <button
+                  key={value}
+                  type="button"
+                  aria-pressed={deliveryMethod === value}
+                  onClick={() => setDeliveryMethod(value)}
+                  style={deliveryMethod === value ? PRIMARY_BACKGROUND : undefined}
+                  className={optionClass(deliveryMethod === value)}
+                >
+                  {label}
+                </button>
+              ))}
             </div>
           </div>
 
           {deliveryMethod === 'domicilio' && (
-            <div>
-              <label htmlFor="address" className="block text-sm font-medium text-gray-700 mb-1">
-                Dirección
-              </label>
-              <input
-                id="address"
-                type="text"
-                autoComplete="street-address"
-                aria-invalid={Boolean(errors.address)}
-                aria-describedby={errors.address ? 'address-error' : undefined}
-                value={address}
-                onChange={(e) => setAddress(e.target.value)}
-                className="w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black"
-              />
-              {errors.address && (
-                <p id="address-error" role="alert" className="text-xs text-red-600 mt-1">
-                  {errors.address}
-                </p>
-              )}
-            </div>
+            <TextField
+              id="address"
+              label="Dirección"
+              value={address}
+              onChange={setAddress}
+              error={errors.address}
+              autoComplete="street-address"
+            />
           )}
 
           <div>
@@ -239,7 +210,7 @@ export function CheckoutForm({
               onChange={(e) => setNotes(e.target.value)}
               rows={2}
               placeholder="Ej: Sin cebolla, con extra queso, timbre 2B…"
-              className="w-full rounded-xl border border-gray-300 px-3 py-2 text-base sm:text-sm focus:outline-none focus:ring-2 focus:ring-black resize-none"
+              className={`${INPUT_CLASS} resize-none`}
             />
             <p className="text-xs text-gray-500 mt-1">
               Podés indicar exclusiones y extras en lenguaje natural (ej. &ldquo;Sin cebolla&rdquo;, &ldquo;Con extra queso&rdquo;).
@@ -256,22 +227,14 @@ export function CheckoutForm({
                   role="radio"
                   aria-checked={paymentMethod === method}
                   onClick={() => setPaymentMethod(method)}
-                  style={paymentMethod === method ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
-                  className={`flex-1 py-2.5 font-medium transition ${
-                    paymentMethod === method ? 'text-white' : 'bg-white text-gray-700 hover:bg-gray-100'
-                  }`}
+                  style={paymentMethod === method ? PRIMARY_BACKGROUND : undefined}
+                  className={optionClass(paymentMethod === method)}
                 >
                   {PAYMENT_METHOD_LABEL[method]}
                 </button>
               ))}
             </div>
-            <p className="text-xs text-gray-500 mt-1">
-              {paymentMethod === 'mercadopago'
-                ? `Al confirmar te llevamos a MercadoPago para pagar ${formatCurrency(total)} de forma segura.`
-                : deliveryMethod === 'domicilio'
-                  ? 'Pagás en efectivo al recibir el pedido.'
-                  : 'Pagás en efectivo al retirar el pedido.'}
-            </p>
+            <p className="text-xs text-gray-500 mt-1">{paymentHint(paymentMethod, deliveryMethod, total)}</p>
           </div>
 
           {submitError && (
@@ -285,7 +248,7 @@ export function CheckoutForm({
             <button
               type="submit"
               disabled={submitting}
-              style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+              style={PRIMARY_BACKGROUND}
               className="w-full text-white rounded-xl py-3 font-semibold hover:opacity-90 transition disabled:opacity-60 disabled:cursor-not-allowed shadow-xs"
             >
               {submitting ? 'Enviando pedido...' : paymentMethod === 'mercadopago' ? 'Confirmar e ir a pagar' : 'Confirmar pedido'}

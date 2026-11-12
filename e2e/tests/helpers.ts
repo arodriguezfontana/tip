@@ -111,10 +111,30 @@ export function orderCard(scope: Page | Locator, orderId: number): Locator {
     .locator('xpath=ancestor::div[contains(@class, "p-4")][1]');
 }
 
-export async function goToSection(page: Page, section: string) {
+export async function goToSection(page: Page, section: string, pin = '1234') {
   const menu = page.locator('aside');
   if ((await menu.getAttribute('aria-hidden')) !== 'false') await page.getByRole('button', { name: 'Abrir menú' }).click();
   await page.getByRole('navigation').getByRole('button', { name: section }).click();
+
+  // Si la sección requiere PIN (ej. Estadísticas o Reporte de ingredientes), se ingresa para desbloquearla
+  const isPotentiallyProtected =
+    section === 'Estadísticas' ||
+    section === 'Reporte de ingredientes' ||
+    section === 'Control de caja';
+
+  if (isPotentiallyProtected) {
+    const pinDialog = page.getByRole('dialog');
+    try {
+      await pinDialog.waitFor({ state: 'visible', timeout: 1500 });
+      for (const digit of pin) {
+        await pinDialog.getByRole('button', { name: digit, exact: true }).click();
+      }
+      await expect(pinDialog).toBeHidden();
+    } catch {
+      // La sección no requirió PIN o ya fue desbloqueada previamente en la sesión
+    }
+  }
+
   // En pantallas anchas el menú queda abierto hasta que se toca la X (en el celular se cierra solo): se cierra
   // para que no tape la página en los pasos que siguen.
   if ((await menu.getAttribute('aria-hidden')) === 'false') await menu.getByRole('button', { name: 'Cerrar menú' }).click();
@@ -140,4 +160,15 @@ export async function ensureOpenCashShift(request: APIRequestContext) {
 export function money(amount: number): RegExp {
   const formatted = new Intl.NumberFormat('es-AR', { style: 'currency', currency: 'ARS' }).format(amount);
   return new RegExp(formatted.replace(/\s/g, '\\s').replace(/\$/g, '\\$').replace(/\./g, '\\.'));
+}
+
+/** Crea un repartidor activo directo contra la API. */
+export async function createDriver(request: APIRequestContext, name: string): Promise<{ id: number; name: string; phone: string }> {
+  const token = await adminToken(request);
+  const response = await request.post(`${API_URL}/delivery-drivers`, {
+    headers: { Authorization: `Bearer ${token}` },
+    data: { name, phone: uniquePhone(), is_active: true },
+  });
+  expect(response.ok()).toBeTruthy();
+  return response.json();
 }

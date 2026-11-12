@@ -1,13 +1,13 @@
 from datetime import datetime
 
-from sqlalchemy import Column, DateTime, Integer, LargeBinary, String
-from sqlalchemy.orm import deferred
+from sqlalchemy import DateTime, Integer, LargeBinary, String
+from sqlalchemy.orm import Mapped, deferred, mapped_column
 
 from app.db.base_class import Base
 from app.models.menu import ProductImage
 
 # El menú puede estar partido en varias imágenes (una por sección de la carta, por ejemplo).
-MAX_MENU_IMAGES = 3
+MAX_MENU_IMAGES = 5
 
 
 class MenuImage(Base):
@@ -20,13 +20,13 @@ class MenuImage(Base):
 
     __tablename__ = "menu_images"
 
-    id = Column(Integer, primary_key=True)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True)
     # Orden en que se muestran y se mandan, de menor a mayor.
-    position = Column(Integer, nullable=False, default=0)
-    content_type = Column(String(20), nullable=False)
-    size_bytes = Column(Integer, nullable=False)
-    data = deferred(Column(LargeBinary, nullable=False))
-    updated_at = Column(DateTime(timezone=True), nullable=False)
+    position: Mapped[int] = mapped_column(Integer, nullable=False, default=0)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    size_bytes: Mapped[int] = mapped_column(Integer, nullable=False)
+    data: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
     @property
     def version(self) -> int:

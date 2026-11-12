@@ -62,6 +62,7 @@ def test_crea_un_producto_y_aparece_en_el_menu_publico(client, db_session, muzza
         "category": {"id": muzza.category_id, "name": "Pizzas"},
         "image_url": None,
         "recipe": [],
+        "allowed_extras": [],
     }
     assert _menu(client)["Fugazzeta"] == "Pizzas"
 
@@ -326,3 +327,39 @@ def test_el_catalogo_es_solo_para_administradores(public_client, customer_header
     ]:
         assert getattr(public_client, method)(url).status_code == 401
         assert getattr(public_client, method)(url, headers=customer_headers).status_code == 403
+
+def test_producto_con_adicionales_permitidos(client, db_session, muzza):
+    from app.models.menu import Ingredient
+    ing1 = Ingredient(name="Queso Cheddar", unit="gramos", extra_price=600)
+    ing2 = Ingredient(name="Huevo Frito", unit="unidades", extra_price=400)
+    db_session.add_all([ing1, ing2])
+    db_session.commit()
+
+    # Crear producto con allowed_extra_ids
+    payload = _product_payload(muzza.category_id)
+    payload["name"] = "Pizza Especial"
+    payload["allowed_extra_ids"] = [ing1.id, ing2.id]
+
+    res = client.post(PRODUCTS_URL, json=payload)
+    assert res.status_code == 201
+    body = res.json()
+    assert len(body["allowed_extras"]) == 2
+    extras_names = {e["name"]: e["extra_price"] for e in body["allowed_extras"]}
+    assert extras_names == {"Queso Cheddar": 600.0, "Huevo Frito": 400.0}
+
+    prod_id = body["id"]
+
+    # Endpoint público de menú expone recipe_ingredients y allowed_extras
+    menu_res = client.get("/api/v1/menu/products")
+    assert menu_res.status_code == 200
+    p = next(x for x in menu_res.json() if x["id"] == prod_id)
+    assert len(p["allowed_extras"]) == 2
+    assert p["recipe_ingredients"] == []
+
+    # Actualizar producto para cambiar allowed_extras
+    payload["allowed_extra_ids"] = [ing1.id]
+    put_res = client.put(f"{PRODUCTS_URL}/{prod_id}", json=payload)
+    assert put_res.status_code == 200
+    assert len(put_res.json()["allowed_extras"]) == 1
+    assert put_res.json()["allowed_extras"][0]["name"] == "Queso Cheddar"
+

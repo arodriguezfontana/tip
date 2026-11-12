@@ -1,7 +1,9 @@
 """Servicio de gestión de promociones."""
 
+from collections.abc import Sequence
 from datetime import datetime, timezone
 from decimal import Decimal
+from typing import Protocol
 
 from sqlalchemy.orm import Session
 
@@ -9,7 +11,6 @@ from app.core.errors import BusinessRuleError, ConflictError, NotFoundError
 from app.db.session import transaction
 from app.models.promotion import Promotion, PromotionPhoto
 from app.repositories import product_repository, promotion_repository
-from app.schemas.promotion_schemas import PromotionItemPayload
 
 
 def list_promotions(db: Session) -> list[Promotion]:
@@ -27,23 +28,25 @@ def get_required_promotion(db: Session, promotion_id: int) -> Promotion:
     return promo
 
 
-def _validate_items(db: Session, items: list[PromotionItemPayload]) -> list[tuple]:
+class PromotionItemInput(Protocol):
+    """Un producto incluido en una promoción y cuántas unidades lleva."""
+
+    product_id: int
+    quantity: int
+
+
+def _validate_items(db: Session, items: Sequence[PromotionItemInput]) -> list[tuple]:
     if not items:
         raise BusinessRuleError("La promoción debe incluir al menos un producto.")
     product_ids = {it.product_id for it in items}
     products = product_repository.get_many(db, product_ids)
     if len(products) != len(product_ids):
         raise BusinessRuleError("Algunos de los productos seleccionados no existen.")
-    result = []
-    seen = set()
-    for it in items:
-        if it.product_id in seen:
-            raise BusinessRuleError("Un producto figura más de una vez en la promoción.")
-        seen.add(it.product_id)
-        if it.quantity < 1:
-            raise BusinessRuleError("Las cantidades de los productos deben ser mayores a cero.")
-        result.append((products[it.product_id], it.quantity))
-    return result
+    if len(product_ids) != len(items):
+        raise BusinessRuleError("Un producto figura más de una vez en la promoción.")
+    if any(it.quantity < 1 for it in items):
+        raise BusinessRuleError("Las cantidades de los productos deben ser mayores a cero.")
+    return [(products[it.product_id], it.quantity) for it in items]
 
 
 def create_promotion(
@@ -52,7 +55,7 @@ def create_promotion(
     description: str | None,
     price: float | Decimal,
     is_active: bool,
-    items: list[PromotionItemPayload],
+    items: Sequence[PromotionItemInput],
     image_url: str | None = None,
 ) -> Promotion:
     if promotion_repository.name_taken(db, name):
@@ -84,7 +87,7 @@ def update_promotion(
     description: str | None,
     price: float | Decimal,
     is_active: bool,
-    items: list[PromotionItemPayload],
+    items: Sequence[PromotionItemInput],
     image_url: str | None = None,
 ) -> Promotion:
     promo = get_required_promotion(db, promotion_id)
@@ -98,7 +101,7 @@ def update_promotion(
     with transaction(db):
         promo.name = name
         promo.description = description
-        promo.price = price
+        promo.price = Decimal(str(price))
         promo.is_active = is_active
         promo.image_url = image_url
         promo.set_products(product_lines)
@@ -134,5 +137,3 @@ def get_promotion_image(db: Session, promotion_id: int) -> PromotionPhoto:
     if promo.photo is None:
         raise NotFoundError("La promoción no tiene imagen cargada.")
     return promo.photo
-
-

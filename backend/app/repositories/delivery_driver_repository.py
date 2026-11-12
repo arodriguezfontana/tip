@@ -1,10 +1,16 @@
 from sqlalchemy.orm import Session
 
-from app.models.delivery_driver import DeliveryDriver
+from app.models.delivery_driver import DeliveryDriver, DeliveryTrip
 
 
 def add(db: Session, driver: DeliveryDriver) -> None:
     db.add(driver)
+
+
+def add_trip(db: Session, trip: DeliveryTrip) -> None:
+    """Registra el viaje y le asigna su id (sin confirmar la transacción)."""
+    db.add(trip)
+    db.flush()
 
 
 def get(db: Session, driver_id: int) -> DeliveryDriver | None:
@@ -23,4 +29,3 @@ def list_drivers(
             DeliveryDriver.name.ilike(term) | DeliveryDriver.phone.ilike(term)
         )
     return query.order_by(DeliveryDriver.is_active.desc(), DeliveryDriver.name.asc()).all()
-

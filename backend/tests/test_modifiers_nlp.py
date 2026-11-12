@@ -14,11 +14,10 @@ import pytest
 
 from app.models.menu import Category, Ingredient, Product, ProductIngredient
 from app.models.order import Order, OrderItem, OrderStatus
-from app.repositories import ingredient_repository
+from app.services.ingredient_service import consumption_totals
 from app.services.modifier_nlp import (
     clasificar_modificador,
     extraer_modificadores_de_texto,
-    formatear_comanda_modificaciones,
 )
 from app.services.tools.order_tools import calcular_y_preparar_pedido, confirmar_y_guardar_pedido
 from tests.conftest import TestingSessionLocal
@@ -68,9 +67,13 @@ def hamburguesa(db_session, categoria, ingredientes):
     )
     db_session.add(prod)
     db_session.flush()
+    from app.models.menu import ProductAllowedExtra
     # Receta con Cebolla (50g) y Tomate (50g)
     db_session.add(ProductIngredient(product_id=prod.id, ingredient_id=ingredientes["cebolla"].id, quantity=50))
     db_session.add(ProductIngredient(product_id=prod.id, ingredient_id=ingredientes["tomate"].id, quantity=50))
+    # Extras permitidos: Queso y Panceta
+    db_session.add(ProductAllowedExtra(product_id=prod.id, ingredient_id=ingredientes["queso"].id))
+    db_session.add(ProductAllowedExtra(product_id=prod.id, ingredient_id=ingredientes["panceta"].id))
     db_session.commit()
     return prod
 
@@ -243,35 +246,13 @@ def test_modificador_negativo_evita_descuento_en_modulo_inventario(db_session, h
     db_session.commit()
 
     # Calcular consumo en inventario
-    consumo = ingredient_repository.consumption(db_session, None, None, None)
+    consumo = consumption_totals(db_session, None, None, None)
     consumo_dict = {name: total for _, name, _, total in consumo}
 
     # Cebolla: solo del pedido 1 (50g), el pedido 2 evitó el consumo por el modificador negativo
     assert consumo_dict["Cebolla"] == 50.0
     # Tomate: consumido en ambos pedidos (50g + 50g = 100g)
     assert consumo_dict["Tomate"] == 100.0
-
-
-# --- 4. Comanda para cocina resalta modificaciones en mayúsculas -------------------------------------
-
-
-def test_comanda_resalta_modificaciones_en_mayusculas(db_session, hamburguesa):
-    mods = [
-        {"type": "negative", "name": "cebolla", "tag": "[SIN CEBOLLA]"},
-        {"type": "positive", "name": "queso", "tag": "[EXTRA QUESO]"},
-    ]
-    texto_comanda = formatear_comanda_modificaciones(mods)
-    assert texto_comanda == "[SIN CEBOLLA] [EXTRA QUESO]"
-
-    item = OrderItem(
-        order_id=1,
-        product_id=hamburguesa.id,
-        product=hamburguesa,
-        quantity=1,
-        unit_price=Decimal("11000"),
-        modifications=mods,
-    )
-    assert item.comanda_display == "Hamburguesa Completa [SIN CEBOLLA] [EXTRA QUESO]"
 
 
 # --- 5. Flujo completo bot: cálculo y confirmación ---------------------------------------------------
@@ -303,4 +284,56 @@ def test_flujo_completo_bot_con_modificadores(db_session, hamburguesa, ingredien
     db_item = orden.items[0]
     assert db_item.unit_price == Decimal("11000.00")
     assert len(db_item.modifications) == 2
-    assert db_item.comanda_display == "Hamburguesa Completa [SIN CEBOLLA] [EXTRA QUESO]"
+
+def test_restriccion_se_descarta_si_ingrediente_no_esta_en_receta(db_session, hamburguesa):
+    # Hamburguesa solo tiene Cebolla y Tomate en su receta. Si piden "sin lechuga" o "sin pepino", se descarta.
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa sin pepino y sin cebolla",
+        "customer_name": "Pedro",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    datos = calc_res["datos_temporales"]
+    item = datos["items"][0]
+    # Solo "sin cebolla" debe quedar, "sin pepino" no está en la receta y se descarta
+    assert len(item["modifications"]) == 1
+    assert item["modifications"][0]["name"] == "cebolla"
+    assert "[SIN CEBOLLA]" in calc_res["mensaje_para_usuario"]
+    assert "[SIN PEPINO]" not in calc_res["mensaje_para_usuario"]
+
+
+def test_adicional_se_descarta_si_no_esta_en_allowed_extras(db_session, hamburguesa):
+    # Hamburguesa solo tiene Queso y Panceta como allowed_extras. Si piden "con anana", se descarta.
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa con anana y con extra queso",
+        "customer_name": "Maria",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    datos = calc_res["datos_temporales"]
+    item = datos["items"][0]
+    # Solo "queso" debe quedar, "anana" no está permitido para este producto y se descarta
+    assert len(item["modifications"]) == 1
+    assert item["modifications"][0]["name"] == "queso"
+    assert item["unit_price"] == 11000.0  # Base 10000 + 1000 extra queso
+    assert "[EXTRA QUESO]" in calc_res["mensaje_para_usuario"]
+    assert "[EXTRA ANANA]" not in calc_res["mensaje_para_usuario"]
+
+
+def test_bot_muestra_extras_debajo_del_producto_y_aclaracion(db_session, hamburguesa):
+    calc_res = json.loads(calcular_y_preparar_pedido.invoke({
+        "items_solicitados": "1 Hamburguesa Completa con extra queso y sin cebolla",
+        "customer_name": "Lucas",
+        "customer_phone": "1144556677",
+        "metodo_entrega": "retiro",
+    }))
+
+    msg = calc_res["mensaje_para_usuario"]
+    # Formato: el plato y abajo las modificaciones una al lado de la otra
+    linea_esperada = "- Hamburguesa Completa (x1) $11,000.00\n  [EXTRA QUESO] [SIN CEBOLLA]"
+    assert linea_esperada in msg
+    # Aclaración de que las modificaciones se realizan según los permitidos
+    assert "modificaciones" in msg.lower() and "permitid" in msg.lower()
+

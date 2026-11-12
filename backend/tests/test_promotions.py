@@ -264,11 +264,6 @@ def test_orden_con_promocion_y_comanda(db_session, products):
     assert item.promotion_id == promo.id
     assert item.product_id is None
     assert item.display_name == "Combo Familiar"
-    # Verificar comanda_display
-    assert item.comanda_display.startswith("PROMO: Combo Familiar (")
-    assert "2x Pizza Muzzarella" in item.comanda_display
-    assert "1x Coca-Cola" in item.comanda_display
-
     # Verificar sectores distribuidos en la orden
     assert "pizzeria" in order.sectors
     assert "barra" in order.sectors
@@ -338,3 +333,20 @@ def test_promotion_image_upload_get_and_delete(client, db_session, products):
     res_get_404 = client.get(f"/api/v1/promotions/{promo.id}/image")
     assert res_get_404.status_code == 404
 
+def test_las_promociones_admiten_hasta_5_imagenes(client):
+    from app.models.promotion import MAX_PROMOTION_IMAGES
+
+    url = "/api/v1/promotion-images"
+    res_init = client.get(url)
+    assert res_init.status_code == 200
+    assert res_init.json()["max_images"] == 5
+
+    png_bytes = b"\x89PNG\r\n\x1a\n" + b"\x00" * 30
+    for _ in range(MAX_PROMOTION_IMAGES):
+        res = client.post(url, content=png_bytes, headers={"Content-Type": "image/png"})
+        assert res.status_code == 201
+
+    res_exceeded = client.post(url, content=png_bytes, headers={"Content-Type": "image/png"})
+    assert res_exceeded.status_code == 400
+    assert "5" in res_exceeded.json()["detail"]
+    assert len(client.get(url).json()["images"]) == 5

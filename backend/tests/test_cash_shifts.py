@@ -245,7 +245,7 @@ def test_inmutabilidad_del_turno_cerrado(client, db_session, products):
             "shipping_address": None,
             "items": [{"product_id": products["muzza"].id, "quantity": 1}],
             "payment_method": "efectivo",
-            "is_paid": False,
+            "is_paid": True,
         },
     )
     order_id = res_order.json()["id"]
@@ -269,9 +269,9 @@ def test_inmutabilidad_del_turno_cerrado(client, db_session, products):
     with pytest.raises(BusinessRuleError, match="turno de caja.*cerrado"):
         order_service.update_order_payment(db_session, order.id, is_paid=True)
 
-    # 3. No se pueden cambiar transiciones de estado del pedido
+    # 3. No se puede cancelar ni rechazar (sacaría el pedido de las ventas del turno sellado)
     with pytest.raises(BusinessRuleError, match="turno de caja.*cerrado"):
-        order.transition_to("En preparación", None, 30)
+        order.transition_to("Cancelado", None, 30)
 
     # 4. No se pueden borrar movimientos de un turno cerrado
     del_mov = client.delete(f"{CASH_SHIFTS_URL}/movements/{mov_id}")
@@ -281,6 +281,72 @@ def test_inmutabilidad_del_turno_cerrado(client, db_session, products):
     # 5. No se puede volver a cerrar una caja ya cerrada
     res_reclose = client.post(f"{CASH_SHIFTS_URL}/close", json={"final_amount": 5000.0})
     assert res_reclose.status_code == 400
+
+
+def _pedido_de_mostrador(client, products, *, is_paid):
+    res = client.post(
+        "/api/v1/orders/counter",
+        json={
+            "customer_name": "Pedido abierto",
+            "customer_phone": "11 9999-8888",
+            "delivery_method": "retiro",
+            "shipping_address": None,
+            "items": [{"product_id": products["muzza"].id, "quantity": 1}],
+            "payment_method": "efectivo",
+            "is_paid": is_paid,
+        },
+    )
+    return res.json()["id"]
+
+
+def test_un_pedido_abierto_al_cerrar_la_caja_se_puede_terminar_de_entregar(client, db_session, products):
+    client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0})
+    order_id = _pedido_de_mostrador(client, products, is_paid=True)
+    client.post(f"{CASH_SHIFTS_URL}/close", json={"final_amount": 5000.0})
+
+    listo = client.patch(f"/api/v1/orders/{order_id}/status", json={"status": "Listo para Retirar"})
+    final = client.patch(f"/api/v1/orders/{order_id}/status", json={"status": "Finalizado"})
+
+    assert (listo.status_code, final.status_code) == (200, 200)
+    # Lo cobrado sigue en el turno cerrado: la venta no se movió.
+    assert db_session.get(Order, order_id).cash_shift_id == 1
+
+
+def test_un_pedido_abierto_al_cerrar_la_caja_no_se_puede_cancelar(client, db_session, products):
+    client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0})
+    order_id = _pedido_de_mostrador(client, products, is_paid=True)
+    client.post(f"{CASH_SHIFTS_URL}/close", json={"final_amount": 5000.0})
+
+    respuesta = client.patch(f"/api/v1/orders/{order_id}/status", json={"status": "Cancelado"})
+
+    assert respuesta.status_code == 400
+    assert "cerrado" in respuesta.json()["detail"]
+
+
+def test_un_pedido_sin_cobrar_al_cerrar_la_caja_se_cobra_en_el_turno_abierto(client, db_session, products):
+    client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0})
+    order_id = _pedido_de_mostrador(client, products, is_paid=False)
+    client.post(f"{CASH_SHIFTS_URL}/close", json={"final_amount": 5000.0})
+
+    sin_caja = client.patch(f"/api/v1/orders/{order_id}/payment", json={"is_paid": True})
+    assert sin_caja.status_code == 400
+
+    nuevo_turno = client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0}).json()["id"]
+    cobrado = client.patch(f"/api/v1/orders/{order_id}/payment", json={"is_paid": True})
+
+    assert cobrado.status_code == 200
+    assert db_session.get(Order, order_id).cash_shift_id == nuevo_turno
+
+
+def test_el_cobro_de_un_turno_cerrado_no_se_puede_deshacer(client, db_session, products):
+    client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0})
+    order_id = _pedido_de_mostrador(client, products, is_paid=True)
+    client.post(f"{CASH_SHIFTS_URL}/close", json={"final_amount": 5000.0})
+    client.post(f"{CASH_SHIFTS_URL}/open", json={"initial_amount": 5000.0})
+
+    respuesta = client.patch(f"/api/v1/orders/{order_id}/payment", json={"is_paid": False})
+
+    assert respuesta.status_code == 400
 
 
 def test_historial_y_detalle_de_turnos(client):

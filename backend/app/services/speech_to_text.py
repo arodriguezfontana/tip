@@ -6,6 +6,7 @@ camino que un mensaje escrito (ver BotService.recibir_audio).
 
 import asyncio
 import logging
+from functools import lru_cache
 
 from google import genai
 from google.genai import types
@@ -48,14 +49,9 @@ _CONFIGURACION = types.GenerateContentConfig(
     automatic_function_calling=types.AutomaticFunctionCallingConfig(disable=True),
 )
 
-_cliente: genai.Client | None = None
-
-
+@lru_cache(maxsize=1)
 def _cliente_gemini() -> genai.Client:
-    global _cliente
-    if _cliente is None:
-        _cliente = genai.Client(api_key=settings.GOOGLE_API_KEY)
-    return _cliente
+    return genai.Client(api_key=settings.GOOGLE_API_KEY)
 
 
 def _tipo_de_audio(mime_type: str) -> str:
@@ -76,54 +72,85 @@ async def _transcribir_con(modelo: str, audio: types.Part) -> _Transcripcion:
     return _leer(respuesta)
 
 
+class _TranscripcionConRespaldo:
+    """Pide la transcripción al modelo principal y, si tarda o falla, también a los de respaldo, y usa la primera
+    respuesta que llegue."""
+
+    def __init__(self, audio: types.Part, mime_type: str):
+        self._audio = audio
+        self._mime_type = mime_type
+        self._por_probar = modelos.en_orden()
+        self._en_curso: dict[asyncio.Task, str] = {}
+
+    async def transcribir(self) -> _Transcripcion | None:
+        """La primera transcripción que llegue, o None si ningún modelo respondió a tiempo."""
+        self._pedir_al_siguiente()
+        try:
+            return await self._esperar_primera_transcripcion()
+        finally:
+            for tarea in self._en_curso:
+                tarea.cancel()
+
+    def _pedir_al_siguiente(self) -> None:
+        if not self._por_probar:
+            return
+        modelo = self._por_probar.pop(0)
+        self._en_curso[asyncio.ensure_future(_transcribir_con(modelo, self._audio))] = modelo
+
+    def _sumar_respaldo(self) -> None:
+        """Ninguno respondió todavía: se suma el siguiente modelo (el que estaba sigue corriendo)."""
+        if not self._por_probar:
+            return
+        logger.warning(
+            "Gemini %s tarda en transcribir un mensaje de voz: se le pide también a %s.",
+            next(iter(self._en_curso.values())),
+            self._por_probar[0],
+        )
+        self._pedir_al_siguiente()
+
+    def _transcripcion_de(self, tarea: asyncio.Task) -> _Transcripcion | None:
+        """El resultado de una tarea terminada; None si falló (y entonces se le pide al siguiente modelo)."""
+        modelo = self._en_curso.pop(tarea)
+        try:
+            resultado = tarea.result()
+        except Exception as e:
+            modelos.registrar_falla(modelo)
+            logger.warning("Gemini %s no pudo transcribir un mensaje de voz (%s): %s", modelo, self._mime_type, e)
+            self._pedir_al_siguiente()
+            return None
+        # El que quedó corriendo fue más lento: si era el principal, se empieza un rato por el respaldo.
+        for lento in self._en_curso.values():
+            modelos.registrar_falla(lento)
+        modelos.registrar_exito(modelo)
+        return resultado
+
+    async def _esperar_una_ronda(self, segundos_restantes: float) -> _Transcripcion | None:
+        """Espera a que termine alguna tarea (o se cumpla el plazo para sumar un respaldo) y devuelve la
+        transcripción si alguna salió bien."""
+        espera = min(ESPERA_ANTES_DEL_RESPALDO_SEGUNDOS, segundos_restantes) if self._por_probar else segundos_restantes
+        terminadas, _ = await asyncio.wait(self._en_curso, timeout=espera, return_when=asyncio.FIRST_COMPLETED)
+        if not terminadas:
+            self._sumar_respaldo()
+            return None
+        return next((t for t in map(self._transcripcion_de, terminadas) if t is not None), None)
+
+    async def _esperar_primera_transcripcion(self) -> _Transcripcion | None:
+        loop = asyncio.get_running_loop()
+        limite = loop.time() + STT_TIMEOUT_SECONDS
+        transcripcion = None
+        while transcripcion is None and self._en_curso and loop.time() < limite:
+            transcripcion = await self._esperar_una_ronda(limite - loop.time())
+        return transcripcion
+
+
 async def transcribir_audio(datos: bytes, mime_type: str) -> str | None:
     """Texto que dice el audio, o None si está vacío, no tiene voz o ningún modelo pudo transcribirlo."""
     if not datos:
         return None
     audio = types.Part.from_bytes(data=datos, mime_type=_tipo_de_audio(mime_type))
-    loop = asyncio.get_running_loop()
-    limite = loop.time() + STT_TIMEOUT_SECONDS
-    por_probar = modelos.en_orden()
-    en_curso: dict[asyncio.Task, str] = {}
-
-    def pedirle_al_siguiente() -> None:
-        modelo = por_probar.pop(0)
-        en_curso[asyncio.ensure_future(_transcribir_con(modelo, audio))] = modelo
-
-    pedirle_al_siguiente()
-    try:
-        while en_curso:
-            restante = limite - loop.time()
-            if restante <= 0:
-                break
-            espera = min(ESPERA_ANTES_DEL_RESPALDO_SEGUNDOS, restante) if por_probar else restante
-            terminadas, _ = await asyncio.wait(en_curso, timeout=espera, return_when=asyncio.FIRST_COMPLETED)
-            if not terminadas:
-                # Ninguno respondió todavía: se suma el siguiente modelo (el que estaba sigue corriendo).
-                if por_probar:
-                    logger.warning("Gemini %s tarda en transcribir un mensaje de voz: se le pide también a %s.",
-                                   next(iter(en_curso.values())), por_probar[0])
-                    pedirle_al_siguiente()
-                continue
-            for tarea in terminadas:
-                modelo = en_curso.pop(tarea)
-                try:
-                    resultado = tarea.result()
-                except Exception as e:
-                    modelos.registrar_falla(modelo)
-                    logger.warning("Gemini %s no pudo transcribir un mensaje de voz (%s): %s", modelo, mime_type, e)
-                    if por_probar:
-                        pedirle_al_siguiente()
-                    continue
-                # El que quedó corriendo fue más lento: si era el principal, se empieza un rato por el respaldo.
-                for lento in en_curso.values():
-                    modelos.registrar_falla(lento)
-                modelos.registrar_exito(modelo)
-                texto = resultado.transcripcion.strip()
-                return texto if resultado.hay_voz and texto else None
-    finally:
-        for tarea in en_curso:
-            tarea.cancel()
-
-    logger.error("Ningún modelo de Gemini pudo transcribir el mensaje de voz (%s).", mime_type)
-    return None
+    transcripcion = await _TranscripcionConRespaldo(audio, mime_type).transcribir()
+    if transcripcion is None:
+        logger.error("Ningún modelo de Gemini pudo transcribir el mensaje de voz (%s).", mime_type)
+        return None
+    texto = transcripcion.transcripcion.strip()
+    return texto if transcripcion.hay_voz and texto else None

@@ -1,12 +1,12 @@
 from collections.abc import Iterable
 from datetime import datetime
 from decimal import Decimal
+from typing import Any
 
 from sqlalchemy import (
     JSON,
     Boolean,
     CheckConstraint,
-    Column,
     DateTime,
     Float,
     ForeignKey,
@@ -17,7 +17,7 @@ from sqlalchemy import (
     and_,
 )
 from sqlalchemy.ext.hybrid import hybrid_property
-from sqlalchemy.orm import deferred, relationship, validates
+from sqlalchemy.orm import Mapped, deferred, mapped_column, relationship, validates
 
 from app.core.errors import BusinessRuleError, ConflictError, UnsupportedFileError
 from app.core.money import MoneyColumn, to_money
@@ -54,23 +54,35 @@ class ProductIngredient(Base):
     __tablename__ = "product_ingredients"
     __table_args__ = (CheckConstraint("quantity > 0", name="ck_product_ingredients_quantity"),)
 
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
-    ingredient_id = Column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
 
-    quantity = Column(Float, nullable=False)
+    quantity: Mapped[float] = mapped_column(Float, nullable=False)
 
-    product = relationship("Product", back_populates="recipe_items")
-    ingredient = relationship("Ingredient", back_populates="used_in_products")
+    product: Mapped["Product"] = relationship("Product", back_populates="recipe_items")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient", back_populates="used_in_products")
+
+
+class ProductAllowedExtra(Base):
+    """Adicional permitido para un producto: insumo que se puede sumar como extra al pedirlo."""
+
+    __tablename__ = "product_allowed_extras"
+
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    ingredient_id: Mapped[int] = mapped_column(Integer, ForeignKey("ingredients.id", ondelete="CASCADE"), primary_key=True)
+
+    product: Mapped["Product"] = relationship("Product", back_populates="allowed_extra_items")
+    ingredient: Mapped["Ingredient"] = relationship("Ingredient", back_populates="allowed_in_products")
 
 
 class Category(Base):
     __tablename__ = "categories"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True, nullable=False)
-    sector = Column(String(50), nullable=False, default="cocina", server_default="cocina")
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    sector: Mapped[str] = mapped_column(String(50), nullable=False, default="cocina", server_default="cocina")
 
-    products = relationship("Product", back_populates="category")
+    products: Mapped[list["Product"]] = relationship("Product", back_populates="category")
 
     def replace_products(self, products: Iterable["Product"]) -> None:
         """Deja en la categoría exactamente esos productos.
@@ -80,9 +92,8 @@ class Category(Base):
         """
         new_products = list(products)
         keep_ids = {product.id for product in new_products}
-        for product in list(self.products):
-            if product.id not in keep_ids:
-                product.category = None
+        for product in [p for p in self.products if p.id not in keep_ids]:
+            product.category = None
         for product in new_products:
             product.category = self
 
@@ -97,14 +108,16 @@ class Ingredient(Base):
 
     __tablename__ = "ingredients"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(100), unique=True, index=True, nullable=False)
-    unit = Column(String(30), nullable=False, server_default="unidades")
-    extra_price = Column(MoneyColumn, nullable=False, default=0, server_default="0")
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(100), unique=True, index=True, nullable=False)
+    unit: Mapped[str] = mapped_column(String(30), nullable=False, server_default="unidades")
+    cost: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, default=0, server_default="0")
+    extra_price: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False, default=0, server_default="0")
 
-    used_in_products = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
+    used_in_products: Mapped[list["ProductIngredient"]] = relationship("ProductIngredient", back_populates="ingredient", cascade="all, delete-orphan")
+    allowed_in_products: Mapped[list["ProductAllowedExtra"]] = relationship("ProductAllowedExtra", back_populates="ingredient", cascade="all, delete-orphan")
 
-    @validates("extra_price")
+    @validates("cost", "extra_price")
     def _as_money(self, _key: str, value) -> Decimal:
         return to_money(value)
 
@@ -121,22 +134,23 @@ class Ingredient(Base):
 class Product(Base):
     __tablename__ = "products"
 
-    id = Column(Integer, primary_key=True, index=True)
-    name = Column(String(150), unique=True, index=True, nullable=False)
-    description = Column(Text, nullable=True)
-    price = Column(MoneyColumn, nullable=False)
-    is_active = Column(Boolean, default=True, nullable=False)
+    id: Mapped[int] = mapped_column(Integer, primary_key=True, index=True)
+    name: Mapped[str] = mapped_column(String(150), unique=True, index=True, nullable=False)
+    description: Mapped[str | None] = mapped_column(Text, nullable=True)
+    price: Mapped[Decimal] = mapped_column(MoneyColumn, nullable=False)
+    is_active: Mapped[bool] = mapped_column(Boolean, default=True, nullable=False)
 
-    preparation_time_minutes = Column(Integer, default=10, nullable=False)
-    dietary_restrictions = Column(JSON, default=list, nullable=False)
+    preparation_time_minutes: Mapped[int] = mapped_column(Integer, default=10, nullable=False)
+    dietary_restrictions: Mapped[Any] = mapped_column(JSON, default=list, nullable=False)
 
     # Un producto queda sin categoría si se lo quita de la suya desde el panel: mientras tanto no se ofrece.
-    category_id = Column(Integer, ForeignKey("categories.id"), nullable=True)
-    category = relationship("Category", back_populates="products")
-    sector = Column(String(50), nullable=True)
+    category_id: Mapped[int | None] = mapped_column(Integer, ForeignKey("categories.id"), nullable=True)
+    category: Mapped["Category | None"] = relationship("Category", back_populates="products")
+    sector: Mapped[str | None] = mapped_column(String(50), nullable=True)
 
-    recipe_items = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")
-    image = relationship("ProductImage", back_populates="product", uselist=False, cascade="all, delete-orphan")
+    recipe_items: Mapped[list["ProductIngredient"]] = relationship("ProductIngredient", back_populates="product", cascade="all, delete-orphan")
+    allowed_extra_items: Mapped[list["ProductAllowedExtra"]] = relationship("ProductAllowedExtra", back_populates="product", cascade="all, delete-orphan")
+    image: Mapped["ProductImage | None"] = relationship("ProductImage", back_populates="product", uselist=False, cascade="all, delete-orphan")
 
     @property
     def effective_sector(self) -> str:
@@ -173,7 +187,7 @@ class Product(Base):
             raise BusinessRuleError("El precio tiene que ser mayor a cero.")
         self.name = name
         self.description = description
-        self.price = price
+        self.price = Decimal(str(price))
         self.category = category
         # Se fija también el id: la disponibilidad depende de él y debe valer antes de guardar.
         self.category_id = category.id
@@ -203,6 +217,19 @@ class Product(Base):
 
     # --- Receta -------------------------------------------------------------------------------------
 
+    @property
+    def allowed_extras(self) -> list[Ingredient]:
+        return [item.ingredient for item in self.allowed_extra_items if item.ingredient]
+
+    def replace_allowed_extras(self, ingredients: Iterable[Ingredient]) -> None:
+        current = {item.ingredient_id: item for item in self.allowed_extra_items}
+        new_items = {ing.id: ing for ing in ingredients}
+        for item in [item for ing_id, item in current.items() if ing_id not in new_items]:
+            self.allowed_extra_items.remove(item)
+        self.allowed_extra_items.extend(
+            ProductAllowedExtra(ingredient=ing) for ing_id, ing in new_items.items() if ing_id not in current
+        )
+
     def replace_recipe(self, lines: list[tuple[Ingredient, float]]) -> None:
         """Reemplaza la receta. Cada línea es (ingrediente, cantidad por unidad de producto)."""
         ids = [ingredient.id for ingredient, _ in lines]
@@ -214,14 +241,15 @@ class Product(Base):
         # Se actualizan las líneas existentes en lugar de recrearlas: comparten la clave (producto, ingrediente).
         current = {item.ingredient_id: item for item in self.recipe_items}
         new = {ingredient.id: (ingredient, quantity) for ingredient, quantity in lines}
-        for ingredient_id, item in current.items():
-            if ingredient_id not in new:
-                self.recipe_items.remove(item)
-        for ingredient_id, (ingredient, quantity) in new.items():
-            if ingredient_id in current:
-                current[ingredient_id].quantity = quantity
-            else:
-                self.recipe_items.append(ProductIngredient(ingredient=ingredient, quantity=quantity))
+        for item in [item for ingredient_id, item in current.items() if ingredient_id not in new]:
+            self.recipe_items.remove(item)
+        for ingredient_id in current.keys() & new.keys():
+            current[ingredient_id].quantity = new[ingredient_id][1]
+        self.recipe_items.extend(
+            ProductIngredient(ingredient=ingredient, quantity=quantity)
+            for ingredient_id, (ingredient, quantity) in new.items()
+            if ingredient_id not in current
+        )
 
 
 class ProductImage(Base):
@@ -229,19 +257,19 @@ class ProductImage(Base):
 
     __tablename__ = "product_images"
 
-    product_id = Column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
-    content_type = Column(String(20), nullable=False)
-    data = deferred(Column(LargeBinary, nullable=False))
-    updated_at = Column(DateTime(timezone=True), nullable=False)
+    product_id: Mapped[int] = mapped_column(Integer, ForeignKey("products.id", ondelete="CASCADE"), primary_key=True)
+    content_type: Mapped[str] = mapped_column(String(20), nullable=False)
+    data: Mapped[bytes] = deferred(mapped_column(LargeBinary, nullable=False))
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), nullable=False)
 
-    product = relationship("Product", back_populates="image")
+    product: Mapped["Product"] = relationship("Product", back_populates="image")
 
     @staticmethod
     def content_type_of(data: bytes) -> str:
         """Tipo de la imagen según su contenido. Solo se aceptan JPG y PNG de hasta MAX_IMAGE_MB."""
         if len(data) > MAX_IMAGE_BYTES:
             raise InvalidImageError(f"La imagen no puede pesar más de {MAX_IMAGE_MB} MB.")
-        for signature, content_type in _IMAGE_SIGNATURES.items():
-            if data.startswith(signature):
-                return content_type
-        raise InvalidImageError("La imagen tiene que ser un archivo JPG o PNG.")
+        content_type = next((kind for signature, kind in _IMAGE_SIGNATURES.items() if data.startswith(signature)), None)
+        if content_type is None:
+            raise InvalidImageError("La imagen tiene que ser un archivo JPG o PNG.")
+        return content_type

@@ -5,6 +5,12 @@ export interface ProductCategory {
   name: string;
 }
 
+export interface IngredientExtra {
+  id: number;
+  name: string;
+  extra_price: number;
+}
+
 export interface Product {
   id: number;
   name: string;
@@ -14,18 +20,22 @@ export interface Product {
   dietary_restrictions: string[];
   /** Ruta de la imagen relativa a la API (ver productImageSrc), o null si no tiene. */
   image_url: string | null;
+  recipe_ingredients?: string[];
+  allowed_extras?: IngredientExtra[];
 }
 
 /** Debe coincidir con MAX_QUANTITY_PER_ITEM del backend. */
 export const MAX_QUANTITY_PER_ITEM = 20;
 
 export interface CartItem {
+  id?: string;
   product: Product;
   promotion?: Promotion;
   quantity: number;
   secondary_product?: Product;
   custom_name?: string;
   unit_price?: number;
+  modifications?: OrderItemModification[];
 }
 
 export type DeliveryMethod = 'domicilio' | 'retiro';
@@ -61,6 +71,7 @@ export interface WebOrderItemPayload {
   quantity: number;
   secondary_product_id?: number;
   custom_name?: string;
+  modifications?: OrderItemModification[];
 }
 
 export interface WebOrderPayload {
@@ -151,6 +162,7 @@ export interface WebOrderItem {
 
 export interface WebOrderCreated {
   id: number;
+  shift_number: number;
   status: OrderStatus;
   customer_name: string;
   customer_phone: string | null;
@@ -164,6 +176,8 @@ export interface WebOrderCreated {
   is_paid: boolean;
   /** Link de Checkout Pro de MercadoPago al que se redirige al cliente (solo si eligió MercadoPago). */
   payment_url: string | null;
+  /** Solo en pedidos de mostrador: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 export interface CheckoutFormErrors {
@@ -198,6 +212,8 @@ export type OrderChannel = 'telegram' | 'whatsapp';
 
 export interface AdminOrder {
   id: number;
+  /** Número que ve el personal y el cliente: se reinicia con cada turno de caja (el `id` es la clave interna). */
+  shift_number: number;
   customer_name: string;
   shipping_address: string;
   total_amount: number;
@@ -205,13 +221,23 @@ export interface AdminOrder {
   delivery_method: DeliveryMethod;
   source: OrderSource;
   channel?: OrderChannel | null;
+  /** El pedido salió de un chat del bot: se puede hablar con el cliente desde el panel. */
+  has_chat?: boolean;
   customer_phone: string | null;
   notes: string | null;
   estimated_minutes: number | null;
+  /** De dónde salió la demora: historial del local, la cargó el personal o la estándar. */
+  estimate_source?: 'smart' | 'manual' | 'default' | null;
+  /** Demora real en minutos (desde que ingresó hasta que se finalizó); vacía mientras el pedido no terminó. */
+  actual_minutes?: number | null;
   scheduled_for: string | null;
   created_at: string;
   item_count: number;
   delivery_driver_id?: number | null;
+  /** Viaje en el que salió el pedido, su parada y la llegada estimada; vacíos mientras el viaje se está armando. */
+  trip_id?: number | null;
+  trip_stop?: number | null;
+  eta_minutes?: number | null;
   delivery_driver_name?: string | null;
   payment_method?: PaymentMethod | null;
   is_paid?: boolean;
@@ -225,6 +251,8 @@ export interface AdminOrder {
   items_prepared_count?: number;
   is_all_prepared?: boolean;
   sectors?: (PreparationSector | string)[];
+  /** Solo al confirmar el pedido: por qué no se pudo imprimir la comanda (el pedido se guardó igual). */
+  print_error?: string | null;
 }
 
 /** Detalle completo de un pedido para el panel (productos, entrega y facturación). */
@@ -234,4 +262,38 @@ export interface OrderDetail extends AdminOrder {
   shipping_cost: number;
   payment_method: PaymentMethod | null;
   is_paid: boolean;
+}
+
+/** Cómo se estimará la demora al aceptar un pedido. */
+export interface OrderDelayEstimate {
+  /** 'smart': la calcula el sistema con el historial del local; 'manual': la tiene que indicar el empleado. */
+  mode: 'smart' | 'manual';
+  estimated_minutes: number | null;
+  /** Pedidos parecidos con los que se calculó (o los que hay hasta ahora) y los que hacen falta. */
+  samples: number;
+  min_samples: number;
+  queue_size: number;
+  /** Demora estándar del local, para sugerirla al cargarla a mano. */
+  suggested_minutes: number;
+}
+
+/** Una parada del viaje de un repartidor con la llegada estimada al domicilio. */
+export interface TripStop {
+  order_id: number;
+  stop: number;
+  address: string;
+  customer_name: string;
+  eta_minutes: number | null;
+}
+
+/** Viaje despachado: la ruta calculada sobre todos los pedidos del lote. */
+export interface DeliveryTrip {
+  id: number;
+  delivery_driver_id: number | null;
+  delivery_driver_name: string | null;
+  dispatched_at: string;
+  total_minutes: number | null;
+  /** Por qué el viaje salió sin tiempos estimados (solo si no se pudo calcular la ruta). */
+  warning?: string | null;
+  stops: TripStop[];
 }
