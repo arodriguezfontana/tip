@@ -215,6 +215,25 @@ def best_selling_products(
     return query.group_by(Product.id, Product.name).order_by(quantity.desc(), Product.name).limit(limit).all()
 
 
+def best_selling_promotions(
+    db: Session, date_from: datetime | None, date_to: datetime | None, limit: int = 3
+) -> list[tuple[str, int, float]]:
+    """(nombre, unidades, facturación) de las promociones más vendidas en pedidos que cuentan como venta."""
+    from app.models.promotion import Promotion
+
+    quantity = func.sum(OrderItem.quantity)
+    revenue = func.sum(OrderItem.quantity * OrderItem.unit_price)
+    query = created_between(
+        db.query(Promotion.name, quantity, revenue)
+        .join(OrderItem, OrderItem.promotion_id == Promotion.id)
+        .join(Order, Order.id == OrderItem.order_id)
+        .filter(Order.is_billable),
+        date_from,
+        date_to,
+    )
+    return query.group_by(Promotion.id, Promotion.name).order_by(quantity.desc(), Promotion.name).limit(limit).all()
+
+
 def billable_totals(db: Session, date_from: datetime | None, date_to: datetime | None) -> list[tuple[datetime, Decimal]]:
     """(fecha de creación, total) de cada pedido que cuenta como venta."""
     query = created_between(db.query(Order.created_at, Order.total_amount).filter(Order.is_billable), date_from, date_to)

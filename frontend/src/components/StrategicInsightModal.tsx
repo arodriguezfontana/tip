@@ -50,7 +50,7 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
         <div className="flex items-center justify-between pb-4 border-b border-gray-100">
           <div>
             <h2 id="insight-modal-title" className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span>💡</span> Análisis del Negocio y Consejos con IA
+              Análisis del Negocio y Consejos con IA
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Evaluación de ventas, tiempos de espera y flujo de pedidos para identificar debilidades operativas y oportunidades.
@@ -90,7 +90,6 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
             {data.operational_metrics && (
               <div className="grid grid-cols-1 sm:grid-cols-3 gap-3 bg-gray-50/70 p-3 rounded-2xl border border-gray-200/60 text-xs text-gray-700">
                 <div className="flex items-center gap-2">
-                  <span className="text-base">⏱️</span>
                   <div>
                     <span className="font-semibold block text-[11px] text-gray-500 uppercase">Demora promedio</span>
                     <span className="font-bold text-gray-900">{data.operational_metrics.avg_wait_minutes} min</span>
@@ -98,7 +97,6 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base">📈</span>
                   <div>
                     <span className="font-semibold block text-[11px] text-gray-500 uppercase">Hora pico de demanda</span>
                     <span className="font-bold text-gray-900">
@@ -108,7 +106,6 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
                   </div>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base">🛵</span>
                   <div>
                     <span className="font-semibold block text-[11px] text-gray-500 uppercase">Modalidad de entrega</span>
                     <span className="font-bold text-gray-900">
@@ -122,7 +119,7 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
             {/* Resumen Ejecutivo */}
             <div className="bg-gradient-to-br from-gray-900 to-zinc-800 text-white rounded-2xl p-5 shadow-sm">
               <span className="text-[11px] font-bold uppercase tracking-wider text-amber-400 block mb-1">
-                📋 Diagnóstico General
+                Diagnóstico General
               </span>
               <p className="text-sm leading-relaxed text-gray-100">{data.summary}</p>
             </div>
@@ -131,7 +128,7 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
               {/* Debilidades Operativas Detectadas */}
               <div className="bg-amber-50/70 border border-amber-200/70 rounded-2xl p-4">
                 <span className="text-xs font-bold uppercase tracking-wide text-amber-900 flex items-center gap-1.5 mb-2.5">
-                  <span>⚠️</span> Debilidades Operativas Detectadas
+                  Debilidades
                 </span>
                 <ul className="space-y-2 text-xs text-amber-950 font-medium">
                   {(data.operational_weaknesses ?? data.warnings).map((w, i) => (
@@ -146,12 +143,12 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
               {/* Recomendaciones Concretas y Accionables */}
               <div className="bg-sky-50/70 border border-sky-200/70 rounded-2xl p-4">
                 <span className="text-xs font-bold uppercase tracking-wide text-sky-900 flex items-center gap-1.5 mb-2.5">
-                  <span>🚀</span> Recomendaciones Concretas
+                  Recomendaciones
                 </span>
                 <ul className="space-y-2 text-xs text-sky-950 font-medium">
                   {data.recommendations.map((r, i) => (
                     <li key={i} className="flex items-start gap-2">
-                      <span className="text-sky-600 font-bold shrink-0">→</span>
+                      <span className="text-sky-600 font-bold shrink-0">•</span>
                       <span>{r}</span>
                     </li>
                   ))}
@@ -159,11 +156,31 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
               </div>
             </div>
 
+            {/* Recomendaciones de Compras y Gastos */}
+            {data.spending_recommendations && data.spending_recommendations.length > 0 && (
+              <div className="bg-violet-50/70 border border-violet-200/70 rounded-2xl p-4">
+                <span className="text-xs font-bold uppercase tracking-wide text-violet-900 flex items-center gap-1.5 mb-1">
+                  Compras y Control de Gastos
+                </span>
+                <p className="text-[11px] text-violet-800/80 mb-2.5">
+                  Sugerencias de abastecimiento según consumo de ingredientes y rotación de platos:
+                </p>
+                <ul className="space-y-2 text-xs text-violet-950 font-medium">
+                  {data.spending_recommendations.map((g, i) => (
+                    <li key={i} className="flex items-start gap-2">
+                      <span className="text-violet-600 font-bold shrink-0">•</span>
+                      <span>{g}</span>
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            )}
+
             {/* Puntos Destacados */}
             {data.highlights.length > 0 && (
               <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-2xl p-4">
                 <span className="text-xs font-bold uppercase tracking-wide text-emerald-900 flex items-center gap-1.5 mb-2.5">
-                  <span>✨</span> Oportunidades y Puntos Fuertes
+                  Oportunidades
                 </span>
                 <ul className="space-y-2 text-xs text-emerald-950 font-medium">
                   {data.highlights.map((h, i) => (
@@ -183,7 +200,7 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
                 disabled={loading}
                 className="text-xs font-semibold text-gray-600 hover:text-black underline flex items-center gap-1 cursor-pointer"
               >
-                🔄 Actualizar análisis
+                Actualizar análisis
               </button>
               <button
                 type="button"

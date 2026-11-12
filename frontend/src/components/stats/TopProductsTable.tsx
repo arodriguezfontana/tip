@@ -1,3 +1,4 @@
+import { useMemo } from 'react';
 import { formatCurrency } from '@/utils/currency';
 import type { useStats } from '@/hooks/useStats';
 
@@ -6,70 +7,62 @@ interface TopProductsTableProps {
   topProducts: ReturnType<typeof useStats>['topProducts'];
 }
 
-/** Productos más vendidos con su rentabilidad y margen. */
+/** 3 más vendidos (con ganancias), 3 más rentables y 3 promos más vendidas en 3 columnas. */
 export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
+  // 1. Top 3 más vendidos
+  const displayProducts = topProducts.slice(0, 3);
+
+  // 2. Top 3 más rentables (ordenados por margen % y ganancia)
+  const topRentables = useMemo(() => {
+    if (!kpis?.top_products) return [];
+    return [...kpis.top_products]
+      .sort((a, b) => b.margin_pct - a.margin_pct || b.gross_profit - a.gross_profit)
+      .slice(0, 3);
+  }, [kpis?.top_products]);
+
+  // 3. Top 3 promociones más vendidas
+  const topPromos = (kpis?.top_promotions ?? []).slice(0, 3);
+
   return (
-    <>
-        <div className="bg-white rounded-2xl shadow-md p-6 flex flex-col lg:min-h-48 border border-gray-100">
-          <div className="shrink-0 flex items-center justify-between mb-4">
+    <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
+      {/* 1. Más Vendidos (Top 3) */}
+      <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
+        <div>
+          <div className="flex items-center justify-between mb-3">
             <div>
-              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Top Productos más Vendidos</p>
-              <p className="text-xs text-gray-400 mt-0.5">
-                {kpis?.top_products?.length
-                  ? 'Desglose comercial detallado con estimación de costos por receta y márgenes brutos.'
-                  : 'Unidades vendidas e ingresos brutos por producto.'}
-              </p>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Más vendidos</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 por unidades pedidas.</p>
             </div>
           </div>
 
-          {topProducts.length === 0 ? (
-            <p className="text-sm text-gray-500">No hay productos vendidos registrados en este período.</p>
+          {displayProducts.length === 0 ? (
+            <p className="text-xs text-gray-500 py-2">No hay productos vendidos registrados en este período.</p>
           ) : (
-            <div className="overflow-auto lg:min-h-0">
-              <table className="w-full text-sm">
-                <thead className="sticky top-0">
-                  <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                    <th className="px-4 py-2">Producto</th>
-                    <th className="px-4 py-2 text-right">Cantidad Vendida</th>
-                    <th className="px-4 py-2 text-right">Ingresos</th>
-                    {kpis?.top_products && kpis.top_products.length > 0 && (
-                      <>
-                        <th className="px-4 py-2 text-right">Costo Est.</th>
-                        <th className="px-4 py-2 text-right">Ganancia Bruta</th>
-                        <th className="px-4 py-2 text-right">Margen %</th>
-                      </>
-                    )}
+            <div className="overflow-x-auto">
+              <table className="w-full text-xs">
+                <thead>
+                  <tr className="bg-gray-50 text-left text-[11px] font-semibold uppercase tracking-wide text-gray-500">
+                    <th className="px-3 py-2 rounded-l-lg">Producto</th>
+                    <th className="px-3 py-2 text-right">Cantidad</th>
+                    <th className="px-3 py-2 text-right rounded-r-lg">
+                      {kpis?.top_products && kpis.top_products.length > 0 ? 'Ganancias' : 'Ingresos'}
+                    </th>
                   </tr>
                 </thead>
                 <tbody className="divide-y divide-gray-100">
-                  {topProducts.map((prod) => {
+                  {displayProducts.map((prod) => {
                     const kpiProd = kpis?.top_products?.find((p) => p.product_name === prod.product_name);
                     return (
-                      <tr key={prod.product_name} className="hover:bg-gray-50">
-                        <td className="px-4 py-3 font-medium text-gray-900">{prod.product_name}</td>
-                        <td className="px-4 py-3 text-right text-gray-600">{prod.total_quantity}</td>
-                        <td className="px-4 py-3 text-right font-medium text-gray-900">
-                          {formatCurrency(prod.total_revenue)}
+                      <tr key={prod.product_name} className="hover:bg-gray-50/70 transition-colors">
+                        <td className="px-3 py-2 font-medium text-gray-900">{prod.product_name}</td>
+                        <td className="px-3 py-2 text-right text-gray-600 font-semibold">{prod.total_quantity}</td>
+                        <td className="px-3 py-2 text-right font-medium text-gray-900">
+                          {kpiProd ? (
+                            <span className="font-semibold text-emerald-700">{formatCurrency(kpiProd.gross_profit)}</span>
+                          ) : (
+                            formatCurrency(prod.total_revenue)
+                          )}
                         </td>
-                        {kpis?.top_products && kpis.top_products.length > 0 && (
-                          <>
-                            <td className="px-4 py-3 text-right text-gray-500 text-xs">
-                              {kpiProd ? formatCurrency(kpiProd.estimated_cost) : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-right font-semibold text-emerald-700 text-xs">
-                              {kpiProd ? formatCurrency(kpiProd.gross_profit) : '—'}
-                            </td>
-                            <td className="px-4 py-3 text-right text-xs">
-                              {kpiProd ? (
-                                <span className="font-bold bg-emerald-50 text-emerald-800 px-2 py-0.5 rounded-full border border-emerald-200">
-                                  {kpiProd.margin_pct}%
-                                </span>
-                              ) : (
-                                '—'
-                              )}
-                            </td>
-                          </>
-                        )}
                       </tr>
                     );
                   })}
@@ -78,6 +71,85 @@ export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
             </div>
           )}
         </div>
-    </>
+      </div>
+
+      {/* 2. Más Rentables (Top 3) */}
+      <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Más rentables</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 con mayor margen y ganancia.</p>
+            </div>
+          </div>
+
+          {topRentables.length === 0 ? (
+            <p className="text-xs text-gray-500 py-2">No hay datos de rentabilidad en este período.</p>
+          ) : (
+            <div className="space-y-2">
+              {topRentables.map((p) => {
+                const marginBadge =
+                  p.margin_pct > 0
+                    ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
+                    : p.margin_pct < 0
+                    ? 'bg-red-50 text-red-800 border-red-200'
+                    : 'bg-gray-50 text-gray-800 border-gray-200';
+                return (
+                  <div
+                    key={p.product_name}
+                    className="flex items-center justify-between p-2 rounded-xl bg-gray-50/70 border border-gray-100 text-xs"
+                  >
+                    <div>
+                      <p className="font-medium text-gray-900">{p.product_name}</p>
+                      <p className="text-[11px] text-gray-500 mt-0.5">
+                        Ganancia: <strong className="text-emerald-700">{formatCurrency(p.gross_profit)}</strong> ({p.total_quantity} u.)
+                      </p>
+                    </div>
+                    <span className={`text-[11px] font-bold px-2 py-0.5 rounded-full border ${marginBadge}`}>
+                      {p.margin_pct}%
+                    </span>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
+      </div>
+
+      {/* 3. Promociones Más Vendidas (Top 3) */}
+      <div className="bg-white rounded-2xl shadow-md p-5 flex flex-col justify-between border border-gray-100">
+        <div>
+          <div className="flex items-center justify-between mb-3">
+            <div>
+              <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Promociones más vendidas</p>
+              <p className="text-[11px] text-gray-400 mt-0.5">Top 3 combos y promociones pedidas.</p>
+            </div>
+          </div>
+
+          {topPromos.length === 0 ? (
+            <p className="text-xs text-gray-500 py-2">Sin promociones vendidas en este período.</p>
+          ) : (
+            <div className="space-y-2">
+              {topPromos.map((promo) => (
+                <div
+                  key={promo.promotion_name}
+                  className="flex items-center justify-between p-2 rounded-xl bg-gray-50/70 border border-gray-100 text-xs"
+                >
+                  <div>
+                    <p className="font-medium text-gray-900">{promo.promotion_name}</p>
+                    <p className="text-[11px] text-gray-500 mt-0.5">
+                      Recaudado: <strong className="text-gray-900">{formatCurrency(promo.total_revenue)}</strong>
+                    </p>
+                  </div>
+                  <span className="text-[11px] font-bold px-2 py-0.5 rounded-full bg-violet-100 text-violet-800">
+                    {promo.total_quantity} pedidos
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
   );
 }

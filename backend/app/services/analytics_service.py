@@ -14,6 +14,7 @@ from sqlalchemy.orm import Session
 from app.core.config import settings
 from app.db.session import transaction
 from app.models.business_goal import BusinessGoal
+from app.models.menu import Product
 from app.repositories import analytics_repository, ingredient_repository, order_repository
 from app.services import stats_service
 from app.services.gemini_models import modelos
@@ -63,6 +64,13 @@ class TopProductKpi:
 
 
 @dataclass(frozen=True)
+class TopPromotionKpi:
+    promotion_name: str
+    total_quantity: int
+    total_revenue: float
+
+
+@dataclass(frozen=True)
 class DashboardKpis:
     revenue: GrowthMetric
     orders_count: GrowthMetric
@@ -76,6 +84,7 @@ class DashboardKpis:
     best_selling_day: dict[str, Any]
     status_distribution: dict[str, int]
     top_products: list[TopProductKpi]
+    top_promotions: list[TopPromotionKpi] = field(default_factory=list)
 
 
 @dataclass(frozen=True)
@@ -96,8 +105,9 @@ class StrategicInsight:
     highlights: list[str]
     operational_weaknesses: list[str]
     recommendations: list[str]
-    operational_metrics: OperationalMetrics
-    generated_at: datetime
+    spending_recommendations: list[str] = field(default_factory=list)
+    operational_metrics: OperationalMetrics | None = None
+    generated_at: datetime = field(default_factory=lambda: datetime.now(timezone.utc))
     # Puntos de atención y alertas: hoy son las mismas debilidades operativas.
     warnings: list[str] = field(default_factory=list)
 
@@ -145,11 +155,19 @@ def _growth_pct_and_trend(current: float, previous: float) -> tuple[float, str]:
 
 
 def calculate_growth_metric(
-    current: float, previous: float, higher_is_better: bool = True
+    current: float, previous: float, higher_is_better: bool = True, has_previous_period: bool = True
 ) -> GrowthMetric:
     """Calcula la variación porcentual entre el período actual y el anterior con dirección y semántica de negocio."""
     curr = float(current)
     prev = float(previous)
+    if not has_previous_period:
+        return GrowthMetric(
+            current=round(curr, 2),
+            previous=0.0,
+            growth_pct=None,
+            trend="neutral",
+            is_positive=True,
+        )
     growth_pct, trend = _growth_pct_and_trend(curr, prev)
     favorable_trend = "up" if higher_is_better else "down"
     return GrowthMetric(
@@ -337,9 +355,11 @@ def _best_selling_day_summary(
 ) -> dict:
     current_day = stats_service.best_selling_day(db, date_from, date_to)
     previous_day = stats_service.best_selling_day(db, *previous_period) if previous_period else None
+    has_prev = previous_period is not None and previous_day is not None and previous_day.total_revenue is not None
     growth = calculate_growth_metric(
         current_day.total_revenue or 0.0,
         (previous_day.total_revenue or 0.0) if previous_day else 0.0,
+        has_previous_period=has_prev,
     )
     return {
         "day": current_day.weekday,
@@ -356,8 +376,9 @@ def _top_product_kpi(
     qty = int(quantity)
     rev = float(revenue)
     estimated_cost = round(qty * unit_cost, 2)
-    gross_profit = round(max(0.0, rev - estimated_cost), 2)
+    gross_profit = round(rev - estimated_cost, 2)
     previous_qty, previous_rev = previous or (0, 0.0)
+    has_prev = previous is not None
     return TopProductKpi(
         product_name=name,
         total_quantity=qty,
@@ -365,8 +386,8 @@ def _top_product_kpi(
         estimated_cost=estimated_cost,
         gross_profit=gross_profit,
         margin_pct=round((gross_profit / rev * 100.0), 1) if rev > 0 else 0.0,
-        quantity_growth_pct=calculate_growth_metric(qty, previous_qty).growth_pct if previous else None,
-        revenue_growth_pct=calculate_growth_metric(rev, previous_rev).growth_pct if previous else None,
+        quantity_growth_pct=calculate_growth_metric(qty, previous_qty, has_previous_period=has_prev).growth_pct if has_prev else None,
+        revenue_growth_pct=calculate_growth_metric(rev, previous_rev, has_previous_period=has_prev).growth_pct if has_prev else None,
     )
 
 
@@ -392,12 +413,31 @@ def _top_products_kpis(
     ]
 
 
+def _top_promotions_kpis(
+    db: Session, date_from: datetime | None, date_to: datetime | None, limit: int = 3
+) -> list[TopPromotionKpi]:
+    """Las promociones más vendidas del período."""
+    try:
+        promos = order_repository.best_selling_promotions(db, date_from, date_to, limit=limit)
+        return [
+            TopPromotionKpi(
+                promotion_name=str(name),
+                total_quantity=int(qty),
+                total_revenue=float(rev),
+            )
+            for name, qty, rev in promos
+        ]
+    except Exception:
+        return []
+
+
 def calculate_dashboard_kpis(
     db: Session, date_from: datetime | None = None, date_to: datetime | None = None
 ) -> DashboardKpis:
     """Calcula todas las métricas de rendimiento comercial, rentabilidad bruta, tendencias y metas."""
     prev_from, prev_to = get_previous_period(date_from, date_to)
     previous_period = (prev_from, prev_to) if prev_from and prev_to else None
+    has_prev = previous_period is not None
 
     # Facturación y conteo de pedidos
     curr_rev, curr_billable_count = analytics_repository.billable_revenue_and_count(db, date_from, date_to)
@@ -414,32 +454,37 @@ def calculate_dashboard_kpis(
     # Costos y rentabilidad bruta (COGS y margen)
     curr_cogs = calculate_cogs(db, date_from, date_to)
     prev_cogs = calculate_cogs(db, *previous_period) if previous_period else 0.0
-    curr_gross_profit = max(0.0, curr_rev - curr_cogs)
-    prev_gross_profit = max(0.0, prev_rev - prev_cogs)
+    curr_gross_profit = round(curr_rev - curr_cogs, 2)
+    prev_gross_profit = round(prev_rev - prev_cogs, 2)
 
-    # Metas y progreso
+    # Metas y progreso (basado en pedidos finalizados reales)
     goal_progress = _with_goal_progress(
-        _determine_target_goal(db, date_from, date_to), curr_rev, completed_orders or curr_billable_count
+        _determine_target_goal(db, date_from, date_to), curr_rev, completed_orders
     )
 
     return DashboardKpis(
-        revenue=calculate_growth_metric(curr_rev, prev_rev),
-        orders_count=calculate_growth_metric(curr_billable_count, prev_billable_count),
+        revenue=calculate_growth_metric(curr_rev, prev_rev, has_previous_period=has_prev),
+        orders_count=calculate_growth_metric(curr_billable_count, prev_billable_count, has_previous_period=has_prev),
         completed_orders_count=completed_orders,
         average_ticket=calculate_growth_metric(
             _average_ticket(curr_rev, completed_orders, curr_billable_count),
             _average_ticket(prev_rev, prev_completed_orders, prev_billable_count),
+            has_previous_period=has_prev,
         ),
         cancellation_rate=calculate_growth_metric(
-            _cancellation_rate(status_dist), _cancellation_rate(prev_status_dist), higher_is_better=False
+            _cancellation_rate(status_dist),
+            _cancellation_rate(prev_status_dist),
+            higher_is_better=False,
+            has_previous_period=has_prev,
         ),
-        cogs=calculate_growth_metric(curr_cogs, prev_cogs, higher_is_better=False),
-        gross_profit=calculate_growth_metric(curr_gross_profit, prev_gross_profit),
+        cogs=calculate_growth_metric(curr_cogs, prev_cogs, higher_is_better=False, has_previous_period=has_prev),
+        gross_profit=calculate_growth_metric(curr_gross_profit, prev_gross_profit, has_previous_period=has_prev),
         gross_margin_pct=round((curr_gross_profit / curr_rev * 100.0), 1) if curr_rev > 0 else 0.0,
         goal=goal_progress,
         best_selling_day=_best_selling_day_summary(db, date_from, date_to, previous_period),
         status_distribution=status_dist,
         top_products=_top_products_kpis(db, date_from, date_to, previous_period),
+        top_promotions=_top_promotions_kpis(db, date_from, date_to, limit=3),
     )
 
 
@@ -451,6 +496,7 @@ class _InsightText(NamedTuple):
     highlights: list[str]
     weaknesses: list[str]
     recommendations: list[str]
+    spending_recommendations: list[str] = []
 
 
 def _estimated_operational_data(kpi_data: DashboardKpis) -> dict:
@@ -487,7 +533,12 @@ def _operational_context(op_data: dict) -> OperationalMetrics:
 
 
 def _build_insight_prompt(
-    kpi_data: DashboardKpis, op_context: OperationalMetrics, peak_hour_pct: float
+    kpi_data: DashboardKpis,
+    op_context: OperationalMetrics,
+    peak_hour_pct: float,
+    db: Session | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> str:
     if op_context.peak_hour is None:
         peak_str = "Sin concentración significativa"
@@ -498,46 +549,73 @@ def _build_insight_prompt(
     )
     goal_progress = kpi_data.goal.revenue_progress_pct if kpi_data.goal else "N/A"
 
+    # Consumo de ingredientes en el período
+    ing_lines = []
+    if db is not None:
+        try:
+            consumed = consumption_totals(db, date_from, date_to, ingredient_id=None)
+            for _, name, unit, qty in sorted(consumed, key=lambda c: c[3], reverse=True)[:6]:
+                ing_lines.append(f"- {name}: {qty:.1f} {unit}")
+        except Exception:
+            pass
+    ing_text = "\n".join(ing_lines) if ing_lines else "- Sin detalle de ingredientes registrado en el período"
+
     return f"""
-Sos un consultor experto en optimización gastronómica y Business Intelligence para el dueño de un restaurante.
-Analizá los siguientes datos y estadísticas reales del negocio correspondientes al período seleccionado:
+Sos un consultor experto en optimización gastronómica para el dueño de un restaurante.
+Tu objetivo es darle un análisis claro, directo y muy fácil de entender, sin tecnicismos ni palabras complejas.
+Basate ÚNICAMENTE en estos datos reales del negocio:
 
-MÉTRICAS DE VENTAS Y FINANZAS:
-- Facturación total: ${kpi_data.revenue.current:,.2f} (Variación vs período anterior: {kpi_data.revenue.growth_pct or 0}%)
-- Total pedidos ingresados: {kpi_data.orders_count.current} (Completados: {kpi_data.completed_orders_count})
+DATOS REALES:
+- Facturación: ${kpi_data.revenue.current:,.2f} (Variación vs anterior: {kpi_data.revenue.growth_pct or 0}%)
+- Pedidos totales: {kpi_data.orders_count.current} (Finalizados: {kpi_data.completed_orders_count})
 - Ticket promedio: ${kpi_data.average_ticket.current:,.2f}
-- Tasa de rechazo/cancelación: {kpi_data.cancellation_rate.current}%
-- Margen bruto promedio: {kpi_data.gross_margin_pct}% (Ganancia bruta: ${kpi_data.gross_profit.current:,.2f}, Costo insumos COGS: ${kpi_data.cogs.current:,.2f})
-- Cumplimiento de meta: {goal_progress}% de la meta de facturación.
-- Platos estrella: {star_products or 'Sin ventas'}
+- Cancelaciones: {kpi_data.cancellation_rate.current}%
+- Margen de ganancia: {kpi_data.gross_margin_pct}% (Ganancia: ${kpi_data.gross_profit.current:,.2f}, Costo insumos: ${kpi_data.cogs.current:,.2f})
+- Meta cumplida: {goal_progress}%
+- Platos más vendidos: {star_products or 'Sin ventas'}
+- Demora promedio: {op_context.avg_wait_minutes} min (máxima: {op_context.max_wait_minutes} min, demora >= 45 min: {op_context.high_wait_count})
+- Hora pico: {peak_str}
+- Modalidad: {op_context.delivery_pct}% delivery / {op_context.pickup_pct}% retiro
 
-TIEMPOS DE ESPERA Y OPERACIONES:
-- Demora promedio estimada: {op_context.avg_wait_minutes} minutos
-- Demora máxima registrada: {op_context.max_wait_minutes} minutos
-- Pedidos con demoras altas (>= 45 min): {op_context.high_wait_count} ({op_context.high_wait_pct}%)
-
-FLUJO DE PEDIDOS Y CANALES:
-- Hora pico de mayor demanda: {peak_str}
-- Modalidad de entrega: {op_context.delivery_pct}% Domicilio, {op_context.pickup_pct}% Retiro en local
+CONSUMO PRINCIPAL DE INGREDIENTES:
+{ing_text}
 
 REGLAS ESTRICTAS DE RESPUESTA:
-1. CITÁ ÚNICAMENTE valores reales provistos en este contexto. NO inventes cifras, clientes ni datos no suministrados.
-2. Identificá debilidades operativas concretas (ej: cuellos de botella en la hora pico, demoras excesivas, productos con bajo margen o cancelaciones).
-3. Cada recomendación DEBE ser una acción concreta e inmediata que el local pueda ejecutar (ej: reorganizar puestos en cocina para la hora pico, ajustar el stock de ingredientes específicos, limitar pedidos si la demora supera 45 min). Prohibidos los consejos genéricos.
+1. Lenguaje simple, conciso y fácil de entender. Directo al grano.
+2. Cita cifras reales, nunca inventes datos.
+3. Generá EXACTAMENTE:
+   - "summary": Diagnóstico general conciso de 1 párrafo breve citando métricas clave.
+   - "operational_weaknesses": Lista de EXACTAMENTE 3 debilidades o aspectos a mejorar.
+   - "highlights": Lista de EXACTAMENTE 3 oportunidades o puntos fuertes del período.
+   - "recommendations": Lista de EXACTAMENTE 6 recomendaciones generales de acción prácticas para mejorar ventas, ganar más margen, perder menos dinero por cancelaciones y optimizar tiempos (sin numeración ordinal en el texto).
+   - "spending_recommendations": Lista de EXACTAMENTE 4 a 5 recomendaciones de compras y control de gastos (sin numeración ordinal) indicando qué insumos comprar más por alta rotación, qué comprar menos o regular por baja rotación y cómo optimizar costos de materias primas.
 
 Respondé en español ÚNICAMENTE con un objeto JSON válido con este esquema exacto:
 {{
-  "summary": "Diagnóstico general conciso de 1 párrafo citando las métricas clave del negocio.",
+  "summary": "Diagnóstico breve y claro del período.",
   "operational_weaknesses": [
-    "Debilidad operativa 1 explicando el problema con cifras reales del período",
-    "Debilidad operativa 2..."
-  ],
-  "recommendations": [
-    "Acción concreta 1 que el dueño puede implementar inmediatamente",
-    "Acción concreta 2..."
+    "Debilidad 1",
+    "Debilidad 2",
+    "Debilidad 3"
   ],
   "highlights": [
-    "Punto fuerte u oportunidad 1 con cifras reales"
+    "Oportunidad 1",
+    "Oportunidad 2",
+    "Oportunidad 3"
+  ],
+  "recommendations": [
+    "Recomendación 1",
+    "Recomendación 2",
+    "Recomendación 3",
+    "Recomendación 4",
+    "Recomendación 5",
+    "Recomendación 6"
+  ],
+  "spending_recommendations": [
+    "Recomendación compras 1",
+    "Recomendación compras 2",
+    "Recomendación compras 3",
+    "Recomendación compras 4"
   ]
 }}
 """
@@ -558,21 +636,28 @@ def _insight_from_model_answer(answer: str) -> _InsightText:
         summary=parsed.get("summary") or "Rendimiento comercial y operativo evaluado correctamente.",
         highlights=parsed.get("highlights") or [],
         weaknesses=parsed.get("operational_weaknesses")
+        or parsed.get("weaknesses")
         or ["No se detectaron cuellos de botella críticos en las comandas del período."],
         recommendations=parsed.get("recommendations")
         or ["Revisar márgenes y tiempos en las horas de mayor demanda."],
+        spending_recommendations=parsed.get("spending_recommendations") or [],
     )
 
 
 def _insight_from_gemini(
-    kpi_data: DashboardKpis, op_context: OperationalMetrics, peak_hour_pct: float
+    kpi_data: DashboardKpis,
+    op_context: OperationalMetrics,
+    peak_hour_pct: float,
+    db: Session | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> _InsightText | None:
     """El análisis que redacta Gemini, o None si no se pudo obtener."""
     try:
         client = genai.Client(api_key=settings.GOOGLE_API_KEY)
         response = client.models.generate_content(
             model=modelos.principal,
-            contents=_build_insight_prompt(kpi_data, op_context, peak_hour_pct),
+            contents=_build_insight_prompt(kpi_data, op_context, peak_hour_pct, db, date_from, date_to),
         )
         return _insight_from_model_answer(response.text or "")
     except Exception as e:
@@ -583,94 +668,237 @@ def _insight_from_gemini(
 def _rule_based_weaknesses(
     kpi_data: DashboardKpis, op_context: OperationalMetrics, peak_hour_pct: float
 ) -> list[str]:
-    margin = kpi_data.gross_margin_pct
     cancellation = kpi_data.cancellation_rate.current
-    is_slow = op_context.avg_wait_minutes >= 35.0 or op_context.max_wait_minutes >= 50
-    has_peak_bottleneck = op_context.peak_hour is not None and peak_hour_pct >= 30.0
-    detected = [
-        (
-            is_slow,
-            f"Demoras de preparación elevadas: promedio de {op_context.avg_wait_minutes} min (máximo de {op_context.max_wait_minutes} min), con {op_context.high_wait_count} pedidos superando los 45 minutos.",
-        ),
-        (
-            has_peak_bottleneck,
-            f"Cuello de botella en hora pico: el {peak_hour_pct}% de las comandas se concentró a las {op_context.peak_hour or 0:02d}:00 hs ({op_context.peak_hour_orders} pedidos), saturando la línea de despacho.",
-        ),
-        (
-            cancellation > 5.0,
-            f"Tasa de rechazo o cancelación del {cancellation}%, superando el umbral operativo tolerable del 5%.",
-        ),
-        (
-            margin < 45.0 and kpi_data.revenue.current > 0,
-            f"Margen bruto comprimido ({margin}%): alto impacto del costo de insumos (${kpi_data.cogs.current:,.2f}) sobre el precio de venta.",
-        ),
-    ]
-    return [text for applies, text in detected if applies] or [
-        f"Operación fluida con demora promedio de {op_context.avg_wait_minutes} min y tasa de rechazo controlada en {cancellation}%."
-    ]
+    margin = kpi_data.gross_margin_pct
+
+    # Punto 1: Tiempos de cocina y demoras
+    if op_context.avg_wait_minutes >= 35.0 or op_context.high_wait_count > 0:
+        p1 = f"Demoras elevadas en cocina: promedio de {op_context.avg_wait_minutes} min (máx {op_context.max_wait_minutes} min), con {op_context.high_wait_count} pedidos superando los 45 min."
+    else:
+        p1 = f"Tiempos de entrega: demora promedio de {op_context.avg_wait_minutes} min, con margen de mejora en momentos de mayor volumen."
+
+    # Punto 2: Hora pico o concentración de pedidos
+    if op_context.peak_hour is not None and peak_hour_pct >= 25.0:
+        p2 = f"Cuello de botella en hora pico: el {peak_hour_pct}% de los pedidos se concentró a las {op_context.peak_hour or 0:02d}:00 hs ({op_context.peak_hour_orders} pedidos)."
+    else:
+        p2 = "Demanda irregular: baja cantidad de pedidos fuera del horario central."
+
+    # Punto 3: Cancelaciones o margen de ganancia
+    if cancellation > 3.0:
+        p3 = f"Tasa de cancelación del {cancellation}%, lo que representa pérdida de ventas directas."
+    elif margin < 50.0 and kpi_data.revenue.current > 0:
+        p3 = f"Margen bruto ajustado ({margin}%): alto impacto del costo de insumos (${kpi_data.cogs.current:,.2f}) sobre las ventas."
+    else:
+        p3 = "Control de costos: margen estable pero susceptible a aumentos de precios en ingredientes principales."
+
+    return [p1, p2, p3]
+
+
+def _rule_based_highlights(
+    kpi_data: DashboardKpis, op_context: OperationalMetrics
+) -> list[str]:
+    top_product = kpi_data.top_products[0] if kpi_data.top_products else None
+
+    # Punto 1: Plato estrella
+    if top_product:
+        p1 = f"Plato más vendido: '{top_product.product_name}' lidera con {top_product.total_quantity} unidades y un margen del {top_product.margin_pct}%."
+    else:
+        p1 = "Potencial para promocionar un plato insignia e impulsar la demanda."
+
+    # Punto 2: Ticket promedio
+    p2 = f"Ticket promedio situado en ${kpi_data.average_ticket.current:,.2f}: oportunidad para sumar bebidas y postres como adicionales."
+
+    # Punto 3: Modalidad de entrega
+    if op_context.delivery_pct >= 50.0:
+        p3 = f"Canal de delivery consolidado ({op_context.delivery_pct}% de ventas): potencial para sumar promociones exclusivas de retiro."
+    else:
+        p3 = f"Buena afluencia de retiro en local ({op_context.pickup_pct}%): posibilidad de incentivar pedidos por delivery en días tranquilos."
+
+    return [p1, p2, p3]
 
 
 def _rule_based_recommendations(
     kpi_data: DashboardKpis, op_context: OperationalMetrics, peak_hour_pct: float
 ) -> list[str]:
-    ticket = kpi_data.average_ticket.current
     top_product = kpi_data.top_products[0] if kpi_data.top_products else None
+    peak_h = op_context.peak_hour or 20
     goal = kpi_data.goal
-    suggested = [
-        (
-            op_context.peak_hour is not None and peak_hour_pct >= 25.0,
-            f"Reforzar personal de cocina y pre-elaborar bases (mise en place) antes de las {op_context.peak_hour or 0:02d}:00 hs para agilizar el pico de {op_context.peak_hour_orders} pedidos.",
-        ),
-        (
-            op_context.avg_wait_minutes >= 35.0,
-            "Ajustar los tiempos de demora estimada informados al cliente y limitar pedidos entrantes cuando la cocina supere los 40 minutos de demora.",
-        ),
-        (
-            top_product is not None,
-            f"Crear combos de '{top_product.product_name if top_product else ''}' combinados con bebidas de alto margen para incrementar el ticket promedio actual de ${ticket:,.2f}.",
-        ),
-        (
-            kpi_data.cancellation_rate.current > 5.0,
-            "Contactar a clientes con pedidos cancelados para evaluar si el motivo fue demora excesiva o falta de stock de ingredientes.",
-        ),
-        (
-            goal is not None and goal.revenue_progress_pct < 80,
-            f"Impulsar promociones por canal digital: faltan ${goal.revenue_remaining if goal else 0:,.2f} para alcanzar la meta comercial del período.",
-        ),
-    ]
-    return [text for applies, text in suggested if applies] or [
-        "Mantener el ritmo de despacho actual y monitorear los costos de los insumos principales."
-    ]
+    top_name = top_product.product_name if top_product else "plato principal"
+
+    # 1. Perder menos dinero / Cancelaciones
+    if kpi_data.cancellation_rate.current > 0:
+        r1 = f"Reducir cancelaciones (actualmente en {kpi_data.cancellation_rate.current}%): informar al cliente el tiempo de espera real y el estado del pedido para evitar ventas caídas."
+    else:
+        r1 = "Cuidar cancelaciones: mantener la confirmación ágil y la comunicación clara de tiempos de espera para sostener la tasa en 0%."
+
+    # 2. Ganar más / Ticket promedio con adicionales
+    r2 = f"Aumentar el ticket promedio (hoy en ${kpi_data.average_ticket.current:,.2f}): ofrecer bebidas, postres y adicionales en cada pedido antes de cerrar la venta."
+
+    # 3. Ventas de platos estrella y combos
+    r3 = f"Promocionar combos de '{top_name}' con bebidas para aumentar el ticket promedio e impulsar el volumen de facturación."
+
+    # 4. Agilizar tiempos en horas pico / Eficiencia operativa
+    r4 = f"Preparar la mise en place antes de las {peak_h:02d}:00 hs para agilizar el despacho de cocina durante la hora pico de mayor demanda."
+
+    # 5. Ganar más margen / Rentabilidad
+    r5 = f"Proteger el margen bruto (actualmente en {kpi_data.gross_margin_pct}%): revisar acuerdos de precios con proveedores de insumos de mayor costo para proteger el margen de ganancia."
+
+    # 6. Alcanzar metas / Ventas en días de menor demanda
+    if goal and goal.revenue_remaining > 0:
+        r6 = f"Lanzar promociones en días de menor demanda para alcanzar los ${goal.revenue_remaining:,.2f} restantes de la meta."
+    else:
+        r6 = "Fidelizar a los clientes más recurrentes con promociones en días tranquilos para sostener el ritmo de crecimiento de ventas."
+
+    return [r1, r2, r3, r4, r5, r6]
+
+
+def _rule_based_spending_recommendations(
+    kpi_data: DashboardKpis,
+    db: Session | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
+) -> list[str]:
+    recs: list[str] = []
+    consumed: list[tuple[int, str, str, float]] = []
+
+    if db is not None:
+        try:
+            consumed = consumption_totals(db, date_from, date_to, ingredient_id=None)
+        except Exception:
+            consumed = []
+
+    top_p = kpi_data.top_products[0] if kpi_data.top_products else None
+
+    # 1. Comprar más / asegurar stock del insumo de mayor consumo o vinculado al plato estrella
+    if consumed:
+        by_qty = sorted(consumed, key=lambda c: c[3], reverse=True)
+        top_ing = by_qty[0]
+        if top_p:
+            recs.append(
+                f"Comprar con mayor volumen: '{top_ing[1]}' es el insumo más consumido ({top_ing[3]:.1f} {top_ing[2]}), impulsado por '{top_p.product_name}'. Conviene negociar compra mayorista o bulto cerrado para abaratar costos."
+            )
+        else:
+            recs.append(
+                f"Comprar con mayor volumen: asegurar stock de '{top_ing[1]}' ({top_ing[3]:.1f} {top_ing[2]} consumidos en el período) para evitar quiebres de stock en cocina."
+            )
+    elif top_p:
+        recs.append(
+            f"Comprar con mayor volumen: asegurar stock prioritario de los insumos principales de '{top_p.product_name}' ({top_p.total_quantity} unidades vendidas) y negociar descuento por cantidad con proveedores."
+        )
+    else:
+        recs.append(
+            "Planificar compras por volumen: negociar bultos cerrados de materias primas no perecederas con proveedores habituales para abaratar el costo unitario."
+        )
+
+    # 2. Comprar menos / regular stock de insumos con baja rotación o platos menos vendidos
+    if db is not None:
+        try:
+            sold_names = {p.product_name for p in kpi_data.top_products}
+            all_active = db.query(Product).filter(Product.is_active == True).all()
+            unsold = [p for p in all_active if p.name not in sold_names]
+
+            low_turnover_ing: str | None = None
+            low_turnover_prod: str | None = None
+            if unsold:
+                for p in unsold:
+                    for item in p.recipe_items:
+                        if item.ingredient and item.ingredient.name:
+                            low_turnover_ing = item.ingredient.name
+                            low_turnover_prod = p.name
+                            break
+                    if low_turnover_ing:
+                        break
+
+            if low_turnover_ing and low_turnover_prod:
+                recs.append(
+                    f"Comprar menos / regular stock: '{low_turnover_ing}' se utiliza en platos con baja rotación en este período ('{low_turnover_prod}'). Comprá solo lo justo para evitar vencimientos o dinero inmovilizado."
+                )
+            elif consumed and len(consumed) > 1:
+                least_ing = sorted(consumed, key=lambda c: c[3])[0]
+                recs.append(
+                    f"Comprar menos / ajustar compras: '{least_ing[1]}' registró muy bajo consumo ({least_ing[3]:.1f} {least_ing[2]}). Reducí el pedido semanal para no sobrecargar el inventario."
+                )
+            else:
+                recs.append(
+                    "Comprar menos en baja rotación: limitar la compra de insumos específicos para platos secundarios o poco pedidos para prevenir mermas."
+                )
+        except Exception:
+            recs.append(
+                "Comprar menos en baja rotación: reducir las órdenes de compra de ingredientes exclusivos para platos de baja demanda y evitar desperdicios."
+            )
+    else:
+        recs.append(
+            "Comprar menos en baja rotación: regular la adquisición de insumos perecederos para platos secundarios o de menor venta para no inmovilizar capital."
+        )
+
+    # 3. Control de gastos en insumo de mayor costo monetario
+    if consumed and db is not None:
+        try:
+            ing_ids = {c[0] for c in consumed}
+            ingredients = ingredient_repository.get_many(db, ing_ids)
+            spent_list = [
+                (c[1], c[3] * float(ingredients[c[0]].cost or 0), c[2])
+                for c in consumed
+                if c[0] in ingredients and (ingredients[c[0]].cost or 0) > 0
+            ]
+            if spent_list:
+                highest_spent = sorted(spent_list, key=lambda s: s[1], reverse=True)[0]
+                if highest_spent[1] > 0:
+                    recs.append(
+                        f"Control de gastos en '{highest_spent[0]}': representó el mayor gasto en materias primas (${highest_spent[1]:,.2f}). Compará listas de precios entre distintos proveedores para proteger el margen."
+                    )
+        except Exception:
+            pass
+
+    if len(recs) < 3 and kpi_data.cogs.current > 0:
+        recs.append(
+            f"Control de costos de mercadería: el gasto total de insumos fue de ${kpi_data.cogs.current:,.2f}. Pedí listas de precios a proveedores alternativos para reducir el costo por lote."
+        )
+
+    # 4. Platos con margen bajo o ajuste de recetas
+    low_margin_p = min(kpi_data.top_products, key=lambda p: p.margin_pct) if kpi_data.top_products else None
+    if low_margin_p and low_margin_p.margin_pct < 60:
+        recs.append(
+            f"Revisar receta o precio de '{low_margin_p.product_name}' (margen del {low_margin_p.margin_pct}%): el costo de sus insumos (${low_margin_p.estimated_cost:,.2f}) absorbe una parte alta del precio. Ajustá porciones o su valor de venta."
+        )
+    else:
+        recs.append(
+            "Estandarizar porciones en cocina: controlar el pesaje de ingredientes clave al despachar platos para evitar desvíos entre el costo teórico y el gasto real."
+        )
+
+    # 5. Mermas y rotación de depósito
+    recs.append(
+        "Control de mermas y almacenamiento: aplicar sistema FIFO (primero en entrar, primero en salir) en heladera y depósito para insumos frescos de alta rotación."
+    )
+
+    return recs[:5]
 
 
 def _rule_based_insight(
-    kpi_data: DashboardKpis, op_context: OperationalMetrics, peak_hour_pct: float
+    kpi_data: DashboardKpis,
+    op_context: OperationalMetrics,
+    peak_hour_pct: float,
+    db: Session | None = None,
+    date_from: datetime | None = None,
+    date_to: datetime | None = None,
 ) -> _InsightText:
     """Análisis determinístico basado en reglas de negocio, para cuando no hay IA disponible o falla."""
     growth = kpi_data.revenue.growth_pct
-    margin = kpi_data.gross_margin_pct
     variation = (
-        f"Las ventas reflejan una variación de {growth}% vs. el período anterior."
+        f"Las ventas tuvieron una variación de {growth}% vs. el período anterior."
         if growth is not None
         else "El volumen de ventas se mantiene estable."
     )
     summary = (
-        f"El negocio registró una facturación de ${kpi_data.revenue.current:,.2f} ({kpi_data.completed_orders_count} pedidos finalizados) con un margen bruto promedio del {margin}%. "
+        f"Facturación de ${kpi_data.revenue.current:,.2f} con {kpi_data.completed_orders_count} pedidos finalizados y un margen del {kpi_data.gross_margin_pct}%. "
         + variation
     )
-    highlights = [
-        f"Ticket promedio situado en ${kpi_data.average_ticket.current:,.2f} por pedido finalizado.",
-        f"Margen bruto comercial del {margin}% sobre los productos vendidos.",
-        *[
-            f"Plato más vendido: '{top.product_name}' con {top.total_quantity} unidades."
-            for top in kpi_data.top_products[:1]
-        ],
-    ]
     return _InsightText(
         summary,
-        highlights,
+        _rule_based_highlights(kpi_data, op_context),
         _rule_based_weaknesses(kpi_data, op_context, peak_hour_pct),
         _rule_based_recommendations(kpi_data, op_context, peak_hour_pct),
+        _rule_based_spending_recommendations(kpi_data, db, date_from, date_to),
     )
 
 
@@ -684,6 +912,23 @@ def generate_strategic_insight(
 
     tiempos de espera, flujo de pedidos y metas del negocio.
     """
+    has_activity = (
+        kpi_data.revenue.current > 0
+        or kpi_data.completed_orders_count > 0
+        or kpi_data.orders_count.current > 0
+    )
+    if not has_activity:
+        return StrategicInsight(
+            summary="No hay datos suficientes en este período para elaborar un análisis con IA. Seleccioná un rango de fechas con ventas registradas.",
+            highlights=[],
+            warnings=[],
+            operational_weaknesses=[],
+            recommendations=[],
+            spending_recommendations=[],
+            operational_metrics=None,
+            generated_at=datetime.now(timezone.utc),
+        )
+
     op_data = (
         get_operational_flow_and_wait_times(db, date_from, date_to)
         if db is not None
@@ -694,8 +939,12 @@ def generate_strategic_insight(
 
     # La IA solo se usa si hay credenciales configuradas y responde algo interpretable.
     insight = (
-        _insight_from_gemini(kpi_data, op_context, peak_hour_pct) if settings.GOOGLE_API_KEY else None
-    ) or _rule_based_insight(kpi_data, op_context, peak_hour_pct)
+        _insight_from_gemini(kpi_data, op_context, peak_hour_pct, db, date_from, date_to) if settings.GOOGLE_API_KEY else None
+    ) or _rule_based_insight(kpi_data, op_context, peak_hour_pct, db, date_from, date_to)
+
+    spending_recs = insight.spending_recommendations or _rule_based_spending_recommendations(
+        kpi_data, db, date_from, date_to
+    )
 
     return StrategicInsight(
         summary=insight.summary,
@@ -703,6 +952,7 @@ def generate_strategic_insight(
         warnings=insight.weaknesses,
         operational_weaknesses=insight.weaknesses,
         recommendations=insight.recommendations,
+        spending_recommendations=spending_recs,
         operational_metrics=op_context,
         generated_at=datetime.now(timezone.utc),
     )

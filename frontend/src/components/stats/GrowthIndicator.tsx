@@ -1,23 +1,29 @@
 import type { GrowthMetric } from '@/types/stats';
 
 export function GrowthIndicator({ metric, label }: { metric?: GrowthMetric; label?: string }) {
-  if (!metric || metric.growth_pct === null) return null;
-  const isUp = metric.trend === 'up';
-  const isDown = metric.trend === 'down';
-  const isPositive = metric.is_positive;
+  if (!metric || metric.growth_pct === null || metric.growth_pct === undefined) return null;
 
-  const colorClass = isUp
-    ? isPositive
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-      : 'text-red-700 bg-red-50 border-red-200'
-    : isDown
-    ? isPositive
-      ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
-      : 'text-red-700 bg-red-50 border-red-200'
-    : 'text-gray-600 bg-gray-50 border-gray-200';
+  const value = Number(metric.growth_pct);
+  if (isNaN(value)) return null;
 
-  const symbol = isUp ? '↑' : isDown ? '↓' : '•';
-  const prefix = isUp ? '+' : '';
+  // Si metric.is_positive está definido, indica si la variación es favorable para el negocio.
+  // Para métricas como cancelaciones o costos, que bajen (value < 0) es bueno (is_positive: true, en VERDE).
+  // Si suben las cancelaciones (value > 0), es malo (is_positive: false, en ROJO).
+  const isNeutral = value === 0 || metric.trend === 'neutral';
+  const isFavorable = metric.is_positive !== undefined ? metric.is_positive : value > 0;
+
+  const colorClass = isNeutral
+    ? 'text-gray-600 bg-gray-50 border-gray-200'
+    : isFavorable
+    ? 'text-emerald-700 bg-emerald-50 border-emerald-200'
+    : 'text-red-700 bg-red-50 border-red-200';
+
+  const symbol = value > 0 ? '↑' : value < 0 ? '↓' : '•';
+  const formattedValue = value > 0
+    ? `+${value}%`
+    : value < 0
+    ? `-${Math.abs(value)}%`
+    : '0%';
 
   return (
     <span
@@ -25,10 +31,7 @@ export function GrowthIndicator({ metric, label }: { metric?: GrowthMetric; labe
       title={`Período previo: ${metric.previous}`}
     >
       <span>{symbol}</span>
-      <span>
-        {prefix}
-        {metric.growth_pct}%
-      </span>
+      <span>{formattedValue}</span>
       {label && <span className="font-normal opacity-85">{label}</span>}
     </span>
   );
