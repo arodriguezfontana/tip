@@ -29,8 +29,7 @@ def upgrade() -> None:
         sa.CheckConstraint("rating IS NOT NULL OR (comment IS NOT NULL AND comment != '')", name='ck_driver_reviews_has_content'),
         sa.ForeignKeyConstraint(['delivery_driver_id'], ['delivery_drivers.id'], ondelete='CASCADE'),
         sa.ForeignKeyConstraint(['order_id'], ['orders.id'], ondelete='CASCADE'),
-        sa.PrimaryKeyConstraint('id'),
-        sa.UniqueConstraint('order_id')
+        sa.PrimaryKeyConstraint('id')
     )
     op.create_index(op.f('ix_driver_reviews_id'), 'driver_reviews', ['id'], unique=False)
     op.create_index(op.f('ix_driver_reviews_delivery_driver_id'), 'driver_reviews', ['delivery_driver_id'], unique=False)
