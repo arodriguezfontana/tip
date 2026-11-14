@@ -77,7 +77,7 @@ export function CategoriasView() {
       </div>
 
       {withoutCategory.length > 0 && (
-        <div className="shrink-0 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 px-4 py-3 text-sm">
+        <div className="shrink-0 rounded-xl bg-gray-50 text-gray-700 border border-gray-200 px-4 py-3 text-sm">
           Sin categoría (no se muestran en el menú):{' '}
           <strong>{withoutCategory.map((product) => product.name).join(', ')}</strong>. Agregalos a una categoría para
           volver a ofrecerlos.
@@ -96,13 +96,13 @@ export function CategoriasView() {
         ) : categories.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Todavía no creaste categorías.</p>
         ) : (
-          <div className="overflow-auto lg:min-h-0">
-            <table className="w-full text-left text-sm table-fixed min-w-[600px]">
+          <div className="overflow-hidden lg:min-h-0">
+            <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <tr>
-                  <th className="w-64 py-3 px-5">Categoría</th>
+                  <th className="w-1/4 sm:w-56 py-3 px-5">Categoría</th>
                   <th className="py-3 px-5">Productos</th>
-                  <th className="w-32 py-3 px-5 text-right">Acciones</th>
+                  <th className="w-28 py-3 px-5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

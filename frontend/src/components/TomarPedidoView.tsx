@@ -132,7 +132,7 @@ export function TomarPedidoView() {
       )}
 
       {isShiftOpen === false && (
-        <div role="alert" className="rounded-xl bg-amber-50 border border-amber-200 text-amber-900 px-4 py-3 text-sm flex items-center justify-between">
+        <div role="alert" className="rounded-xl bg-gray-50 border border-gray-200 text-gray-800 px-4 py-3 text-sm flex items-center justify-between">
           <div className="flex items-center gap-2">
             <span className="font-bold">Caja cerrada:</span>
             <span>Debés realizar la apertura de la caja antes de poder registrar o facturar pedidos presenciales.</span>

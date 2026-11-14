@@ -16,7 +16,7 @@ function PendingBalanceRows({ detail }: { detail: OrderDetail }) {
     <>
       <Row label="Pagado">{formatCurrency(detail.paid_amount ?? 0)}</Row>
       <Row label="Falta cobrar">
-        <span className="font-bold text-amber-800">
+        <span className="font-bold text-sky-800">
           {formatCurrency(detail.pending_amount ?? 0)}
           {balanceMethod}
         </span>
@@ -37,7 +37,7 @@ function PaymentStatus({ detail, markingPaid, onMarkAsPaid }: PaymentStatusProps
       <div className="flex items-center justify-end gap-2">
         <span
           className={`text-xs font-bold px-2 py-0.5 rounded-full ${
-            detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-amber-100 text-amber-800'
+            detail.is_paid ? 'bg-green-100 text-green-800' : 'bg-sky-100 text-sky-800'
           }`}
         >
           {paymentStatusLabel(detail)}

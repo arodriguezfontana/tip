@@ -197,7 +197,7 @@ export function ProductosView() {
       </div>
 
       {withoutCategory.length > 0 && (
-        <div className="shrink-0 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 px-4 py-3 text-sm">
+        <div className="shrink-0 rounded-xl bg-gray-50 text-gray-700 border border-gray-200 px-4 py-3 text-sm">
           {withoutCategory.length === 1 ? 'Este producto no tiene' : 'Estos productos no tienen'} categoría y no se
           muestran en el menú: <strong>{withoutCategory.map((product) => product.name).join(', ')}</strong>. Editalos
           para asignarles una.
