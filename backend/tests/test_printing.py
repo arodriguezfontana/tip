@@ -150,6 +150,53 @@ def test_con_una_sola_impresora_se_usa_sin_importar_el_sector(client, products, 
     assert len(fake_printer.received) == 1
 
 
+def test_con_una_sola_impresora_sale_una_copia_por_cada_sector_del_pedido(
+    client, db_session, products, open_shift, fake_printer
+):
+    products["coca"].sector = "barra"
+    products["muzza"].sector = "pizzeria"
+    db_session.commit()
+    _configure(client, ("cocina", fake_printer.port))
+    items = [
+        {"product_id": products["muzza"].id, "quantity": 1},
+        {"product_id": products["coca"].id, "quantity": 1},
+    ]
+
+    response = client.post(COUNTER_URL, json=_counter_payload(items))
+
+    assert response.json()["print_error"] is None
+    _wait_for(fake_printer, 2)
+    assert len(fake_printer.received) == 2
+    assert fake_printer.received[0] == fake_printer.received[1]
+    assert b"SECTOR" not in fake_printer.received[0]
+
+
+def test_impresora_que_atiende_varios_sectores_recibe_una_copia_de_cada_uno(
+    client, db_session, products, open_shift, fake_printer
+):
+    other = FakePrinter()
+    try:
+        products["coca"].sector = "barra"
+        products["muzza"].sector = "pizzeria"
+        db_session.commit()
+        _configure(
+            client, ("pizzeria", fake_printer.port), ("barra", fake_printer.port), ("cocina", other.port)
+        )
+        items = [
+            {"product_id": products["muzza"].id, "quantity": 1},
+            {"product_id": products["coca"].id, "quantity": 1},
+        ]
+
+        response = client.post(COUNTER_URL, json=_counter_payload(items))
+
+        assert response.json()["print_error"] is None
+        _wait_for(fake_printer, 2)
+        assert len(fake_printer.received) == 2
+        assert other.received == []
+    finally:
+        other.close()
+
+
 def test_pedido_de_varios_sectores_imprime_en_cada_impresora(client, db_session, products, open_shift):
     cocina, barra = FakePrinter(), FakePrinter()
     try:
@@ -168,8 +215,6 @@ def test_pedido_de_varios_sectores_imprime_en_cada_impresora(client, db_session,
         _wait_for(cocina)
         _wait_for(barra)
         assert len(cocina.received) == 1 and len(barra.received) == 1
-        assert b"SECTOR: COCINA" in cocina.received[0]
-        assert b"SECTOR: BARRA" in barra.received[0]
     finally:
         cocina.close()
         barra.close()

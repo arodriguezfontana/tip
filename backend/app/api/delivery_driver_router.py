@@ -1,3 +1,5 @@
+from datetime import datetime
+
 from fastapi import APIRouter, Depends, Query, status
 from sqlalchemy.orm import Session
 
@@ -8,8 +10,9 @@ from app.schemas.delivery_driver_schemas import (
     DeliveryDriverCreate,
     DeliveryDriverResponse,
     DeliveryDriverUpdate,
+    DriverActivityResponse,
 )
-from app.services import delivery_driver_service
+from app.services import delivery_driver_service, driver_activity_service
 
 router = APIRouter()
 
@@ -49,6 +52,21 @@ def get_delivery_driver(
 ) -> DeliveryDriver:
     """Obtiene el detalle de un repartidor."""
     return delivery_driver_service.get_delivery_driver(db, driver_id)
+
+
+@router.get(
+    "/{driver_id}/trips", response_model=DriverActivityResponse, dependencies=[Depends(get_current_admin)]
+)
+def get_driver_activity(
+    driver_id: int,
+    date_from: datetime | None = Query(None, description="Salida mínima (inclusive) de los viajes."),
+    date_to: datetime | None = Query(None, description="Salida máxima (inclusive) de los viajes."),
+    current_shift: bool = Query(False, description="Solo los viajes del turno de caja abierto."),
+    db: Session = Depends(get_db),
+) -> DriverActivityResponse:
+    """Historial de viajes del repartidor con sus pedidos, y el resumen del período (efectivo a rendir incluido)."""
+    activity = driver_activity_service.get_driver_activity(db, driver_id, date_from, date_to, current_shift)
+    return DriverActivityResponse.model_validate(activity)
 
 
 @router.put("/{driver_id}", response_model=DeliveryDriverResponse, dependencies=[Depends(get_current_admin)])
