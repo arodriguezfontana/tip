@@ -7,8 +7,9 @@ import {
   updateDeliveryDriver,
 } from '@/services/deliveryDriverService';
 import { DeliveryDriverModal } from '@/components/DeliveryDriverModal';
+import { DriverReviewsModal } from '@/components/repartidores/DriverReviewsModal';
 import { Toast } from '@/components/ui/Toast';
-import { SearchIcon, PlusIcon, DeliveryIcon, EditIcon } from '@/components/Icons';
+import { SearchIcon, PlusIcon, DeliveryIcon, EditIcon, StarIcon } from '@/components/Icons';
 import type { DeliveryDriver, DeliveryDriverPayload } from '@/types/deliveryDriver';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
@@ -23,6 +24,7 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingDriver, setEditingDriver] = useState<DeliveryDriver | null>(null);
+  const [reviewsDriver, setReviewsDriver] = useState<DeliveryDriver | null>(null);
   const toast = useToast();
 
   const fetchDriversCallback = useCallback(
@@ -138,9 +140,10 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   <th className="py-3 px-4">Nombre</th>
-                  <th className="w-40 py-3 px-4">Teléfono</th>
-                  <th className="w-32 py-3 px-4">Estado</th>
-                  <th className="w-56 py-3 px-4 text-right whitespace-nowrap">Acciones</th>
+                  <th className="w-36 py-3 px-4">Teléfono</th>
+                  <th className="w-28 py-3 px-4">Puntaje</th>
+                  <th className="w-28 py-3 px-4">Estado</th>
+                  <th className="w-72 py-3 px-4 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
@@ -148,6 +151,17 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
                   <tr key={driver.id} className="hover:bg-gray-50/50 transition">
                     <td className="py-3.5 px-4 font-semibold text-gray-900">{driver.name}</td>
                     <td className="py-3.5 px-4 text-gray-600">{driver.phone}</td>
+                    <td className="py-3.5 px-4">
+                      {driver.rating_average !== null && driver.rating_average !== undefined ? (
+                        <span className="inline-flex items-center gap-1 font-semibold text-gray-900">
+                          <StarIcon className="w-4 h-4 text-amber-400 fill-amber-400 shrink-0" />
+                          <span>{driver.rating_average.toFixed(1)}</span>
+                          <span className="text-xs text-gray-600 font-normal">({driver.ratings_count ?? 0})</span>
+                        </span>
+                      ) : (
+                        <span className="text-gray-600 text-xs">-</span>
+                      )}
+                    </td>
                     <td className="py-3.5 px-4">
                       {driver.is_active ? (
                         <span className="inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full text-xs font-semibold bg-green-50 text-green-700 border border-green-200">
@@ -163,6 +177,13 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
                     </td>
                     <td className="py-3.5 px-4 text-right whitespace-nowrap">
                       <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
+                        <button
+                          type="button"
+                          onClick={() => setReviewsDriver(driver)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition whitespace-nowrap shrink-0"
+                        >
+                          <span>Ver reseñas</span>
+                        </button>
                         {onViewActivity && (
                           <button
                             type="button"
@@ -195,6 +216,13 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
           driver={editingDriver}
           onClose={handleCloseModal}
           onSave={handleSaveDriver}
+        />
+      )}
+
+      {reviewsDriver && (
+        <DriverReviewsModal
+          driver={reviewsDriver}
+          onClose={() => setReviewsDriver(null)}
         />
       )}
     </div>

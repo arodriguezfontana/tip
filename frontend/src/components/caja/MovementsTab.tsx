@@ -231,7 +231,7 @@ function MovementsList({
       .filter((o) => o.is_billable)
       .map((o) => {
         const methodKey = (o.payment_method || '').toLowerCase();
-        let category = 'Venta';
+        let category: string;
         if (methodKey.includes('transferencia')) {
           category = 'Venta (Transferencia)';
         } else if (methodKey.includes('tarjeta')) {

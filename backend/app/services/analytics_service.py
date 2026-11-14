@@ -796,7 +796,7 @@ def _rule_based_spending_recommendations(
     if db is not None:
         try:
             sold_names = {p.product_name for p in kpi_data.top_products}
-            all_active = db.query(Product).filter(Product.is_active == True).all()
+            all_active = db.query(Product).filter(Product.is_active).all()
             unsold = [p for p in all_active if p.name not in sold_names]
 
             low_turnover_ing: str | None = None

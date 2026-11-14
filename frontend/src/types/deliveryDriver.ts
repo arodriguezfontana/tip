@@ -7,6 +7,9 @@ export interface DeliveryDriver {
   is_active: boolean;
   created_at: string;
   updated_at: string;
+  rating_average?: number | null;
+  ratings_count?: number;
+  reviews_count?: number;
 }
 
 export interface DeliveryDriverPayload {
@@ -42,4 +45,21 @@ export interface DriverActivity {
   delivered_orders_count: number;
   cash_to_hand_over: number;
   trips: DriverTrip[];
+}
+
+export interface DriverReview {
+  id: number;
+  rating: number | null;
+  comment: string | null;
+  created_at: string;
+}
+
+export interface DriverReviewsDetail {
+  driver_id: number;
+  driver_name: string;
+  delivered_orders_count: number;
+  rating_average: number | null;
+  ratings_count: number;
+  reviews_count: number;
+  reviews: DriverReview[];
 }

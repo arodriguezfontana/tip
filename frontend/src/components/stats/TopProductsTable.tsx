@@ -13,12 +13,13 @@ export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
   const displayProducts = topProducts.slice(0, 5);
 
   // 2. Top 5 más rentables (ordenados por margen % y ganancia)
+  const topProductsList = kpis?.top_products;
   const topRentables = useMemo(() => {
-    if (!kpis?.top_products) return [];
-    return [...kpis.top_products]
+    if (!topProductsList) return [];
+    return [...topProductsList]
       .sort((a, b) => b.margin_pct - a.margin_pct || b.gross_profit - a.gross_profit)
       .slice(0, 5);
-  }, [kpis?.top_products]);
+  }, [topProductsList]);
 
   // 3. Top 5 promociones más vendidas
   const topPromos = (kpis?.top_promotions ?? []).slice(0, 5);
@@ -38,12 +39,13 @@ export function TopProductsTable({ kpis, topProducts }: TopProductsTableProps) {
           {displayProducts.length === 0 ? (
             <p className="text-xs text-gray-500 py-2">No hay productos vendidos registrados en este período.</p>
           ) : (
-            <div className="space-y-2">
+            <div className="space-y-2" role="table">
               {displayProducts.map((prod) => {
                 const kpiProd = kpis?.top_products?.find((p) => p.product_name === prod.product_name);
                 return (
                   <div
                     key={prod.product_name}
+                    role="row"
                     className="flex items-center justify-between p-2 rounded-xl bg-gray-50/70 border border-gray-100 text-xs"
                   >
                     <div>

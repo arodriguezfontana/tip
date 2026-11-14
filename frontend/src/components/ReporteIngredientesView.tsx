@@ -69,10 +69,11 @@ export function ReporteIngredientesView() {
     'No se pudo cargar el reporte de ingredientes.'
   );
 
+  const reportItems = report?.items;
   const totalSpending = useMemo(() => {
-    if (!report?.items) return 0;
-    return report.items.reduce((sum, item) => sum + (item.total_cost ?? (item.total_quantity * (item.unit_cost ?? 0))), 0);
-  }, [report?.items]);
+    if (!reportItems) return 0;
+    return reportItems.reduce((sum, item) => sum + (item.total_cost ?? (item.total_quantity * (item.unit_cost ?? 0))), 0);
+  }, [reportItems]);
 
   return (
     <div className="flex flex-col gap-4 lg:h-full pb-28">

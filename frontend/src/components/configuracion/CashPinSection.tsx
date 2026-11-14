@@ -19,7 +19,7 @@ export function CashPinSection({ cashPinEnabled, setCashPinEnabled, cashPin, set
     setAdminPinModalOpen(true);
   };
 
-  const handleAdminSuccess = (_token: string) => {
+  const handleAdminSuccess = () => {
     setAdminPinModalOpen(false);
     if (pendingChecked !== null) {
       setCashPinEnabled(pendingChecked);

@@ -1,5 +1,5 @@
 import { api } from './api';
-import type { DeliveryDriver, DeliveryDriverPayload, DriverActivity } from '@/types/deliveryDriver';
+import type { DeliveryDriver, DeliveryDriverPayload, DriverActivity, DriverReviewsDetail } from '@/types/deliveryDriver';
 
 /** Obtiene la lista de repartidores, opcionalmente filtrada por activos o término de búsqueda. */
 export async function fetchDeliveryDrivers(params?: {
@@ -42,5 +42,11 @@ export async function fetchDriverActivity(driverId: number, params: DriverActivi
       current_shift: params.currentShift || undefined,
     },
   });
+  return data;
+}
+
+/** Obtiene las reseñas anónimas y métricas de calificación de un repartidor. */
+export async function fetchDriverReviews(driverId: number): Promise<DriverReviewsDetail> {
+  const { data } = await api.get<DriverReviewsDetail>(`/delivery-drivers/${driverId}/reviews`);
   return data;
 }

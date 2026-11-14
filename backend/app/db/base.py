@@ -10,6 +10,7 @@ from app.models.business_hours import BusinessHours
 from app.models.cash_shift import CashMovement, CashShift
 from app.models.client import Client
 from app.models.delivery_driver import DeliveryDriver, DeliveryTrip
+from app.models.driver_review import DriverReview
 from app.models.menu import Category, Ingredient, Product, ProductAllowedExtra, ProductImage, ProductIngredient
 from app.models.menu_image import MenuImage
 from app.models.order import Order, OrderItem, OrderStatusEvent
@@ -29,6 +30,7 @@ __all__ = [
     "Client",
     "DeliveryDriver",
     "DeliveryTrip",
+    "DriverReview",
     "Ingredient",
     "MenuImage",
     "PinLockout",
