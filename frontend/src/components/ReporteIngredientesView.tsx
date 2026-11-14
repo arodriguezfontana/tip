@@ -176,7 +176,7 @@ export function ReporteIngredientesView() {
                   <span className="text-[11px] text-violet-700 font-semibold">Insumos y rotación de platos</span>
                 </div>
                 <p className="text-[11px] text-violet-800/80 mb-2.5">
-                  Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:
+                  El análisis con IA se genera solo a pedido para el período seleccionado.
                 </p>
                 <ul className="space-y-2.5 text-xs text-violet-950 font-medium">
                   {gastos.map((g, i) => (
@@ -194,7 +194,7 @@ export function ReporteIngredientesView() {
             <div>
               <p className="text-xs font-semibold text-gray-700">Consejos inteligentes para optimizar compras y materias primas</p>
               <p className="text-[11px] text-gray-400 mt-0.5">
-                Generá 6 sugerencias prácticas basadas en recetas, costos unitarios, gasto total y demanda de platos.
+                Elegí el rango de fechas arriba y presioná el botón para obtenersugerencias prácticas basadas en recetas, costos unitarios, gasto total y demanda de platos.
               </p>
             </div>
             <button

@@ -364,7 +364,7 @@ describe('ReporteIngredientesView', () => {
     await screen.findByRole('cell', { name: 'Muzzarella' });
 
     expect(screen.getByRole('heading', { name: 'Consejos de IA' })).toBeInTheDocument();
-    await user.click(screen.getByRole('button', { name: 'Analizar compras con IA' }));
+    await user.click(screen.getByRole('button', { name: 'Consejos con IA' }));
 
     expect(await screen.findByText('Compras y Control de Gastos')).toBeInTheDocument();
     expect(screen.getByText('Insumos y rotación de platos')).toBeInTheDocument();
