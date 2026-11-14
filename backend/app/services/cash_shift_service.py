@@ -74,20 +74,49 @@ def _optional_float(amount) -> float | None:
 
 def calculate_shift_summary(shift: CashShift) -> ShiftSummary:
     initial = to_money(shift.initial_amount)
-    manual_income = sum((to_money(m.amount) for m in shift.movements if m.type == "ingreso"), Decimal(0))
+
+    # Movimientos manuales que representan ventas digitales (transferencias o tarjetas)
+    digital_transfer_movements = sum(
+        (
+            to_money(m.amount)
+            for m in shift.movements
+            if m.type == "ingreso" and m.category.strip().lower() in ("transferencia", "transferencias")
+        ),
+        Decimal(0),
+    )
+    digital_card_movements = sum(
+        (
+            to_money(m.amount)
+            for m in shift.movements
+            if m.type == "ingreso" and m.category.strip().lower() in ("tarjeta", "tarjetas")
+        ),
+        Decimal(0),
+    )
+
+    # Ingresos manuales en efectivo físico (excluye las transferencias y tarjetas digitales)
+    manual_income = sum(
+        (
+            to_money(m.amount)
+            for m in shift.movements
+            if m.type == "ingreso" and m.category.strip().lower() not in ("transferencia", "transferencias", "tarjeta", "tarjetas")
+        ),
+        Decimal(0),
+    )
     manual_expense = sum((to_money(m.amount) for m in shift.movements if m.type == "egreso"), Decimal(0))
 
     billable_orders = [o for o in shift.orders if o.is_billable]
     sales = _sales_by_bucket(billable_orders)
-    total_digital_sales = sales["mercadopago"] + sales["transferencia"] + sales["tarjeta"] + sales["other_digital"]
+    transferencia_sales = sales["transferencia"] + digital_transfer_movements
+    tarjeta_sales = sales["tarjeta"] + digital_card_movements
+    total_digital_sales = sales["mercadopago"] + transferencia_sales + tarjeta_sales + sales["other_digital"]
     expected_cash = initial + sales["cash"] + manual_income - manual_expense
 
     return ShiftSummary(
         initial_amount=float(initial),
         cash_sales=float(sales["cash"]),
         mercadopago_sales=float(sales["mercadopago"]),
-        transferencia_sales=float(sales["transferencia"]),
-        tarjeta_sales=float(sales["tarjeta"]),
+        transferencia_sales=float(transferencia_sales),
+        tarjeta_sales=float(tarjeta_sales),
         other_digital_sales=float(sales["other_digital"]),
         total_digital_sales=float(total_digital_sales),
         total_sales=float(sales["cash"] + total_digital_sales),

@@ -42,11 +42,19 @@ function VariantModifications({ variants }: { variants: SectorRowItem['variants'
 
 function SectorRow({ item }: { item: SectorRowItem }) {
   return (
-    <tr className={`transition ${item.added_later ? 'bg-amber-50' : 'hover:bg-gray-50/50'}`}>
+    <tr
+      style={item.added_later ? { backgroundColor: 'var(--primary-light, #f4f4f5)' } : undefined}
+      className={`transition ${item.added_later ? '' : 'hover:bg-gray-50/50'}`}
+    >
       <td className="py-2 px-3 align-top font-semibold text-gray-800">
         <div className="text-sm font-bold">{item.total_quantity}</div>
         {item.has_promo_units && (
-          <div className="text-[10px] text-amber-700 font-semibold whitespace-nowrap">({item.promo_quantity} en promo)</div>
+          <div
+            className="text-[10px] font-semibold whitespace-nowrap"
+            style={{ color: 'var(--primary-text, #18181b)' }}
+          >
+            ({item.promo_quantity} en promo)
+          </div>
         )}
       </td>
       <td className="py-2 pr-2 text-gray-900 font-medium">
@@ -61,11 +69,16 @@ function SectorRow({ item }: { item: SectorRowItem }) {
           <div>
             <span>{formatCurrency(item.normal_subtotal)}</span>
             {item.has_promo_units && (
-              <div className="text-[10px] text-amber-800 font-normal italic">No incluye precios de promo</div>
+              <div className="text-[10px] text-gray-500 font-normal italic">No incluye precios de promo</div>
             )}
           </div>
         ) : (
-          <span className="text-amber-800 font-medium italic text-xs">Precio de promo</span>
+          <span
+            className="font-medium italic text-xs"
+            style={{ color: 'var(--primary-text, #18181b)' }}
+          >
+            Precio de promo
+          </span>
         )}
       </td>
     </tr>
@@ -106,7 +119,10 @@ export function SectorTable({ sector, items }: { sector: string; items: SectorRo
 
 function PromoRow({ promo }: { promo: WebOrderItem }) {
   return (
-    <tr className={`transition ${promo.added_later ? 'bg-amber-100/60' : 'hover:bg-amber-50/40'}`}>
+    <tr
+      style={promo.added_later ? { backgroundColor: 'var(--primary-light, #f4f4f5)' } : undefined}
+      className={`transition ${promo.added_later ? '' : 'hover:bg-gray-50/50'}`}
+    >
       <td className="py-2 px-3 align-top font-semibold text-gray-800">{promo.quantity}</td>
       <td className="py-2 pr-2 text-gray-900 font-medium">
         <div className="flex items-center gap-1.5 flex-wrap">
@@ -128,24 +144,34 @@ function PromoRow({ promo }: { promo: WebOrderItem }) {
 export function PromoTable({ promos }: { promos: WebOrderItem[] }) {
   const totalPromos = promos.reduce((total, promo) => total + promo.quantity, 0);
   return (
-    <div className="rounded-xl border-2 border-amber-200/90 overflow-hidden bg-gradient-to-b from-amber-50/40 to-white shadow-2xs">
-      <div className="flex items-center justify-between px-3 py-1.5 bg-amber-100/70 border-b border-amber-200 text-xs font-bold text-amber-900">
+    <div
+      style={{ borderColor: 'var(--primary-border, #e4e4e7)' }}
+      className="rounded-xl border-2 overflow-hidden bg-white shadow-2xs"
+    >
+      <div
+        style={{
+          backgroundColor: 'var(--primary-light, #f4f4f5)',
+          borderColor: 'var(--primary-border, #e4e4e7)',
+          color: 'var(--primary-text, #18181b)',
+        }}
+        className="flex items-center justify-between px-3 py-1.5 border-b text-xs font-bold"
+      >
         <span className="flex items-center gap-1.5">
           <span>Promos</span>
         </span>
-        <span className="text-[11px] font-medium text-amber-700">
+        <span className="text-[11px] font-medium opacity-80">
           {totalPromos} {totalPromos === 1 ? 'promo' : 'promos'}
         </span>
       </div>
       <table className="w-full text-xs">
         <thead>
-          <tr className="border-b border-amber-200/70 text-[10px] font-bold text-amber-900/70 uppercase tracking-wider bg-amber-50/50">
+          <tr className="border-b border-gray-200 text-[10px] font-bold text-gray-500 uppercase tracking-wider bg-gray-50">
             <th scope="col" className="py-1 px-3 text-left w-14">Cant.</th>
             <th scope="col" className="py-1 pr-2 text-left">Promoción</th>
             <th scope="col" className="py-1 pr-3 text-right w-36">Total</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-amber-100">
+        <tbody className="divide-y divide-gray-100">
           {promos.map((promo, index) => (
             <PromoRow key={promo.id ?? promo.promotion_id ?? index} promo={promo} />
           ))}

@@ -19,7 +19,6 @@ export function AiAdviceSection({
   const debilidades = (aiData?.operational_weaknesses ?? aiData?.warnings ?? []).slice(0, 3);
   const oportunidades = (aiData?.highlights ?? []).slice(0, 3);
   const recomendaciones = (aiData?.recommendations ?? []).slice(0, 6);
-  const gastosRecomendaciones = (aiData?.spending_recommendations ?? []).slice(0, 6);
 
   const hasMetrics = Boolean(
     aiData?.operational_metrics &&
@@ -32,8 +31,7 @@ export function AiAdviceSection({
   const hasContent =
     debilidades.length > 0 ||
     oportunidades.length > 0 ||
-    recomendaciones.length > 0 ||
-    gastosRecomendaciones.length > 0;
+    recomendaciones.length > 0;
 
   return (
     <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
@@ -178,29 +176,6 @@ export function AiAdviceSection({
                 ))}
               </ul>
             </div>
-
-            {/* Recomendaciones de compras y gastos de insumos */}
-            {gastosRecomendaciones.length > 0 && (
-              <div className="bg-violet-50/70 border border-violet-200/70 rounded-xl p-4">
-                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
-                  <span className="text-xs font-bold uppercase tracking-wide text-violet-900">
-                    Compras y Control de Gastos
-                  </span>
-                  <span className="text-[11px] text-violet-700 font-semibold">Insumos y rotación de platos</span>
-                </div>
-                <p className="text-[11px] text-violet-800/80 mb-2.5">
-                  Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:
-                </p>
-                <ul className="space-y-2 text-xs text-violet-950 font-medium">
-                  {gastosRecomendaciones.map((g, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="text-violet-600 font-bold shrink-0">•</span>
-                      <span>{g}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
           </div>
         )
       ) : (

@@ -117,8 +117,8 @@ export function ReporteIngredientesView() {
       <div className="shrink-0 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
           <div>
-            <h2 className="text-base font-bold text-gray-900">Compras y Control de Gastos</h2>
-            <p className="text-xs font-semibold text-violet-700 mt-0.5">Insumos y rotación de platos</p>
+            <h2 className="text-base font-bold text-gray-900">Consejos de IA</h2>
+            <p className="text-xs text-gray-500 mt-0.5">Análisis operativo para compras, rotación de platos e insumos.</p>
           </div>
           {(aiData || aiLoading) && (
             <button
@@ -169,7 +169,13 @@ export function ReporteIngredientesView() {
               </div>
             ) : (
               <div className="bg-violet-50/70 border border-violet-200/70 rounded-xl p-4">
-                <p className="text-xs font-semibold text-violet-900 mb-3">
+                <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-1 mb-1">
+                  <span className="text-xs font-bold uppercase tracking-wide text-violet-900">
+                    Compras y Control de Gastos
+                  </span>
+                  <span className="text-[11px] text-violet-700 font-semibold">Insumos y rotación de platos</span>
+                </div>
+                <p className="text-[11px] text-violet-800/80 mb-2.5">
                   Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:
                 </p>
                 <ul className="space-y-2.5 text-xs text-violet-950 font-medium">

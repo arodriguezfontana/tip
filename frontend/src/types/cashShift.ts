@@ -48,8 +48,20 @@ export interface CashShift {
   summary?: CashShiftSummaryBreakdown | null;
 }
 
+export interface ShiftOrder {
+  id: number;
+  shift_number?: number | null;
+  customer_name: string;
+  total_amount: number;
+  payment_method?: string | null;
+  status: string;
+  created_at: string;
+  is_billable: boolean;
+}
+
 export interface CashShiftDetail extends CashShift {
   movements: CashMovement[];
+  orders?: ShiftOrder[];
 }
 
 export interface CashShiftCurrentStatus {

@@ -49,7 +49,7 @@ export const PAYMENT_METHOD_LABEL: Record<PaymentMethod, string> = {
   mercadopago: 'MercadoPago',
 };
 
-/** Medios que se ofrecen al tomar un pedido (los demás quedan solo para mostrar pedidos viejos). */
+/** Medios que se ofrecen al tomar un pedido en el mostrador. */
 export const COUNTER_PAYMENT_METHODS: PaymentMethod[] = ['efectivo', 'mercadopago'];
 
 /** Medios con los que el cliente puede pagar un pedido hecho desde la web. */

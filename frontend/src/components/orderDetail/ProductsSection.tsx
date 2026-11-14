@@ -92,7 +92,18 @@ export function ProductsSection({ order, detail, acknowledging, onAcknowledge, .
           <ProductsContent order={order} detail={detail} acknowledging={acknowledging} onAcknowledge={onAcknowledge} />
         )
       )}
-      <div className={`rounded-xl px-4 py-3 text-sm ${order.notes ? 'bg-amber-50 text-amber-900' : 'bg-gray-50 text-gray-400'}`}>
+      <div
+        style={
+          order.notes
+            ? {
+                backgroundColor: 'var(--primary-light, #f4f4f5)',
+                borderColor: 'var(--primary-border, #e4e4e7)',
+                color: 'var(--primary-text, #18181b)',
+              }
+            : undefined
+        }
+        className={`rounded-xl px-4 py-3 text-sm border ${order.notes ? '' : 'bg-gray-50 text-gray-400 border-gray-200'}`}
+      >
         <span className="block text-[11px] font-bold uppercase tracking-wide mb-0.5">Aclaraciones del cliente</span>
         <span className="break-words">{order.notes || 'Sin observaciones'}</span>
       </div>

@@ -185,7 +185,7 @@ describe('ControlCajaView', () => {
     const cierreTab = screen.getByRole('button', { name: /Cierre de caja/i });
     await user.click(cierreTab);
 
-    expect(screen.getByText('Arqueo y cierre de caja')).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Cierre de caja' })).toBeInTheDocument();
 
     const realInput = screen.getByLabelText(/Monto real contado en efectivo/i);
     // Caja teórica es 13500. Si ponemos 14000, hay sobrante de 500

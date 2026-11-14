@@ -156,26 +156,6 @@ export function StrategicInsightModal({ isOpen, onClose, params }: StrategicInsi
               </div>
             </div>
 
-            {/* Recomendaciones de Compras y Gastos */}
-            {data.spending_recommendations && data.spending_recommendations.length > 0 && (
-              <div className="bg-violet-50/70 border border-violet-200/70 rounded-2xl p-4">
-                <span className="text-xs font-bold uppercase tracking-wide text-violet-900 flex items-center gap-1.5 mb-1">
-                  Compras y Control de Gastos
-                </span>
-                <p className="text-[11px] text-violet-800/80 mb-2.5">
-                  Sugerencias de abastecimiento según consumo de ingredientes y rotación de platos:
-                </p>
-                <ul className="space-y-2 text-xs text-violet-950 font-medium">
-                  {data.spending_recommendations.map((g, i) => (
-                    <li key={i} className="flex items-start gap-2">
-                      <span className="text-violet-600 font-bold shrink-0">•</span>
-                      <span>{g}</span>
-                    </li>
-                  ))}
-                </ul>
-              </div>
-            )}
-
             {/* Puntos Destacados */}
             {data.highlights.length > 0 && (
               <div className="bg-emerald-50/70 border border-emerald-200/70 rounded-2xl p-4">

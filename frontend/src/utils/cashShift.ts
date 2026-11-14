@@ -2,6 +2,8 @@ import type { DifferenceType } from '@/types/cashShift';
 
 /** Categorías sugeridas para un movimiento manual; "Otro" permite escribir una propia. */
 export const MOVEMENT_CATEGORIES = [
+  'Transferencia',
+  'Tarjeta',
   'Pago a proveedor',
   'Adelanto de sueldo',
   'Compra de insumos',

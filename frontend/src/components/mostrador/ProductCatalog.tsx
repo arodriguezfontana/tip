@@ -27,16 +27,25 @@ function QuantityBadge({ quantity }: { quantity: number }) {
 }
 
 function PromotionTile({ promo, quantity, onAdd }: { promo: Promotion; quantity: number; onAdd: () => void }) {
+  const isSelected = quantity > 0;
   return (
     <button
       type="button"
       onClick={onAdd}
       disabled={quantity >= MAX_QUANTITY_PER_ITEM}
       title={`Agregar promoción ${promo.name}`}
-      className={`${TILE_BASE_CLASS} ${
-        quantity > 0
-          ? 'border-amber-600 bg-amber-50/70 ring-1 ring-amber-500'
-          : 'border-amber-200/90 bg-gradient-to-b from-amber-50/40 to-white hover:border-amber-400 hover:shadow-md'
+      style={
+        isSelected
+          ? {
+              backgroundColor: 'var(--primary-light, #f4f4f5)',
+              borderColor: 'var(--primary-color, #18181b)',
+            }
+          : undefined
+      }
+      className={`${TILE_BASE_CLASS} border transition ${
+        isSelected
+          ? 'ring-1 ring-black/20'
+          : 'border-gray-200 bg-white hover:border-gray-400 hover:shadow-md'
       }`}
     >
       <QuantityBadge quantity={quantity} />
@@ -45,15 +54,24 @@ function PromotionTile({ promo, quantity, onAdd }: { promo: Promotion; quantity:
           src={productImageSrc(promo.image_url)}
           alt={promo.name}
           loading="lazy"
-          className="w-10 h-10 rounded-xl object-cover bg-amber-50 shrink-0 shadow-2xs"
+          className="w-10 h-10 rounded-xl object-cover bg-gray-100 shrink-0 shadow-2xs"
         />
       ) : (
-        <div className="w-10 h-10 rounded-xl bg-amber-100 flex items-center justify-center text-amber-800 font-bold text-lg shrink-0 shadow-2xs">
-          🎁
+        <div
+          className="w-10 h-10 rounded-xl flex items-center justify-center font-bold text-[11px] uppercase shrink-0 shadow-2xs border"
+          style={{
+            backgroundColor: 'var(--primary-light, #f4f4f5)',
+            borderColor: 'var(--primary-border, #e4e4e7)',
+            color: 'var(--primary-text, #18181b)',
+          }}
+        >
+          Promo
         </div>
       )}
       <span className="text-xs font-bold text-gray-900 leading-tight line-clamp-2">{promo.name}</span>
-      <span className="text-xs font-bold text-amber-900">{formatCurrency(promo.price)}</span>
+      <span className="text-xs font-bold" style={{ color: 'var(--primary-text, #18181b)' }}>
+        {formatCurrency(promo.price)}
+      </span>
     </button>
   );
 }
@@ -106,9 +124,17 @@ function CategoryChips({ categories, promotionsCount, active, onChange }: Catego
         <button
           type="button"
           onClick={() => onChange(PROMOTIONS_CATEGORY)}
-          style={promotionsActive ? PRIMARY_BACKGROUND : undefined}
-          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition ${
-            promotionsActive ? 'text-white shadow-md' : 'bg-amber-100 text-amber-900 hover:bg-amber-200 border border-amber-300'
+          style={
+            promotionsActive
+              ? PRIMARY_BACKGROUND
+              : {
+                  backgroundColor: 'var(--primary-light, #f4f4f5)',
+                  borderColor: 'var(--primary-border, #e4e4e7)',
+                  color: 'var(--primary-text, #18181b)',
+                }
+          }
+          className={`flex items-center gap-1.5 rounded-xl px-3 py-2 text-xs font-bold uppercase tracking-wide transition border ${
+            promotionsActive ? 'text-white shadow-md border-transparent' : 'hover:opacity-85'
           }`}
         >
           <span>Promociones</span>
@@ -231,7 +257,10 @@ export function ProductCatalog({
       <div className="space-y-5 max-h-[60vh] overflow-y-auto pr-1 lg:max-h-none lg:flex-1 lg:min-h-40">
         {visiblePromotions.length > 0 && (
           <div>
-            <h3 className="text-xs font-bold uppercase tracking-wider text-amber-800 mb-2">
+            <h3
+              className="text-xs font-bold uppercase tracking-wider mb-2"
+              style={{ color: 'var(--primary-text, #18181b)' }}
+            >
               Promociones
             </h3>
             <div className="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-2">

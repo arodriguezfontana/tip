@@ -183,10 +183,8 @@ describe('Dashboard de Métricas, Metas y Asistente IA', () => {
       expect(screen.getByText(/Reforzar personal de cocina y pre-elaborar bases antes de las 21:00 hs/i)).toBeInTheDocument();
       expect(screen.getByText(/Crear combos de pizzas y bebidas/i)).toBeInTheDocument();
 
-      // Verifica recomendaciones de compras y control de gastos
-      expect(screen.getByText('Compras y Control de Gastos')).toBeInTheDocument();
-      expect(screen.getByText(/Comprar con mayor volumen: 'Muzzarella'/i)).toBeInTheDocument();
-      expect(screen.getByText(/Comprar menos \/ regular stock: 'Rúcula'/i)).toBeInTheDocument();
+      // Compras y control de gastos se muestra exclusivamente en el reporte de ingredientes
+      expect(screen.queryByText('Compras y Control de Gastos')).not.toBeInTheDocument();
 
       // Verifica que el botón cambie a "Actualizar consejos"
       expect(screen.getByRole('button', { name: /Actualizar consejos/i })).toBeInTheDocument();

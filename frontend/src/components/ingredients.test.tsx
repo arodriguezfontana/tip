@@ -6,14 +6,17 @@ import { ProductosView } from '@/components/ProductosView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import * as catalogService from '@/services/catalogService';
 import * as ingredientService from '@/services/ingredientService';
+import * as statsService from '@/services/statsService';
 import type { AdminProduct } from '@/types/catalog';
 import type { Ingredient, IngredientConsumptionReport } from '@/types/ingredient';
 
 vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
+vi.mock('@/services/statsService');
 
 const service = vi.mocked(ingredientService);
 const catalog = vi.mocked(catalogService);
+const stats = vi.mocked(statsService);
 
 const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 
@@ -339,5 +342,35 @@ describe('ReporteIngredientesView', () => {
     render(<ReporteIngredientesView />);
 
     expect(await screen.findByText('No se pudo cargar el reporte de ingredientes.')).toBeInTheDocument();
+  });
+
+  it('muestra la sección de consejos de IA con compras y control de gastos para insumos', async () => {
+    stats.fetchStrategicInsight.mockResolvedValue({
+      generated_at: '2026-10-29T12:00:00Z',
+      summary: 'Buen rendimiento',
+      recommendations: [],
+      spending_recommendations: [
+        "Comprar con mayor volumen: 'Muzzarella'",
+        "Comprar menos / regular stock: 'Rúcula'",
+      ],
+      highlights: [],
+      warnings: [],
+      operational_weaknesses: [],
+      operational_metrics: null,
+    });
+
+    render(<ReporteIngredientesView />);
+    const user = userEvent.setup();
+    await screen.findByRole('cell', { name: 'Muzzarella' });
+
+    expect(screen.getByRole('heading', { name: 'Consejos de IA' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Analizar compras con IA' }));
+
+    expect(await screen.findByText('Compras y Control de Gastos')).toBeInTheDocument();
+    expect(screen.getByText('Insumos y rotación de platos')).toBeInTheDocument();
+    expect(
+      screen.getByText('Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Comprar con mayor volumen: 'Muzzarella'/)).toBeInTheDocument();
   });
 });
