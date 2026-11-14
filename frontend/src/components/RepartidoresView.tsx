@@ -13,9 +13,11 @@ import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
 interface RepartidoresViewProps {
   themeColor?: ThemeColor;
+  /** Si se informa, cada repartidor ofrece ir a ver su actividad. */
+  onViewActivity?: (driverId: number) => void;
 }
 
-export function RepartidoresView({ themeColor }: RepartidoresViewProps) {
+export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresViewProps) {
   const themeHex = themeColor ? getThemeOption(themeColor).hex : undefined;
   const [search, setSearch] = useState('');
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -65,7 +67,7 @@ export function RepartidoresView({ themeColor }: RepartidoresViewProps) {
   );
 
   return (
-    <div className="space-y-6 max-w-7xl mx-auto p-4 relative">
+    <div className="space-y-6 relative">
       <Toast message={toast.message} />
 
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
@@ -151,6 +153,15 @@ export function RepartidoresView({ themeColor }: RepartidoresViewProps) {
                       )}
                     </td>
                     <td className="py-3.5 px-4 text-right">
+                      {onViewActivity && (
+                        <button
+                          type="button"
+                          onClick={() => onViewActivity(driver.id)}
+                          className="mr-2 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
+                        >
+                          Ver viajes
+                        </button>
+                      )}
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(driver)}

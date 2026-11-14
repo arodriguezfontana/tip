@@ -1,4 +1,4 @@
-export type DateRangePreset = 'today' | 'week' | 'month' | 'all' | 'custom';
+export type DateRangePreset = 'shift' | 'today' | 'week' | 'month' | 'all' | 'custom';
 
 export interface DateRange {
   from?: Date;
@@ -6,6 +6,7 @@ export interface DateRange {
 }
 
 const PRESET_LABELS: Record<DateRangePreset, string> = {
+  shift: 'Turno actual',
   today: 'Hoy',
   week: 'Última semana',
   month: 'Último mes',
@@ -61,6 +62,7 @@ export function rangeForPreset(preset: DateRangePreset, custom?: DateRange): Dat
         from: custom?.from ? startOfDay(custom.from) : undefined,
         to: custom?.to ? endOfDay(custom.to) : undefined,
       };
+    case 'shift': // El turno lo define el servidor (la caja abierta): no es un rango de fechas.
     case 'all':
     default:
       return {};

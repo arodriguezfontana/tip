@@ -1,12 +1,14 @@
 import type { DateRangePreset } from '@/utils/dateRange';
 import { presetLabel } from '@/utils/dateRange';
 
-const PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
+const DEFAULT_PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
 
 interface DateRangeFilterProps {
   preset: DateRangePreset;
   customFrom: string;
   customTo: string;
+  /** Opciones que se ofrecen (por defecto, las de las estadísticas y el historial). */
+  presets?: DateRangePreset[];
   onPresetChange: (preset: DateRangePreset) => void;
   onCustomFromChange: (value: string) => void;
   onCustomToChange: (value: string) => void;
@@ -16,6 +18,7 @@ export function DateRangeFilter({
   preset,
   customFrom,
   customTo,
+  presets = DEFAULT_PRESETS,
   onPresetChange,
   onCustomFromChange,
   onCustomToChange,
@@ -26,7 +29,7 @@ export function DateRangeFilter({
         Rango de fechas
       </span>
       <div className="flex flex-wrap gap-2">
-        {PRESETS.map((p) => (
+        {presets.map((p) => (
           <button
             key={p}
             type="button"
