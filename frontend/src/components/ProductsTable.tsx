@@ -13,14 +13,14 @@ interface ProductsTableProps {
 export function ProductsTable({ products, onEdit, onEditRecipe }: ProductsTableProps) {
   return (
     <div className="overflow-auto lg:min-h-0">
-      <table className="w-full text-left text-sm">
+      <table className="w-full text-left text-sm table-fixed min-w-[700px]">
         <thead className="sticky top-0 z-10 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
           <tr>
             <th className="py-3 px-5">Producto</th>
-            <th className="py-3 px-5">Categoría</th>
-            <th className="py-3 px-5 text-right">Precio</th>
-            <th className="py-3 px-5">Receta (por unidad)</th>
-            <th className="py-3 px-5 text-right">Acciones</th>
+            <th className="w-40 py-3 px-5">Categoría</th>
+            <th className="w-28 py-3 px-5 text-right">Precio</th>
+            <th className="w-56 py-3 px-5">Receta (por unidad)</th>
+            <th className="w-40 py-3 px-5 text-right">Acciones</th>
           </tr>
         </thead>
         <tbody className="divide-y divide-gray-100">
@@ -40,6 +40,23 @@ export function ProductsTable({ products, onEdit, onEditRecipe }: ProductsTableP
                     </p>
                     {product.description && (
                       <p className="text-xs text-gray-500 line-clamp-2">{product.description}</p>
+                    )}
+                    {product.dietary_restrictions && product.dietary_restrictions.length > 0 && (
+                      <div className="flex flex-wrap gap-1 mt-1.5">
+                        {product.dietary_restrictions.map((restriction) => (
+                          <span
+                            key={restriction}
+                            style={{
+                              backgroundColor: 'var(--primary-light, #f4f4f5)',
+                              borderColor: 'var(--primary-border, #e4e4e7)',
+                              color: 'var(--primary-text, #18181b)',
+                            }}
+                            className="rounded-full border text-[10px] font-semibold px-2 py-0.5"
+                          >
+                            {restriction}
+                          </span>
+                        ))}
+                      </div>
                     )}
                   </div>
                 </div>

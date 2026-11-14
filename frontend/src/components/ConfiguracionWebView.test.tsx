@@ -144,11 +144,12 @@ describe('ConfiguracionWebView', () => {
     expect(await screen.findByText(/¡Configuración guardada exitosamente!/i)).toBeInTheDocument();
   });
 
-  it('no muestra el campo para agregar el alias de MercadoPago', async () => {
+  it('no muestra el campo para agregar el alias de MercadoPago ni en la vista previa', async () => {
     render(<ConfiguracionWebView />);
 
     await screen.findByDisplayValue('Pizzería Los Troncos');
     expect(screen.queryByLabelText(/Alias de MercadoPago/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Alias MercadoPago/i)).not.toBeInTheDocument();
   });
 
   it('permite subir un archivo de imagen como logo y luego quitarlo', async () => {

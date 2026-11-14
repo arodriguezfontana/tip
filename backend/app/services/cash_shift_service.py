@@ -80,7 +80,7 @@ def calculate_shift_summary(shift: CashShift) -> ShiftSummary:
         (
             to_money(m.amount)
             for m in shift.movements
-            if m.type == "ingreso" and m.category.strip().lower() in ("transferencia", "transferencias")
+            if m.type == "ingreso" and "transferencia" in m.category.strip().lower()
         ),
         Decimal(0),
     )
@@ -88,7 +88,7 @@ def calculate_shift_summary(shift: CashShift) -> ShiftSummary:
         (
             to_money(m.amount)
             for m in shift.movements
-            if m.type == "ingreso" and m.category.strip().lower() in ("tarjeta", "tarjetas")
+            if m.type == "ingreso" and "tarjeta" in m.category.strip().lower()
         ),
         Decimal(0),
     )
@@ -98,7 +98,8 @@ def calculate_shift_summary(shift: CashShift) -> ShiftSummary:
         (
             to_money(m.amount)
             for m in shift.movements
-            if m.type == "ingreso" and m.category.strip().lower() not in ("transferencia", "transferencias", "tarjeta", "tarjetas")
+            if m.type == "ingreso"
+            and not any(k in m.category.strip().lower() for k in ("transferencia", "tarjeta"))
         ),
         Decimal(0),
     )

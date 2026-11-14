@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useMemo, useState } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { TopBar } from '@/components/TopBar';
 import { ProductCard } from '@/components/ProductCard';
@@ -14,7 +14,7 @@ import { StoreClosedNotice } from '@/components/StoreClosedNotice';
 import { StoreInfoCard } from '@/components/StoreInfoCard';
 import { PaymentReturn } from '@/components/PaymentReturn';
 import { PizzaMitadYMitadModal } from '@/components/PizzaMitadYMitadModal';
-import { PizzaIcon } from '@/components/Icons';
+import { PizzaIcon, SearchIcon } from '@/components/Icons';
 import { useCart } from '@/hooks/useCart';
 import { useAuth } from '@/hooks/useAuth';
 import { useAvailablePromotions } from '@/hooks/useAvailablePromotions';
@@ -56,7 +56,91 @@ export default function MenuPage() {
   } = useMenuProducts('No pudimos cargar el menú.');
 
   const showingConfirmation = Boolean(submittedOrder || returningOrderId);
-  const productGroups = groupByCategory(products);
+  const [search, setSearch] = useState('');
+  const [selectedCategory, setSelectedCategory] = useState<string>('all');
+  const [selectedRestriction, setSelectedRestriction] = useState<string>('all');
+
+  const categories = useMemo(() => {
+    const map = new Map<number, { id: number; name: string }>();
+    for (const p of products) {
+      if (p.category && !map.has(p.category.id)) {
+        map.set(p.category.id, p.category);
+      }
+    }
+    return Array.from(map.values()).sort((a, b) => a.name.localeCompare(b.name));
+  }, [products]);
+
+  const availableRestrictions = useMemo(() => {
+    const set = new Set<string>();
+    for (const p of products) {
+      for (const r of p.dietary_restrictions ?? []) {
+        if (r && r.trim()) set.add(r.trim());
+      }
+    }
+    ['vegetariano', 'vegano', 'sin TACC'].forEach((def) => set.add(def));
+    return Array.from(set).sort((a, b) => a.localeCompare(b));
+  }, [products]);
+
+  const filteredProducts = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    const restriction = selectedRestriction.toLowerCase().trim();
+
+    return products.filter((product) => {
+      if (term) {
+        const name = product.name.toLowerCase();
+        const desc = (product.description ?? '').toLowerCase();
+        const cat = (product.category?.name ?? '').toLowerCase();
+        const rest = (product.dietary_restrictions ?? []).join(' ').toLowerCase();
+        if (!name.includes(term) && !desc.includes(term) && !cat.includes(term) && !rest.includes(term)) {
+          return false;
+        }
+      }
+
+      if (selectedCategory === 'promociones') {
+        return false;
+      }
+
+      if (selectedCategory !== 'all' && String(product.category?.id) !== selectedCategory) {
+        return false;
+      }
+
+      if (selectedRestriction !== 'all') {
+        const hasMatch = (product.dietary_restrictions ?? []).some(
+          (r) => r.toLowerCase().trim() === restriction || r.toLowerCase().trim().includes(restriction)
+        );
+        if (!hasMatch) return false;
+      }
+
+      return true;
+    });
+  }, [products, search, selectedCategory, selectedRestriction]);
+
+  const productGroups = useMemo(() => groupByCategory(filteredProducts), [filteredProducts]);
+
+  const filteredPromotions = useMemo(() => {
+    if (selectedCategory !== 'all' && selectedCategory !== 'promociones') {
+      return [];
+    }
+    if (selectedRestriction !== 'all') {
+      return [];
+    }
+    const term = search.trim().toLowerCase();
+    if (!term) return promotions;
+    return promotions.filter(
+      (promo) =>
+        promo.name.toLowerCase().includes(term) ||
+        Boolean(promo.description?.toLowerCase().includes(term))
+    );
+  }, [promotions, search, selectedCategory, selectedRestriction]);
+
+  const hasActiveFilters = Boolean(search.trim() || selectedCategory !== 'all' || selectedRestriction !== 'all');
+
+  const handleClearFilters = () => {
+    setSearch('');
+    setSelectedCategory('all');
+    setSelectedRestriction('all');
+  };
+
   const currentTheme = getThemeOption(storeConfig?.theme_color);
 
   const handleOrderCreated = (order: WebOrderCreated, form: CheckoutFormData) => {
@@ -112,6 +196,75 @@ export default function MenuPage() {
                 accentColor={currentTheme.hex}
               />
 
+              {/* Barra de Búsqueda y Filtros */}
+              {!loadingProducts && products.length > 0 && (
+                <div className="bg-white rounded-2xl p-4 shadow-xs border border-gray-100 space-y-3">
+                  {/* Fila del buscador a ancho completo para que la frase se lea completa sin cortarse */}
+                  <div className="relative w-full">
+                    <SearchIcon className="w-4 h-4 text-gray-400 absolute left-3.5 top-1/2 -translate-y-1/2 pointer-events-none" />
+                    <input
+                      type="search"
+                      aria-label="Buscar producto"
+                      placeholder="Buscar por nombre, descripción o ingrediente..."
+                      value={search}
+                      onChange={(e) => setSearch(e.target.value)}
+                      className="w-full pl-9.5 pr-8 py-2.5 text-sm bg-gray-50 border border-gray-200 rounded-xl focus:bg-white focus:outline-none focus:ring-2 focus:ring-black placeholder:text-gray-400 transition"
+                    />
+                    {search && (
+                      <button
+                        type="button"
+                        onClick={() => setSearch('')}
+                        aria-label="Limpiar búsqueda"
+                        className="absolute right-2.5 top-1/2 -translate-y-1/2 text-gray-400 hover:text-gray-600 p-1 font-bold text-xs"
+                      >
+                        ✕
+                      </button>
+                    )}
+                  </div>
+
+                  <div className="flex flex-wrap sm:flex-nowrap gap-2 items-center">
+                    <select
+                      aria-label="Filtrar por categoría"
+                      value={selectedCategory}
+                      onChange={(e) => setSelectedCategory(e.target.value)}
+                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-black flex-1"
+                    >
+                      <option value="all">Todas las categorías</option>
+                      {promotions.length > 0 && <option value="promociones">Promociones</option>}
+                      {categories.map((cat) => (
+                        <option key={cat.id} value={String(cat.id)}>
+                          {cat.name}
+                        </option>
+                      ))}
+                    </select>
+
+                    <select
+                      aria-label="Filtrar por restricción"
+                      value={selectedRestriction}
+                      onChange={(e) => setSelectedRestriction(e.target.value)}
+                      className="rounded-xl border border-gray-200 bg-gray-50 px-3 py-2 text-xs font-semibold text-gray-700 focus:bg-white focus:outline-none focus:ring-2 focus:ring-black flex-1"
+                    >
+                      <option value="all">Todas las restricciones</option>
+                      {availableRestrictions.map((res) => (
+                        <option key={res} value={res}>
+                          {res}
+                        </option>
+                      ))}
+                    </select>
+
+                    {hasActiveFilters && (
+                      <button
+                        type="button"
+                        onClick={handleClearFilters}
+                        className="text-xs text-rose-600 hover:text-rose-700 font-semibold px-2 py-1 shrink-0 underline"
+                      >
+                        Limpiar filtros
+                      </button>
+                    )}
+                  </div>
+                </div>
+              )}
+
               {loadingProducts && products.length === 0 && (
                 <p className="text-sm text-gray-500 text-center py-12">Cargando menú...</p>
               )}
@@ -130,11 +283,11 @@ export default function MenuPage() {
               )}
 
               {/* Sección de Promociones vigentes */}
-              {promotions.length > 0 && (
+              {filteredPromotions.length > 0 && (
                 <section className="space-y-3">
                   <h2 className="text-lg font-bold text-gray-900">Promociones</h2>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-                    {promotions.map((promo) => (
+                    {filteredPromotions.map((promo) => (
                       <PromotionCard key={promo.id} promotion={promo} />
                     ))}
                   </div>
@@ -145,6 +298,24 @@ export default function MenuPage() {
                 <p className="text-sm text-gray-500 text-center py-12">
                   No hay productos disponibles en este momento.
                 </p>
+              )}
+
+              {!loadingProducts && !productsError && products.length > 0 && filteredProducts.length === 0 && filteredPromotions.length === 0 && (
+                <div className="bg-white rounded-2xl shadow-xs border border-gray-100 p-8 text-center space-y-3">
+                  <p className="text-sm font-semibold text-gray-700">
+                    No encontramos platos ni productos que coincidan con los filtros.
+                  </p>
+                  <p className="text-xs text-gray-500">
+                    Probá cambiando el término de búsqueda o quitando las restricciones.
+                  </p>
+                  <button
+                    type="button"
+                    onClick={handleClearFilters}
+                    className="inline-flex items-center text-xs font-semibold px-4 py-2 rounded-xl bg-black text-white hover:bg-gray-800 transition"
+                  >
+                    Restablecer filtros
+                  </button>
+                </div>
               )}
 
               {productGroups.map((group) => {

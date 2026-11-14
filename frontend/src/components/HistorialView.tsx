@@ -185,16 +185,16 @@ export function HistorialView() {
       ) : (
         <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-48">
           <div className="overflow-auto lg:min-h-0">
-            <table className="w-full text-sm">
-              <thead className="sticky top-0">
+            <table className="w-full text-sm table-fixed min-w-[720px]">
+              <thead className="sticky top-0 z-10">
                 <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
-                  <th className="px-4 py-3">ID</th>
-                  <th className="px-4 py-3">Fecha</th>
+                  <th className="w-20 px-4 py-3">ID</th>
+                  <th className="w-40 px-4 py-3">Fecha</th>
                   <th className="px-4 py-3">Cliente</th>
-                  <th className="px-4 py-3">Pago</th>
-                  <th className="px-4 py-3 text-right">Total</th>
-                  <th className="px-4 py-3">Estado</th>
-                  <th className="px-4 py-3 text-right">Comanda</th>
+                  <th className="w-32 px-4 py-3">Pago</th>
+                  <th className="w-28 px-4 py-3 text-right">Total</th>
+                  <th className="w-32 px-4 py-3">Estado</th>
+                  <th className="w-24 px-4 py-3 text-right">Comanda</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -203,7 +203,7 @@ export function HistorialView() {
                   const paymentLabel = PAYMENT_METHOD_LABEL[paymentKey] || order.payment_method || 'Efectivo';
                   return (
                     <tr key={order.id} onClick={() => setDetailOrder(order)} className="hover:bg-gray-50 cursor-pointer">
-                      <td className="px-4 py-3 font-medium text-gray-900">
+                      <td className="px-4 py-3 font-medium text-gray-900 whitespace-nowrap">
                         <button
                           type="button"
                           onClick={(event) => {
@@ -217,7 +217,7 @@ export function HistorialView() {
                         </button>
                       </td>
                       <td className="px-4 py-3 text-gray-600 whitespace-nowrap">{formatDateTime(order.created_at)}</td>
-                      <td className="px-4 py-3 text-gray-900">{order.customer_name}</td>
+                      <td className="px-4 py-3 text-gray-900 truncate" title={order.customer_name}>{order.customer_name}</td>
                       <td className="px-4 py-3 whitespace-nowrap">
                         <span className="inline-flex px-2 py-0.5 rounded-md text-xs font-medium bg-gray-100 text-gray-800">
                           {paymentLabel}

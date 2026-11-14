@@ -86,7 +86,7 @@ export function ControlCajaView() {
 
       {cash.isOpen && cash.currentShift && (
         <div className="space-y-6">
-          <ShiftSummaryCards shift={cash.currentShift} onAddMovement={cash.addMovement} />
+          <ShiftSummaryCards shift={cash.currentShift} />
           <CashTabs
             active={cash.activeTab}
             movementsCount={

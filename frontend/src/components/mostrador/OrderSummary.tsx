@@ -14,14 +14,22 @@ function SummaryLine({ line, onQuantityChange, onRemove }: SummaryLineProps) {
   const name = line.promotion ? line.promotion.name : line.product.name;
   const price = line.promotion ? line.promotion.price : line.product.price;
   return (
-    <tr className={isPromo ? 'bg-amber-50/40' : undefined}>
+    <tr
+      style={
+        isPromo
+          ? {
+              backgroundColor: 'var(--primary-light, #f4f4f5)',
+            }
+          : undefined
+      }
+    >
       <td className="py-2 px-1">
         <div className="flex items-center gap-1">
           <button
             type="button"
             onClick={() => onQuantityChange(line.quantity - 1)}
             aria-label={`Restar una unidad de ${name}`}
-            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition"
+            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition flex items-center justify-center font-bold"
           >
             −
           </button>
@@ -31,7 +39,7 @@ function SummaryLine({ line, onQuantityChange, onRemove }: SummaryLineProps) {
             onClick={() => onQuantityChange(line.quantity + 1)}
             disabled={line.quantity >= MAX_QUANTITY_PER_ITEM}
             aria-label={`Sumar una unidad de ${name}`}
-            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed"
+            className="w-6 h-6 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 transition disabled:opacity-40 disabled:cursor-not-allowed flex items-center justify-center font-bold"
           >
             +
           </button>
@@ -40,7 +48,14 @@ function SummaryLine({ line, onQuantityChange, onRemove }: SummaryLineProps) {
       <td className="py-2 px-1 text-gray-900">
         <div className="flex items-center gap-1.5 flex-wrap">
           {isPromo && (
-            <span className="text-[10px] font-bold uppercase px-1.5 py-0.2 rounded bg-amber-100 text-amber-900 border border-amber-200">
+            <span
+              className="text-[10px] font-bold uppercase px-1.5 py-0.5 rounded border"
+              style={{
+                backgroundColor: 'var(--primary-light, #f4f4f5)',
+                borderColor: 'var(--primary-border, #e4e4e7)',
+                color: 'var(--primary-text, #18181b)',
+              }}
+            >
               Promo
             </span>
           )}
@@ -200,7 +215,7 @@ export function OrderSummary(props: OrderSummaryProps) {
           type="button"
           onClick={props.onClear}
           disabled={submitting}
-          className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50"
+          className="px-4 py-3 rounded-xl border border-gray-300 text-sm font-semibold text-gray-700 hover:bg-gray-100 transition disabled:opacity-50 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300"
         >
           Limpiar
         </button>
@@ -208,9 +223,16 @@ export function OrderSummary(props: OrderSummaryProps) {
           type="submit"
           disabled={submitting || shiftClosed}
           title={shiftClosed ? 'Debés abrir la caja para confirmar pedidos' : undefined}
-          className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 text-white rounded-xl py-3 font-bold transition disabled:opacity-60 disabled:cursor-not-allowed"
+          className="flex-1 min-w-40 bg-green-600 hover:bg-green-700 active:scale-[0.99] text-white rounded-xl py-3 font-bold transition disabled:opacity-50 disabled:cursor-not-allowed shadow-md hover:shadow-lg flex items-center justify-center gap-2 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-green-600"
         >
-          {submitting ? 'Registrando...' : 'Confirmar pedido'}
+          {submitting ? (
+            <>
+              <span className="w-4 h-4 rounded-full border-2 border-white/30 border-t-white animate-spin shrink-0" aria-hidden="true" />
+              <span>Registrando...</span>
+            </>
+          ) : (
+            'Confirmar pedido'
+          )}
         </button>
       </div>
     </section>

@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react';
+import { render, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { ControlCajaView } from '@/components/ControlCajaView';
@@ -233,6 +233,53 @@ describe('ControlCajaView', () => {
     await waitFor(() => {
       expect(screen.queryByText('Detalle del turno #1')).not.toBeInTheDocument();
     });
+  });
+
+  it('categorías manuales incluyen Pago a empleado, muestra Venta (Transferencia) y Venta (Tarjeta) sin columna Acción y sin botones en ventas digitales', async () => {
+    const shiftConDigitales: CashShiftDetail = {
+      ...MOCK_OPEN_SHIFT,
+      movements: [
+        {
+          id: 201,
+          cash_shift_id: 1,
+          type: 'ingreso',
+          amount: 4500,
+          category: 'Transferencia',
+          description: 'Transferencia cliente',
+          created_at: '2026-10-30T10:20:00Z',
+        },
+        {
+          id: 202,
+          cash_shift_id: 1,
+          type: 'ingreso',
+          amount: 3200,
+          category: 'Tarjeta',
+          description: 'Tarjeta débito',
+          created_at: '2026-10-30T10:25:00Z',
+        },
+      ],
+    };
+
+    service.fetchCurrentCashShift.mockResolvedValue({ is_open: true, shift: shiftConDigitales });
+    render(<ControlCajaView />);
+
+    // 1. Pago a empleado está en el select
+    const categorySelect = await screen.findByLabelText(/Categoría \*/i);
+    expect(within(categorySelect).getByRole('option', { name: 'Pago a empleado' })).toBeInTheDocument();
+
+    // 2. Movimientos se muestran como Venta (Transferencia) y Venta (Tarjeta) con badge Venta
+    expect(screen.getByText('Venta (Transferencia)')).toBeInTheDocument();
+    expect(screen.getByText('Venta (Tarjeta)')).toBeInTheDocument();
+    const ventaBadges = screen.getAllByText('Venta');
+    expect(ventaBadges.length).toBeGreaterThanOrEqual(2);
+
+    // 3. No existe la columna Acción ni botones de anulación
+    expect(screen.queryByText('Acción')).not.toBeInTheDocument();
+    expect(screen.queryByTitle('Anular movimiento')).not.toBeInTheDocument();
+
+    // 4. En Ventas digitales no hay botones de agregar transferencia o tarjeta
+    expect(screen.queryByRole('button', { name: '+ Transferencia' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: '+ Tarjeta' })).not.toBeInTheDocument();
   });
 });
 

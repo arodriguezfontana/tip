@@ -69,7 +69,8 @@ export function CategoriasView() {
           type="button"
           onClick={() => setCategoryForm({ category: null })}
           disabled={loading}
-          className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60 whitespace-nowrap"
+          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+          className="text-white rounded-xl px-5 py-2 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60 whitespace-nowrap"
         >
           + Nueva categoría
         </button>
@@ -96,12 +97,12 @@ export function CategoriasView() {
           <p className="text-sm text-gray-500 text-center py-16">Todavía no creaste categorías.</p>
         ) : (
           <div className="overflow-auto lg:min-h-0">
-            <table className="w-full text-left text-sm">
+            <table className="w-full text-left text-sm table-fixed min-w-[600px]">
               <thead className="sticky top-0 z-10 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-5">Categoría</th>
+                  <th className="w-64 py-3 px-5">Categoría</th>
                   <th className="py-3 px-5">Productos</th>
-                  <th className="py-3 px-5 text-right">Acciones</th>
+                  <th className="w-32 py-3 px-5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">

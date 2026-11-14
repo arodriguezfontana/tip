@@ -8,6 +8,7 @@ import {
 } from '@/services/deliveryDriverService';
 import { DeliveryDriverModal } from '@/components/DeliveryDriverModal';
 import { Toast } from '@/components/ui/Toast';
+import { SearchIcon, PlusIcon, DeliveryIcon, EditIcon } from '@/components/Icons';
 import type { DeliveryDriver, DeliveryDriverPayload } from '@/types/deliveryDriver';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
 
@@ -80,12 +81,15 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
 
         <div className="flex flex-wrap items-center gap-3">
           <div className="relative w-full sm:w-64">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400" aria-hidden="true">
+              <SearchIcon className="w-4 h-4" />
+            </span>
             <input
               type="text"
               placeholder="Buscar por nombre o teléfono..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black transition"
             />
           </div>
 
@@ -93,12 +97,12 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
             type="button"
             onClick={handleOpenCreate}
             style={themeHex ? { backgroundColor: themeHex } : undefined}
-            className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl text-white transition shadow-xs ${
+            className={`flex items-center gap-1.5 text-xs font-bold px-4 py-2 rounded-xl text-white transition shadow-xs active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${
               themeHex ? 'hover:opacity-90' : 'bg-black hover:bg-gray-800'
             }`}
           >
-            <span className="text-sm leading-none">+</span>
-            Nuevo repartidor
+            <PlusIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+            <span>Nuevo repartidor</span>
           </button>
         </div>
       </div>
@@ -113,25 +117,30 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
         {loading && drivers.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Cargando repartidores...</p>
         ) : filteredDrivers.length === 0 ? (
-          <div className="text-center py-16 px-4 space-y-2">
-            <p className="text-sm font-semibold text-gray-800">
-              {search
-                ? 'No se encontraron repartidores que coincidan con la búsqueda.'
-                : 'Aún no hay repartidores registrados en el sistema.'}
-            </p>
-            <p className="text-xs text-gray-500">
-              {!search && 'Registrá al personal de entregas para poder asignarle pedidos a domicilio.'}
-            </p>
+          <div className="text-center py-16 px-4 space-y-3 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400" aria-hidden="true">
+              <DeliveryIcon className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                {search
+                  ? 'No se encontraron repartidores que coincidan con la búsqueda.'
+                  : 'Aún no hay repartidores registrados en el sistema.'}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {!search && 'Registrá al personal de entregas para poder asignarle pedidos a domicilio.'}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse table-fixed min-w-[550px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold uppercase tracking-wider text-gray-500">
                   <th className="py-3 px-4">Nombre</th>
-                  <th className="py-3 px-4">Teléfono</th>
-                  <th className="py-3 px-4">Estado</th>
-                  <th className="py-3 px-4 text-right">Acciones</th>
+                  <th className="w-40 py-3 px-4">Teléfono</th>
+                  <th className="w-32 py-3 px-4">Estado</th>
+                  <th className="w-48 py-3 px-4 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
@@ -165,9 +174,10 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
                       <button
                         type="button"
                         onClick={() => handleOpenEdit(driver)}
-                        className="text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
+                        className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
                       >
-                        Editar
+                        <EditIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                        <span>Editar</span>
                       </button>
                     </td>
                   </tr>

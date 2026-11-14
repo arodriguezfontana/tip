@@ -62,7 +62,7 @@ export function StatsSection() {
     : true;
 
   return (
-    <div className="flex flex-col gap-6 lg:h-full pb-16">
+    <div className="flex flex-col gap-6 lg:h-full pb-28">
       {/* Barra superior con filtros */}
       <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
         <div>
@@ -109,7 +109,7 @@ export function StatsSection() {
       ) : error ? (
         <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
       ) : (
-        <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0 pb-12">
+        <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0 pb-16">
           <AiAdviceSection
             aiData={aiData}
             aiLoading={aiLoading}
@@ -120,6 +120,7 @@ export function StatsSection() {
           <GoalsProgress kpis={kpis} setGoalsModalOpen={setGoalsModalOpen} />
           <KpiCards kpis={kpis} bestDay={bestDay} statusDistribution={statusDistribution} />
           <TopProductsTable kpis={kpis} topProducts={topProducts} />
+          <div className="h-10 shrink-0" aria-hidden="true" />
         </div>
       )}
 

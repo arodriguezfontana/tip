@@ -150,7 +150,8 @@ function MovementFormCard({ form, onInvalid, onAdd }: MovementFormCardProps) {
         <button
           type="submit"
           disabled={saving}
-          className="w-full py-2.5 rounded-xl bg-black text-white text-sm font-bold hover:bg-gray-800 transition disabled:opacity-50"
+          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+          className="w-full py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90 transition disabled:opacity-50"
         >
           {saving ? 'Guardando...' : 'Asentar movimiento'}
         </button>
@@ -187,38 +188,62 @@ const PAGE_SIZE = 7;
 function MovementsList({
   movements,
   orders = [],
-  onDelete,
 }: {
   movements: CashMovement[];
   orders?: ShiftOrder[];
-  onDelete: (id: number) => void;
+  onDelete?: (id: number) => void;
 }) {
   const [filter, setFilter] = useState<'todos' | ShiftDisplayMovementType>('todos');
   const [page, setPage] = useState(1);
 
   const allItems = useMemo<UnifiedMovementItem[]>(() => {
-    const manualItems: UnifiedMovementItem[] = movements.map((m) => ({
-      id: `mov-${m.id}`,
-      rawId: m.id,
-      time: m.created_at,
-      type: m.type,
-      category: m.category,
-      description: m.description || '-',
-      amount: m.amount,
-      isManual: true,
-    }));
+    const manualItems: UnifiedMovementItem[] = movements.map((m) => {
+      const catLower = m.category.trim().toLowerCase();
+      const isTransferencia = catLower === 'transferencia' || catLower.includes('transferencia');
+      const isTarjeta = catLower === 'tarjeta' || catLower.includes('tarjeta');
+
+      let type: ShiftDisplayMovementType = m.type;
+      let category = m.category;
+
+      if (isTransferencia) {
+        type = 'venta';
+        category = 'Venta (Transferencia)';
+      } else if (isTarjeta) {
+        type = 'venta';
+        category = 'Venta (Tarjeta)';
+      }
+
+      return {
+        id: `mov-${m.id}`,
+        rawId: m.id,
+        time: m.created_at,
+        type,
+        category,
+        description: m.description || '-',
+        amount: m.amount,
+        isManual: true,
+      };
+    });
 
     const orderItems: UnifiedMovementItem[] = orders
       .filter((o) => o.is_billable)
       .map((o) => {
-        const methodKey = (o.payment_method || '').toLowerCase() as PaymentMethod;
-        const methodLabel = PAYMENT_METHOD_LABEL[methodKey] || o.payment_method || 'Efectivo';
+        const methodKey = (o.payment_method || '').toLowerCase();
+        let category = 'Venta';
+        if (methodKey.includes('transferencia')) {
+          category = 'Venta (Transferencia)';
+        } else if (methodKey.includes('tarjeta')) {
+          category = 'Venta (Tarjeta)';
+        } else {
+          const methodLabel = PAYMENT_METHOD_LABEL[methodKey as PaymentMethod] || o.payment_method || 'Efectivo';
+          category = `Venta (${methodLabel})`;
+        }
         return {
           id: `order-${o.id}`,
           rawId: o.id,
           time: o.created_at,
           type: 'venta',
-          category: `Venta (${methodLabel})`,
+          category,
           description: `Pedido #${o.shift_number || o.id} · ${o.customer_name}`,
           amount: o.total_amount,
           isManual: false,
@@ -293,26 +318,25 @@ function MovementsList({
       ) : (
         <>
           <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs">
+            <table className="w-full text-left text-xs table-fixed min-w-[550px]">
               <thead>
                 <tr className="border-b border-gray-200 text-gray-500 uppercase tracking-wider">
-                  <th className="py-2.5 px-2">Hora</th>
-                  <th className="py-2.5 px-2">Tipo</th>
-                  <th className="py-2.5 px-2">Categoría</th>
+                  <th className="w-20 py-2.5 px-2">Hora</th>
+                  <th className="w-28 py-2.5 px-2">Tipo</th>
+                  <th className="w-44 py-2.5 px-2">Categoría</th>
                   <th className="py-2.5 px-2">Detalle</th>
-                  <th className="py-2.5 px-2 text-right">Monto</th>
-                  <th className="py-2.5 px-2 text-center">Acción</th>
+                  <th className="w-28 py-2.5 px-2 text-right">Monto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
                 {pagedItems.map((item) => (
                   <tr key={item.id} className="hover:bg-gray-50 transition">
                     <td className="py-2.5 px-2 text-gray-500 whitespace-nowrap">{formatTime(item.time)}</td>
-                    <td className="py-2.5 px-2">
+                    <td className="py-2.5 px-2 whitespace-nowrap">
                       <MovementTypeBadge type={item.type} />
                     </td>
-                    <td className="py-2.5 px-2 font-semibold text-gray-900">{item.category}</td>
-                    <td className="py-2.5 px-2 text-gray-600 max-w-xs truncate">{item.description}</td>
+                    <td className="py-2.5 px-2 font-semibold text-gray-900 truncate" title={item.category}>{item.category}</td>
+                    <td className="py-2.5 px-2 text-gray-600 truncate" title={item.description}>{item.description}</td>
                     <td
                       className={`py-2.5 px-2 text-right font-bold whitespace-nowrap ${
                         item.type === 'ingreso'
@@ -324,20 +348,6 @@ function MovementsList({
                     >
                       {item.type === 'egreso' ? '-' : '+'}
                       {formatCurrency(item.amount)}
-                    </td>
-                    <td className="py-2.5 px-2 text-center">
-                      {item.isManual ? (
-                        <button
-                          type="button"
-                          onClick={() => onDelete(item.rawId)}
-                          title="Anular movimiento"
-                          className="text-gray-400 hover:text-red-600 font-bold p-1 transition"
-                        >
-                          ×
-                        </button>
-                      ) : (
-                        <span className="text-gray-300">-</span>
-                      )}
                     </td>
                   </tr>
                 ))}
@@ -384,7 +394,7 @@ function MovementsList({
 interface MovementsTabProps extends MovementFormCardProps {
   movements: CashMovement[];
   orders?: ShiftOrder[];
-  onDelete: (id: number) => void;
+  onDelete?: (id: number) => void;
 }
 
 /** Formulario para asentar movimientos manuales de efectivo y la lista de los del turno. */

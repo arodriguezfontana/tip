@@ -160,10 +160,19 @@ function PinModalDialog({
       <div className="relative w-full max-w-sm bg-white rounded-3xl shadow-2xl border border-gray-100 p-6 sm:p-7 flex flex-col items-center text-center">
         {/* Ícono de seguridad */}
         <div
-          className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 ${
+          style={
+            !isBlocked
+              ? {
+                  backgroundColor: 'var(--primary-light, #f4f4f5)',
+                  borderColor: 'var(--primary-border, #e4e4e7)',
+                  color: 'var(--primary-color, #18181b)',
+                }
+              : undefined
+          }
+          className={`w-14 h-14 rounded-2xl flex items-center justify-center mb-4 border ${
             isBlocked
-              ? 'bg-red-100 text-red-600'
-              : 'bg-zinc-900 text-amber-400'
+              ? 'bg-red-100 text-red-600 border-red-200'
+              : ''
           }`}
         >
           {isBlocked ? (
@@ -214,9 +223,17 @@ function PinModalDialog({
             return (
               <div
                 key={idx}
+                style={
+                  hasDigit
+                    ? {
+                        backgroundColor: 'var(--primary-color, #18181b)',
+                        borderColor: 'var(--primary-color, #18181b)',
+                      }
+                    : undefined
+                }
                 className={`w-4 h-4 rounded-full border-2 transition-all duration-150 ${
                   hasDigit
-                    ? 'bg-zinc-900 border-zinc-900 scale-110 shadow-xs'
+                    ? 'scale-110 shadow-xs'
                     : 'bg-gray-100 border-gray-300'
                 }`}
               />
@@ -285,7 +302,19 @@ function PinModalDialog({
             disabled={isBlocked || loading || pin.length !== 4}
             onClick={() => handleSubmit(pin)}
             aria-label="Confirmar PIN"
-            className="h-12 rounded-xl bg-zinc-900 hover:bg-black text-amber-400 font-bold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center"
+            style={
+              !isBlocked && pin.length === 4
+                ? {
+                    backgroundColor: 'var(--primary-color, #18181b)',
+                    color: '#ffffff',
+                  }
+                : undefined
+            }
+            className={`h-12 rounded-xl font-bold transition disabled:opacity-40 disabled:cursor-not-allowed shadow-2xs flex items-center justify-center ${
+              !isBlocked && pin.length === 4
+                ? 'hover:opacity-90'
+                : 'bg-zinc-900 text-white'
+            }`}
           >
             {loading ? '...' : '✔'}
           </button>

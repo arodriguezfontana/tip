@@ -1,5 +1,6 @@
 import { GrowthIndicator } from '@/components/stats/GrowthIndicator';
 import { formatCurrency } from '@/utils/currency';
+import { Tooltip } from '@/components/ui/Tooltip';
 import type { useStats } from '@/hooks/useStats';
 
 interface KpiCardsProps {
@@ -36,9 +37,12 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
   return (
     <div className="shrink-0 grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
       {/* 1. Facturación */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Facturación</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Facturación</span>
+            <Tooltip content="Ingresos totales generados por pedidos en el período." />
+          </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpiData.revenue.current)}</p>
           </div>
@@ -50,9 +54,12 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
       </div>
 
       {/* 2. Ticket Promedio */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ticket Promedio</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Ticket Promedio</span>
+            <Tooltip content="Monto promedio facturado por cada pedido finalizado." />
+          </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-gray-900">{formatCurrency(kpiData.average_ticket.current)}</p>
           </div>
@@ -64,10 +71,13 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
       </div>
 
       {/* 3. Margen Bruto */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
           <div className="flex items-center justify-between">
-            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Margen Bruto</span>
+            <div className="flex items-center gap-1.5">
+              <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Margen Bruto</span>
+              <Tooltip content="Rentabilidad bruta descontando el costo registrado de insumos." />
+            </div>
             <span className={`text-xs font-bold px-2 py-0.5 rounded-full border ${marginBadgeClass}`}>
               {kpiData.gross_margin_pct}%
             </span>
@@ -83,9 +93,12 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
       </div>
 
       {/* 4. Cancelaciones */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cancelaciones</span>
+          <div className="flex items-center justify-between">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Cancelaciones</span>
+            <Tooltip content="Tasa de pedidos cancelados respecto al total recibido." />
+          </div>
           <div className="mt-2">
             <p className="text-2xl font-bold text-gray-900">{kpiData.cancellation_rate.current}%</p>
           </div>
@@ -96,7 +109,7 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
       </div>
 
       {/* 5. Mejor día */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
           <div className="flex items-center justify-between">
             <span className="text-xs font-semibold uppercase tracking-wide text-gray-500">Mejor día</span>
@@ -134,9 +147,12 @@ export function KpiCards({ kpis, bestDay, statusDistribution }: KpiCardsProps) {
       </div>
 
       {/* 6. Estado de pedidos */}
-      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between">
+      <div className="bg-white rounded-2xl shadow-md p-5 border border-gray-100 flex flex-col justify-between hover:shadow-lg transition">
         <div>
-          <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 block mb-2">Estado de pedidos</span>
+          <div className="flex items-center justify-between mb-2">
+            <span className="text-xs font-semibold uppercase tracking-wide text-gray-500 block">Estado de pedidos</span>
+            <Tooltip content="Desglose del estado actual de todos los pedidos ingresados." />
+          </div>
           <div className="space-y-1.5 max-h-24 overflow-y-auto">
             {Object.keys(statusDistribution).length === 0 ? (
               <p className="text-xs text-gray-500">No hay registros de pedidos en este período.</p>

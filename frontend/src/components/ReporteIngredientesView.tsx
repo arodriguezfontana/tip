@@ -11,6 +11,7 @@ import { parseDateInputValue, rangeForPreset } from '@/utils/dateRange';
 import { formatQuantity } from '@/utils/ingredients';
 import { formatCurrency } from '@/utils/currency';
 import { PanelNote } from '@/components/ui/PanelNote';
+import { SparklesIcon } from '@/components/Icons';
 
 export function ReporteIngredientesView() {
   const [preset, setPreset] = useState<DateRangePreset>('week');
@@ -74,7 +75,7 @@ export function ReporteIngredientesView() {
   }, [report?.items]);
 
   return (
-    <div className="flex flex-col gap-4 lg:h-full pb-16">
+    <div className="flex flex-col gap-4 lg:h-full pb-28">
       <div className="shrink-0 bg-white p-5 rounded-2xl shadow-xs border border-gray-100 space-y-1">
         <h1 className="text-lg font-bold text-gray-900">Reporte de ingredientes</h1>
         <p className="text-xs text-gray-500">
@@ -176,7 +177,7 @@ export function ReporteIngredientesView() {
                   <span className="text-[11px] text-violet-700 font-semibold">Insumos y rotación de platos</span>
                 </div>
                 <p className="text-[11px] text-violet-800/80 mb-2.5">
-                  El análisis con IA se genera solo a pedido para el período seleccionado.
+                  Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:
                 </p>
                 <ul className="space-y-2.5 text-xs text-violet-950 font-medium">
                   {gastos.map((g, i) => (
@@ -200,9 +201,11 @@ export function ReporteIngredientesView() {
             <button
               type="button"
               onClick={handleRequestAi}
-              className="px-3.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer"
+              aria-label="Consejos con IA"
+              className="px-3.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer flex items-center gap-1.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
             >
-              Analizar compras con IA
+              <SparklesIcon className="w-3.5 h-3.5" aria-hidden="true" />
+              <span>Consejos con IA</span>
             </button>
           </div>
         )}
@@ -212,7 +215,7 @@ export function ReporteIngredientesView() {
         <PanelNote>Cargando...</PanelNote>
       ) : (
         report && (
-          <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0">
+          <div className="flex flex-col gap-4 lg:flex-1 lg:min-h-0 pb-16">
             <div className="shrink-0 grid grid-cols-1 sm:grid-cols-2 gap-4">
               <div className="bg-white rounded-2xl shadow-md p-6 border border-gray-100">
                 <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">Gasto total en ingredientes</p>
@@ -225,17 +228,20 @@ export function ReporteIngredientesView() {
             </div>
 
             {report.items.length === 0 ? (
-              <PanelNote>No hay consumo de ingredientes en el rango seleccionado.</PanelNote>
+              <div className="space-y-4">
+                <PanelNote>No hay consumo de ingredientes en el rango seleccionado.</PanelNote>
+                <div className="h-10 shrink-0" aria-hidden="true" />
+              </div>
             ) : (
               <div className="bg-white rounded-2xl shadow-md overflow-hidden flex flex-col lg:min-h-48">
                 <div className="overflow-auto lg:min-h-0">
-                  <table className="w-full text-sm">
-                    <thead className="sticky top-0">
+                  <table className="w-full text-sm table-fixed min-w-[600px]">
+                    <thead className="sticky top-0 z-10">
                       <tr className="bg-gray-50 text-left text-xs font-semibold uppercase tracking-wide text-gray-500">
                         <th className="px-4 py-3">Ingrediente</th>
-                        <th className="px-4 py-3 text-right">Consumo total</th>
-                        <th className="px-4 py-3 text-right">Costo unitario</th>
-                        <th className="px-4 py-3 text-right">Gasto total</th>
+                        <th className="w-40 px-4 py-3 text-right">Consumo total</th>
+                        <th className="w-40 px-4 py-3 text-right">Costo unitario</th>
+                        <th className="w-40 px-4 py-3 text-right">Gasto total</th>
                       </tr>
                     </thead>
                     <tbody className="divide-y divide-gray-100">
@@ -262,9 +268,11 @@ export function ReporteIngredientesView() {
                 </div>
               </div>
             )}
+            <div className="h-10 shrink-0" aria-hidden="true" />
           </div>
         )
       )}
+      <div className="h-10 shrink-0" aria-hidden="true" />
     </div>
   );
 }

@@ -1,4 +1,5 @@
 import type { StrategicInsightResponse } from '@/types/stats';
+import { SparklesIcon } from '../Icons';
 
 interface AiAdviceSectionProps {
   aiData: StrategicInsightResponse | null;
@@ -22,10 +23,10 @@ export function AiAdviceSection({
 
   const hasMetrics = Boolean(
     aiData?.operational_metrics &&
-      (aiData.operational_metrics.avg_wait_minutes > 0 ||
-        (aiData.operational_metrics.peak_hour_orders ?? 0) > 0 ||
-        aiData.operational_metrics.delivery_pct > 0 ||
-        aiData.operational_metrics.pickup_pct > 0)
+    (aiData.operational_metrics.avg_wait_minutes > 0 ||
+      (aiData.operational_metrics.peak_hour_orders ?? 0) > 0 ||
+      aiData.operational_metrics.delivery_pct > 0 ||
+      aiData.operational_metrics.pickup_pct > 0)
   );
 
   const hasContent =
@@ -195,9 +196,11 @@ export function AiAdviceSection({
           <button
             type="button"
             onClick={handleRequestAi}
-            className="px-3.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer"
+            aria-label="Analizar con IA"
+            className="px-3.5 py-1.5 bg-black hover:bg-gray-800 text-white rounded-xl text-xs font-semibold transition shrink-0 cursor-pointer flex items-center gap-1.5 active:scale-[0.99] focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
           >
-            Analizar con IA
+            <SparklesIcon className="w-3.5 h-3.5" aria-hidden="true" />
+            <span>Analizar con IA</span>
           </button>
         </div>
       )}

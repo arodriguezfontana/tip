@@ -20,7 +20,12 @@ export function ProductCard({ product }: { product: Product }) {
             {product.dietary_restrictions.map((restriction) => (
               <span
                 key={restriction}
-                className="rounded-full bg-gray-100 text-gray-600 text-xs px-2 py-0.5"
+                style={{
+                  backgroundColor: 'var(--primary-light, #f4f4f5)',
+                  borderColor: 'var(--primary-border, #e4e4e7)',
+                  color: 'var(--primary-text, #18181b)',
+                }}
+                className="rounded-full border text-xs font-semibold px-2.5 py-0.5 shadow-2xs"
               >
                 {restriction}
               </span>

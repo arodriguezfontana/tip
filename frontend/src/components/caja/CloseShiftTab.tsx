@@ -73,7 +73,8 @@ function ConfirmCloseModal({
             type="button"
             disabled={closing}
             onClick={onConfirm}
-            className="px-5 py-2 rounded-xl bg-black text-white text-sm font-bold hover:bg-gray-800 transition disabled:opacity-50"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="px-5 py-2 rounded-xl text-white text-sm font-bold hover:opacity-90 transition disabled:opacity-50"
           >
             {closing ? 'Cerrando...' : 'Sí, cerrar turno'}
           </button>
@@ -176,7 +177,8 @@ export function CloseShiftTab({ form, expectedCash, onClose }: CloseShiftTabProp
             type="button"
             disabled={validCounted === null || closing}
             onClick={() => form.setConfirming(true)}
-            className="w-full py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800 transition disabled:opacity-50"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="w-full py-3 rounded-xl text-white font-bold hover:opacity-90 transition disabled:opacity-50"
           >
             Cerrar turno de caja
           </button>

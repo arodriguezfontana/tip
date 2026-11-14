@@ -90,6 +90,23 @@ function ProductTile({ product, quantity, onAdd }: { product: Product; quantity:
       <QuantityBadge quantity={quantity} />
       <ProductThumbnail product={product} size="sm" />
       <span className="text-xs font-semibold text-gray-900 leading-tight">{product.name}</span>
+      {product.dietary_restrictions && product.dietary_restrictions.length > 0 && (
+        <span className="flex flex-wrap gap-1 justify-center" aria-hidden="true">
+          {product.dietary_restrictions.map((restriction) => (
+            <span
+              key={restriction}
+              style={{
+                backgroundColor: 'var(--primary-light, #f4f4f5)',
+                borderColor: 'var(--primary-border, #e4e4e7)',
+                color: 'var(--primary-text, #18181b)',
+              }}
+              className="rounded-full border text-[9px] font-semibold px-1.5 py-0.2"
+            >
+              {restriction}
+            </span>
+          ))}
+        </span>
+      )}
       <span className="text-xs text-gray-600">{formatCurrency(product.price)}</span>
     </button>
   );

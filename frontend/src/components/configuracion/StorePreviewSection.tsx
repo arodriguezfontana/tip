@@ -1,4 +1,4 @@
-import { CreditCardIcon, LocationPinIcon, PhoneIcon } from '@/components/Icons';
+import { LocationPinIcon, PhoneIcon } from '@/components/Icons';
 import type { ThemeOption } from '@/types/storeConfig';
 
 interface StorePreviewSectionProps {
@@ -7,11 +7,11 @@ interface StorePreviewSectionProps {
   storeName: string;
   address: string;
   contactPhone: string;
-  mpAlias: string;
+  mpAlias?: string | null;
 }
 
 /** Vista previa en tiempo real de cómo se ve la web con lo que se está configurando. */
-export function StorePreviewSection({ currentTheme, logoUrl, storeName, address, contactPhone, mpAlias }: StorePreviewSectionProps) {
+export function StorePreviewSection({ currentTheme, logoUrl, storeName, address, contactPhone }: StorePreviewSectionProps) {
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-3">
       <h2 className="text-base font-bold text-gray-900">Vista Previa</h2>
@@ -34,7 +34,7 @@ export function StorePreviewSection({ currentTheme, logoUrl, storeName, address,
 
         {/* Banner de datos simulado */}
         <div className="bg-white p-4 border-t border-gray-100">
-          <div className="grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
             {address && (
               <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
                 <span
@@ -63,22 +63,8 @@ export function StorePreviewSection({ currentTheme, logoUrl, storeName, address,
                 </div>
               </div>
             )}
-            {mpAlias && (
-              <div className="flex items-start gap-2.5 p-2.5 rounded-xl bg-gray-50 border border-gray-100 text-xs">
-                <span
-                  className="w-7 h-7 rounded-lg flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: `${currentTheme.hex}18`, color: currentTheme.hex }}
-                >
-                  <CreditCardIcon className="w-4 h-4" />
-                </span>
-                <div className="min-w-0">
-                  <span className="block text-[10px] font-medium uppercase text-gray-500">Alias MercadoPago</span>
-                  <span className="font-medium text-gray-900 break-words">{mpAlias}</span>
-                </div>
-              </div>
-            )}
-            {!address && !contactPhone && !mpAlias && (
-              <span className="italic text-gray-400 text-xs py-2 sm:col-span-3">Completá los datos de contacto para verlos aquí.</span>
+            {!address && !contactPhone && (
+              <span className="italic text-gray-400 text-xs py-2 sm:col-span-2">Completá los datos de contacto para verlos aquí.</span>
             )}
           </div>
         </div>

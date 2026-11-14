@@ -39,7 +39,7 @@ export function Modal({ title, subtitle, onClose, closeDisabled = false, width =
             onClick={onClose}
             disabled={closeDisabled}
             aria-label="Cerrar"
-            className="text-gray-400 hover:text-gray-700 text-lg font-bold"
+            className="text-gray-400 hover:text-gray-700 hover:bg-gray-100 rounded-lg w-8 h-8 flex items-center justify-center transition text-xl leading-none font-semibold focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
           >
             ×
           </button>
@@ -79,14 +79,15 @@ export function ModalFooter({ error, note, onCancel, submitLabel, saving }: Moda
           type="button"
           onClick={onCancel}
           disabled={saving}
-          className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100"
+          className="rounded-xl px-4 py-2 text-sm font-semibold text-gray-600 hover:bg-gray-100 transition focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-gray-300 disabled:opacity-50"
         >
           Cancelar
         </button>
         <button
           type="submit"
           disabled={saving}
-          className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60"
+          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+          className="text-white rounded-xl px-5 py-2 text-sm font-semibold hover:opacity-90 active:scale-[0.99] transition disabled:opacity-50 disabled:cursor-not-allowed focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black"
         >
           {saving ? 'Guardando...' : submitLabel}
         </button>

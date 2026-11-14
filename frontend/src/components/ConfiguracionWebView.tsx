@@ -75,7 +75,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
           storeName={form.storeName}
           address={form.address}
           contactPhone={form.contactPhone}
-          mpAlias={form.mpAlias}
         />
         <LoginBackgroundSection
           loginBg={form.loginBg}

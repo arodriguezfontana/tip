@@ -6,6 +6,7 @@ import * as businessHoursService from '@/services/businessHoursService';
 import * as menuService from '@/services/menuService';
 import * as mercadopagoService from '@/services/mercadopagoService';
 import * as orderService from '@/services/orderService';
+import * as promotionService from '@/services/promotionService';
 import * as storeConfigService from '@/services/storeConfigService';
 import type { BusinessHoursStatus } from '@/types/businessHours';
 import type { WebOrderCreated } from '@/types/order';
@@ -17,12 +18,14 @@ vi.mock('@/services/orderService');
 vi.mock('@/services/businessHoursService');
 vi.mock('@/services/storeConfigService');
 vi.mock('@/services/mercadopagoService');
+vi.mock('@/services/promotionService');
 
 const menu = vi.mocked(menuService);
 const orders = vi.mocked(orderService);
 const businessHours = vi.mocked(businessHoursService);
 const mercadopago = vi.mocked(mercadopagoService);
 const storeConfig = vi.mocked(storeConfigService);
+const promotions = vi.mocked(promotionService);
 
 const OPEN: BusinessHoursStatus = {
   configured: true,
@@ -93,6 +96,7 @@ beforeEach(() => {
     theme_color: 'black',
     login_bg: 'bistro',
   });
+  promotions.fetchAvailablePromotions.mockResolvedValue([]);
 });
 
 describe('MenuPage', () => {
@@ -497,5 +501,72 @@ describe('MenuPage', () => {
     const carrito = cart();
     expect(within(carrito).getByText('Pizza Grande [1/2 Muzzarella | 1/2 Fugazzeta]')).toBeInTheDocument();
     expect(within(carrito).getAllByText(/9\.500/).length).toBeGreaterThanOrEqual(1);
+  });
+
+  it('permite buscar productos por texto en el menú', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+
+    const searchInput = screen.getByLabelText('Buscar producto');
+    await user.type(searchInput, 'coca');
+
+    expect(screen.getByRole('heading', { name: 'Coca-Cola 500ml' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pizza Muzzarella' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Fugazzeta' })).not.toBeInTheDocument();
+
+    await user.click(screen.getByRole('button', { name: 'Limpiar búsqueda' }));
+    expect(screen.getByRole('heading', { name: 'Pizza Muzzarella' })).toBeInTheDocument();
+    expect(screen.getByRole('heading', { name: 'Coca-Cola 500ml' })).toBeInTheDocument();
+  });
+
+  it('permite filtrar productos por categoría y por restricción alimentaria', async () => {
+    renderMenu();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+
+    // Filtrar por categoría Bebidas
+    await user.selectOptions(screen.getByLabelText('Filtrar por categoría'), '2');
+    expect(screen.getByRole('heading', { name: 'Coca-Cola 500ml' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pizza Muzzarella' })).not.toBeInTheDocument();
+
+    // Restablecer a todas las categorías
+    await user.selectOptions(screen.getByLabelText('Filtrar por categoría'), 'all');
+    expect(screen.getByRole('heading', { name: 'Pizza Muzzarella' })).toBeInTheDocument();
+
+    // Filtrar por restricción 'vegetariano' (Fugazzeta es vegetariana en el mock)
+    await user.selectOptions(screen.getByLabelText('Filtrar por restricción'), 'vegetariano');
+    expect(screen.getByRole('heading', { name: 'Fugazzeta' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pizza Muzzarella' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Coca-Cola 500ml' })).not.toBeInTheDocument();
+
+    // Limpiar filtros con el botón
+    await user.click(screen.getByRole('button', { name: 'Limpiar filtros' }));
+    expect(screen.getByRole('heading', { name: 'Pizza Muzzarella' })).toBeInTheDocument();
+  });
+
+  it('permite filtrar por promociones en el selector de categorías', async () => {
+    promotions.fetchAvailablePromotions.mockResolvedValue([
+      {
+        id: 1,
+        name: 'Combo Pareja',
+        description: '2 pizzas y una gaseosa',
+        price: 15000,
+        is_active: true,
+        is_available: true,
+        image_url: null,
+        items: [],
+      },
+    ]);
+    renderMenu();
+    const user = userEvent.setup();
+    await screen.findByRole('heading', { name: 'Pizza Muzzarella' });
+    await screen.findByRole('heading', { name: 'Combo Pareja' });
+
+    // Filtrar por Promociones
+    await user.selectOptions(screen.getByLabelText('Filtrar por categoría'), 'promociones');
+    expect(screen.getByRole('heading', { name: 'Combo Pareja' })).toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Pizza Muzzarella' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('heading', { name: 'Coca-Cola 500ml' })).not.toBeInTheDocument();
   });
 });

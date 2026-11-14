@@ -92,7 +92,8 @@ export function OpenShiftPanel({ form, onInvalid, onOpen }: OpenShiftPanelProps)
           <button
             type="submit"
             disabled={opening}
-            className="w-full py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800 transition disabled:opacity-50"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="w-full py-3 rounded-xl text-white font-bold hover:opacity-90 transition disabled:opacity-50"
           >
             {opening ? 'Abriendo caja...' : 'Abrir caja e iniciar turno'}
           </button>

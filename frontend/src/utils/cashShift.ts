@@ -5,6 +5,7 @@ export const MOVEMENT_CATEGORIES = [
   'Transferencia',
   'Tarjeta',
   'Pago a proveedor',
+  'Pago a empleado',
   'Adelanto de sueldo',
   'Compra de insumos',
   'Retiro de efectivo',
