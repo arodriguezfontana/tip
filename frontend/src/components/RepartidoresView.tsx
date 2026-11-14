@@ -140,7 +140,7 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
                   <th className="py-3 px-4">Nombre</th>
                   <th className="w-40 py-3 px-4">Teléfono</th>
                   <th className="w-32 py-3 px-4">Estado</th>
-                  <th className="w-48 py-3 px-4 text-right">Acciones</th>
+                  <th className="w-56 py-3 px-4 text-right whitespace-nowrap">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-sm">
@@ -161,24 +161,26 @@ export function RepartidoresView({ themeColor, onViewActivity }: RepartidoresVie
                         </span>
                       )}
                     </td>
-                    <td className="py-3.5 px-4 text-right">
-                      {onViewActivity && (
+                    <td className="py-3.5 px-4 text-right whitespace-nowrap">
+                      <div className="inline-flex items-center justify-end gap-2 whitespace-nowrap">
+                        {onViewActivity && (
+                          <button
+                            type="button"
+                            onClick={() => onViewActivity(driver.id)}
+                            className="text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition whitespace-nowrap shrink-0"
+                          >
+                            Ver viajes
+                          </button>
+                        )}
                         <button
                           type="button"
-                          onClick={() => onViewActivity(driver.id)}
-                          className="mr-2 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
+                          onClick={() => handleOpenEdit(driver)}
+                          className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition whitespace-nowrap shrink-0"
                         >
-                          Ver viajes
+                          <EditIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+                          <span>Editar</span>
                         </button>
-                      )}
-                      <button
-                        type="button"
-                        onClick={() => handleOpenEdit(driver)}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-gray-700 hover:text-black bg-gray-100 hover:bg-gray-200 px-3 py-1.5 rounded-lg transition"
-                      >
-                        <EditIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
-                        <span>Editar</span>
-                      </button>
+                      </div>
                     </td>
                   </tr>
                 ))}

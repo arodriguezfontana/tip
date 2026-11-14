@@ -74,84 +74,86 @@ function MovementFormCard({ form, onInvalid, onAdd }: MovementFormCardProps) {
   };
 
   return (
-    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-full space-y-4">
       <div>
         <h2 className="text-sm font-bold text-gray-900">Registrar movimiento manual</h2>
       </div>
 
-      <form onSubmit={handleSubmit} className="space-y-3.5">
-        <div>
-          <label className={LABEL_CLASS}>Tipo de movimiento</label>
-          <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de movimiento">
-            <TypeButton type="ingreso" selected={form.type} onSelect={form.setType} />
-            <TypeButton type="egreso" selected={form.type} onSelect={form.setType} />
+      <form onSubmit={handleSubmit} className="flex-1 flex flex-col justify-between space-y-4">
+        <div className="space-y-3.5">
+          <div>
+            <label className={LABEL_CLASS}>Tipo de movimiento</label>
+            <div className="grid grid-cols-2 gap-2" role="radiogroup" aria-label="Tipo de movimiento">
+              <TypeButton type="ingreso" selected={form.type} onSelect={form.setType} />
+              <TypeButton type="egreso" selected={form.type} onSelect={form.setType} />
+            </div>
           </div>
-        </div>
 
-        <div>
-          <label htmlFor="mov-amount" className={LABEL_CLASS}>
-            Monto ($) *
-          </label>
-          <input
-            id="mov-amount"
-            type="number"
-            step="0.01"
-            min="0.01"
-            required
-            placeholder="0.00"
-            value={form.amount}
-            onChange={(e) => form.setAmount(e.target.value)}
-            className={`${FIELD_CLASS} font-medium`}
-          />
-        </div>
-
-        <div>
-          <label htmlFor="mov-category" className={LABEL_CLASS}>
-            Categoría *
-          </label>
-          <select
-            id="mov-category"
-            value={form.category}
-            onChange={(e) => form.setCategory(e.target.value)}
-            className={FIELD_CLASS}
-          >
-            {MOVEMENT_CATEGORIES.map((category) => (
-              <option key={category} value={category}>
-                {category}
-              </option>
-            ))}
-          </select>
-          {form.category === OTHER_CATEGORY && (
+          <div>
+            <label htmlFor="mov-amount" className={LABEL_CLASS}>
+              Monto ($) *
+            </label>
             <input
-              type="text"
-              placeholder="Escribí el motivo o categoría..."
+              id="mov-amount"
+              type="number"
+              step="0.01"
+              min="0.01"
               required
-              value={form.customCategory}
-              onChange={(e) => form.setCustomCategory(e.target.value)}
-              className={`mt-2 ${FIELD_CLASS}`}
+              placeholder="0.00"
+              value={form.amount}
+              onChange={(e) => form.setAmount(e.target.value)}
+              className={`${FIELD_CLASS} font-medium`}
             />
-          )}
-        </div>
+          </div>
 
-        <div>
-          <label htmlFor="mov-description" className={LABEL_CLASS}>
-            Observaciones / Detalle (opcional)
-          </label>
-          <input
-            id="mov-description"
-            type="text"
-            placeholder="Ej. Factura N° 1234, proveedor..."
-            value={form.description}
-            onChange={(e) => form.setDescription(e.target.value)}
-            className={FIELD_CLASS}
-          />
+          <div>
+            <label htmlFor="mov-category" className={LABEL_CLASS}>
+              Categoría *
+            </label>
+            <select
+              id="mov-category"
+              value={form.category}
+              onChange={(e) => form.setCategory(e.target.value)}
+              className={FIELD_CLASS}
+            >
+              {MOVEMENT_CATEGORIES.map((category) => (
+                <option key={category} value={category}>
+                  {category}
+                </option>
+              ))}
+            </select>
+            {form.category === OTHER_CATEGORY && (
+              <input
+                type="text"
+                placeholder="Escribí el motivo o categoría..."
+                required
+                value={form.customCategory}
+                onChange={(e) => form.setCustomCategory(e.target.value)}
+                className={`mt-2 ${FIELD_CLASS}`}
+              />
+            )}
+          </div>
+
+          <div>
+            <label htmlFor="mov-description" className={LABEL_CLASS}>
+              Observaciones / Detalle (opcional)
+            </label>
+            <input
+              id="mov-description"
+              type="text"
+              placeholder="Ej. Factura N° 1234, proveedor..."
+              value={form.description}
+              onChange={(e) => form.setDescription(e.target.value)}
+              className={FIELD_CLASS}
+            />
+          </div>
         </div>
 
         <button
           type="submit"
           disabled={saving}
           style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
-          className="w-full py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90 transition disabled:opacity-50"
+          className="w-full py-2.5 rounded-xl text-white text-sm font-bold hover:opacity-90 transition disabled:opacity-50 mt-4"
         >
           {saving ? 'Guardando...' : 'Asentar movimiento'}
         </button>
@@ -275,57 +277,59 @@ function MovementsList({
   );
 
   return (
-    <div className="lg:col-span-2 bg-white rounded-2xl border border-gray-200 p-5 shadow-sm space-y-4">
-      <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
-        <h2 className="text-sm font-bold text-gray-900">Movimientos del turno</h2>
-        <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filtrar movimientos">
-          {(
-            [
-              { key: 'todos', label: 'Todos', count: counts.todos },
-              { key: 'ingreso', label: 'Ingresos', count: counts.ingreso },
-              { key: 'egreso', label: 'Egresos', count: counts.egreso },
-              { key: 'venta', label: 'Ventas', count: counts.venta },
-            ] as const
-          ).map((tab) => {
-            const isActive = filter === tab.key;
-            return (
-              <button
-                key={tab.key}
-                type="button"
-                role="tab"
-                aria-selected={isActive}
-                onClick={() => {
-                  setFilter(tab.key);
-                  setPage(1);
-                }}
-                className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
-                  isActive
-                    ? 'bg-black text-white border-black shadow-xs'
-                    : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
-                }`}
-              >
-                {tab.label} ({tab.count})
-              </button>
-            );
-          })}
+    <div className="bg-white rounded-2xl border border-gray-200 p-5 shadow-sm flex flex-col justify-between h-full space-y-4">
+      <div className="space-y-4 flex-1 flex flex-col">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-3">
+          <h2 className="text-sm font-bold text-gray-900">Movimientos del turno</h2>
+          <div className="flex flex-wrap items-center gap-1.5" role="tablist" aria-label="Filtrar movimientos">
+            {(
+              [
+                { key: 'todos', label: 'Todos', count: counts.todos },
+                { key: 'ingreso', label: 'Ingresos', count: counts.ingreso },
+                { key: 'egreso', label: 'Egresos', count: counts.egreso },
+                { key: 'venta', label: 'Ventas', count: counts.venta },
+              ] as const
+            ).map((tab) => {
+              const isActive = filter === tab.key;
+              return (
+                <button
+                  key={tab.key}
+                  type="button"
+                  role="tab"
+                  aria-selected={isActive}
+                  onClick={() => {
+                    setFilter(tab.key);
+                    setPage(1);
+                  }}
+                  className={`px-2.5 py-1 text-xs font-semibold rounded-lg border transition ${
+                    isActive
+                      ? 'bg-black text-white border-black shadow-xs'
+                      : 'bg-white text-gray-600 border-gray-200 hover:bg-gray-50'
+                  }`}
+                >
+                  {tab.label} ({tab.count})
+                </button>
+              );
+            })}
+          </div>
         </div>
-      </div>
 
-      {filteredItems.length === 0 ? (
-        <p className="text-sm text-gray-400 text-center py-12 border border-dashed border-gray-200 rounded-xl">
-          No hay movimientos que coincidan con el filtro seleccionado.
-        </p>
-      ) : (
-        <>
-          <div className="overflow-x-auto">
-            <table className="w-full text-left text-xs table-fixed min-w-[550px]">
+        {filteredItems.length === 0 ? (
+          <div className="flex-1 flex items-center justify-center py-12 border border-dashed border-gray-200 rounded-xl">
+            <p className="text-sm text-gray-400 text-center">
+              No hay movimientos que coincidan con el filtro seleccionado.
+            </p>
+          </div>
+        ) : (
+          <div className="w-full flex-1">
+            <table className="w-full text-left text-xs table-fixed">
               <thead>
                 <tr className="border-b border-gray-200 text-gray-500 uppercase tracking-wider">
-                  <th className="w-20 py-2.5 px-2">Hora</th>
-                  <th className="w-28 py-2.5 px-2">Tipo</th>
-                  <th className="w-44 py-2.5 px-2">Categoría</th>
+                  <th className="w-14 sm:w-16 py-2.5 px-2">Hora</th>
+                  <th className="w-20 sm:w-24 py-2.5 px-2">Tipo</th>
+                  <th className="w-28 sm:w-36 py-2.5 px-2">Categoría</th>
                   <th className="py-2.5 px-2">Detalle</th>
-                  <th className="w-28 py-2.5 px-2 text-right">Monto</th>
+                  <th className="w-20 sm:w-24 py-2.5 px-2 text-right">Monto</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -354,38 +358,40 @@ function MovementsList({
               </tbody>
             </table>
           </div>
+        )}
+      </div>
 
-          <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
-            <span>
-              {filteredItems.length} {filteredItems.length === 1 ? 'movimiento' : 'movimientos'}
-            </span>
-            {totalPages > 1 && (
-              <div className="flex items-center gap-2">
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.max(1, p - 1))}
-                  disabled={currentPage <= 1}
-                  aria-label="Página anterior"
-                  className="px-2 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
-                >
-                  &larr;
-                </button>
-                <span className="font-semibold text-gray-700">
-                  {currentPage} de {totalPages}
-                </span>
-                <button
-                  type="button"
-                  onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
-                  disabled={currentPage >= totalPages}
-                  aria-label="Página siguiente"
-                  className="px-2 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
-                >
-                  &rarr;
-                </button>
-              </div>
-            )}
-          </div>
-        </>
+      {filteredItems.length > 0 && (
+        <div className="flex items-center justify-between pt-3 border-t border-gray-100 text-xs text-gray-500">
+          <span>
+            {filteredItems.length} {filteredItems.length === 1 ? 'movimiento' : 'movimientos'}
+          </span>
+          {totalPages > 1 && (
+            <div className="flex items-center gap-2">
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.max(1, p - 1))}
+                disabled={currentPage <= 1}
+                aria-label="Página anterior"
+                className="px-2 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+              >
+                &larr;
+              </button>
+              <span className="font-semibold text-gray-700">
+                {currentPage} de {totalPages}
+              </span>
+              <button
+                type="button"
+                onClick={() => setPage((p) => Math.min(totalPages, p + 1))}
+                disabled={currentPage >= totalPages}
+                aria-label="Página siguiente"
+                className="px-2 py-1 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-100 disabled:opacity-30 disabled:cursor-not-allowed font-bold"
+              >
+                &rarr;
+              </button>
+            </div>
+          )}
+        </div>
       )}
     </div>
   );
@@ -400,7 +406,7 @@ interface MovementsTabProps extends MovementFormCardProps {
 /** Formulario para asentar movimientos manuales de efectivo y la lista de los del turno. */
 export function MovementsTab({ form, onInvalid, onAdd, movements, orders, onDelete }: MovementsTabProps) {
   return (
-    <div className="grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-stretch">
       <MovementFormCard form={form} onInvalid={onInvalid} onAdd={onAdd} />
       <MovementsList movements={movements} orders={orders} onDelete={onDelete} />
     </div>
