@@ -70,6 +70,10 @@ const MOCK_INSIGHT: StrategicInsightResponse = {
     'Reforzar personal de cocina y pre-elaborar bases antes de las 21:00 hs',
     'Crear combos de pizzas y bebidas para subir el ticket promedio actual',
   ],
+  spending_recommendations: [
+    "Comprar con mayor volumen: 'Muzzarella' es el insumo más consumido (15.5 kg)",
+    "Comprar menos / regular stock: 'Rúcula' se utiliza en platos con baja rotación",
+  ],
   operational_metrics: {
     avg_wait_minutes: 38.0,
     max_wait_minutes: 55,
@@ -104,31 +108,32 @@ describe('Dashboard de Métricas, Metas y Asistente IA', () => {
     it('renderiza las barras de progreso de metas y los 4 KPIs estratégicos con indicadores de tendencia', async () => {
       render(<StatsSection />);
 
-      // Verifica los botones de acción para Metas e Inteligencia Artificial
+      // Verifica los botones de acción para Metas y sección de Consejos de IA
       expect(await screen.findByRole('button', { name: /Metas Comerciales/i })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: /Consejos de IA/i })).toBeInTheDocument();
+      expect(screen.getByText('Consejos de IA')).toBeInTheDocument();
 
       // Verifica sección de Progreso vs Metas
-      expect(screen.getByText('Seguimiento de Metas Comerciales')).toBeInTheDocument();
+      expect(screen.getByText('Seguimiento de Metas')).toBeInTheDocument();
       expect(screen.getByText('75% alcanzado')).toBeInTheDocument();
       expect(screen.getByText('80% alcanzado')).toBeInTheDocument();
       expect(screen.getByText('Faltan $ 50.000,00')).toBeInTheDocument();
       expect(screen.getByText('Faltan 4 pedidos')).toBeInTheDocument();
 
       // Verifica los 4 KPIs estratégicos
-      expect(screen.getByText('Facturación Total')).toBeInTheDocument();
+      expect(screen.getAllByText('Facturación').length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Ticket Promedio')).toBeInTheDocument();
       expect(screen.getByText('Margen Bruto')).toBeInTheDocument();
-      expect(screen.getByText('Tasa de Cancelación')).toBeInTheDocument();
+      expect(screen.getByText('Cancelaciones')).toBeInTheDocument();
 
       // Verifica valores formateados
       expect(screen.getByText('70%')).toBeInTheDocument(); // Margen bruto %
       expect(screen.getByText('6.25%')).toBeInTheDocument(); // Tasa de rechazo
 
-      // Verifica tabla de productos enriquecida con columnas de rentabilidad
-      expect(screen.getByText('Costo Est.')).toBeInTheDocument();
-      expect(screen.getByText('Ganancia Bruta')).toBeInTheDocument();
-      expect(screen.getByText('Margen %')).toBeInTheDocument();
+      // Verifica secciones de productos: más vendidos (con ganancias), más rentables y promociones
+      expect(screen.getByText('Más vendidos')).toBeInTheDocument();
+      expect(screen.getByText('Más rentables')).toBeInTheDocument();
+      expect(screen.getByText('Promociones más vendidas')).toBeInTheDocument();
+      expect(screen.getByText('Ganancias')).toBeInTheDocument();
       expect(screen.getByText('66.67%')).toBeInTheDocument();
     });
 
@@ -169,14 +174,17 @@ describe('Dashboard de Métricas, Metas y Asistente IA', () => {
       expect(screen.getByText('70% Domicilio / 30% Retiro')).toBeInTheDocument(); // Modalidad de entrega
 
       // Verifica debilidades operativas detectadas
-      expect(screen.getByText(/Debilidades Operativas Detectadas/i)).toBeInTheDocument();
+      expect(screen.getByText('Debilidades')).toBeInTheDocument();
       expect(screen.getByText(/Demora promedio de preparación de 38 min/i)).toBeInTheDocument();
       expect(screen.getByText(/Cuello de botella a las 21:00 hs/i)).toBeInTheDocument();
 
       // Verifica recomendaciones concretas de acción
-      expect(screen.getByText(/Recomendaciones Concretas/i)).toBeInTheDocument();
+      expect(screen.getByText('Recomendaciones')).toBeInTheDocument();
       expect(screen.getByText(/Reforzar personal de cocina y pre-elaborar bases antes de las 21:00 hs/i)).toBeInTheDocument();
       expect(screen.getByText(/Crear combos de pizzas y bebidas/i)).toBeInTheDocument();
+
+      // Compras y control de gastos se muestra exclusivamente en el reporte de ingredientes
+      expect(screen.queryByText('Compras y Control de Gastos')).not.toBeInTheDocument();
 
       // Verifica que el botón cambie a "Actualizar consejos"
       expect(screen.getByRole('button', { name: /Actualizar consejos/i })).toBeInTheDocument();
@@ -189,7 +197,7 @@ describe('Dashboard de Métricas, Metas y Asistente IA', () => {
       const user = userEvent.setup();
 
       // El resto de la sección de Estadísticas funciona y está visible
-      expect(await screen.findByText('Facturación Total')).toBeInTheDocument();
+      expect((await screen.findAllByText('Facturación')).length).toBeGreaterThanOrEqual(1);
       expect(screen.getByText('Ticket Promedio')).toBeInTheDocument();
       expect(screen.getByText('Viernes')).toBeInTheDocument(); // Mejor día
 
@@ -203,8 +211,8 @@ describe('Dashboard de Métricas, Metas y Asistente IA', () => {
       expect(reintentarBtn).toBeInTheDocument();
 
       // El resto de las estadísticas sigue visible y funcionando
-      expect(screen.getByText('Facturación Total')).toBeInTheDocument();
-      expect(screen.getByText('Pizza Especial')).toBeInTheDocument();
+      expect(screen.getAllByText('Facturación').length).toBeGreaterThanOrEqual(1);
+      expect(screen.getAllByText('Pizza Especial').length).toBeGreaterThanOrEqual(1);
 
       // Reintentar con éxito
       stats.fetchStrategicInsight.mockResolvedValueOnce(MOCK_INSIGHT);

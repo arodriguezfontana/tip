@@ -4,6 +4,7 @@ import { ClientEditModal } from '@/components/ClientEditModal';
 import { Toast } from '@/components/ui/Toast';
 import { useAsyncData } from '@/hooks/useAsyncData';
 import { useToast } from '@/hooks/useToast';
+import { EditIcon, SearchIcon, UserIcon, ChevronLeftIcon, ChevronRightIcon } from '@/components/Icons';
 import type { Client } from '@/types/client';
 
 export function ClientesView() {
@@ -55,12 +56,15 @@ export function ClientesView() {
 
         <div className="flex items-center gap-3">
           <div className="relative w-full sm:w-72">
+            <span className="absolute inset-y-0 left-0 pl-3 flex items-center pointer-events-none text-gray-400" aria-hidden="true">
+              <SearchIcon className="w-4 h-4" />
+            </span>
             <input
               type="text"
               placeholder="Buscar por nombre, teléfono o dirección..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
-              className="w-full bg-gray-50 border border-gray-200 rounded-xl px-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black"
+              className="w-full bg-gray-50 border border-gray-200 rounded-xl pl-9 pr-3 py-2 text-xs focus:outline-none focus:ring-2 focus:ring-black transition"
             />
           </div>
 
@@ -86,33 +90,38 @@ export function ClientesView() {
         {loading && clients.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Cargando clientes...</p>
         ) : clients.length === 0 ? (
-          <div className="text-center py-16 px-4 space-y-2">
-            <p className="text-sm font-semibold text-gray-800">
-              {debouncedSearch ? 'No se encontraron clientes que coincidan con la búsqueda.' : 'Aún no hay clientes registrados en el sistema.'}
-            </p>
-            <p className="text-xs text-gray-500">
-              {!debouncedSearch && 'Los clientes se guardarán automáticamente al cargar sus pedidos.'}
-            </p>
+          <div className="text-center py-16 px-4 space-y-3 flex flex-col items-center">
+            <div className="w-12 h-12 rounded-2xl bg-gray-50 border border-gray-100 flex items-center justify-center text-gray-400" aria-hidden="true">
+              <UserIcon className="w-6 h-6" />
+            </div>
+            <div>
+              <p className="text-sm font-semibold text-gray-800">
+                {debouncedSearch ? 'No se encontraron clientes que coincidan con la búsqueda.' : 'Aún no hay clientes registrados en el sistema.'}
+              </p>
+              <p className="text-xs text-gray-500 mt-0.5">
+                {!debouncedSearch && 'Los clientes se guardarán automáticamente al cargar sus pedidos.'}
+              </p>
+            </div>
           </div>
         ) : (
           <div className="overflow-x-auto">
-            <table className="w-full text-left border-collapse">
+            <table className="w-full text-left border-collapse table-fixed min-w-[650px]">
               <thead>
                 <tr className="border-b border-gray-100 bg-gray-50/50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
-                  <th className="py-3 px-5">Nombre del Cliente</th>
-                  <th className="py-3 px-5">Teléfono</th>
+                  <th className="w-52 py-3 px-5">Nombre del Cliente</th>
+                  <th className="w-36 py-3 px-5">Teléfono</th>
                   <th className="py-3 px-5">Dirección</th>
-                  <th className="py-3 px-5">Registrado</th>
-                  <th className="py-3 px-5 text-right">Acciones</th>
+                  <th className="w-32 py-3 px-5">Registrado</th>
+                  <th className="w-24 py-3 px-5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100 text-xs">
                 {clients.map((client) => (
                   <tr key={client.id} className="hover:bg-gray-50/50 transition">
-                    <td className="py-3.5 px-5 font-semibold text-gray-900">{client.full_name}</td>
-                    <td className="py-3.5 px-5 text-gray-600">{client.phone}</td>
-                    <td className="py-3.5 px-5 text-gray-600">{client.address || <span className="text-gray-400 italic">Sin dirección</span>}</td>
-                    <td className="py-3.5 px-5 text-gray-400">{new Date(client.created_at).toLocaleDateString()}</td>
+                    <td className="py-3.5 px-5 font-semibold text-gray-900 truncate" title={client.full_name}>{client.full_name}</td>
+                    <td className="py-3.5 px-5 text-gray-600 whitespace-nowrap">{client.phone}</td>
+                    <td className="py-3.5 px-5 text-gray-600 truncate">{client.address || <span className="text-gray-400 italic">Sin dirección</span>}</td>
+                    <td className="py-3.5 px-5 text-gray-400 whitespace-nowrap">{new Date(client.created_at).toLocaleDateString()}</td>
                     <td className="py-3.5 px-5 text-right">
                       <button
                         type="button"
@@ -120,9 +129,7 @@ export function ClientesView() {
                         className="p-1.5 rounded-lg hover:bg-gray-200 text-gray-700 transition"
                         title="Editar cliente"
                       >
-                        <svg className="w-4 h-4 inline-block" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                          <path strokeLinecap="round" strokeLinejoin="round" d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                        </svg>
+                        <EditIcon className="w-4 h-4 inline-block" />
                       </button>
                     </td>
                   </tr>
@@ -138,9 +145,10 @@ export function ClientesView() {
               type="button"
               disabled={page === 1}
               onClick={() => setPage((p) => Math.max(p - 1, 1))}
-              className="font-semibold text-gray-700 disabled:opacity-30 hover:underline"
+              className="inline-flex items-center gap-1 font-semibold text-gray-700 disabled:opacity-30 hover:underline"
             >
-              Anterior
+              <ChevronLeftIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
+              <span>Anterior</span>
             </button>
             <span className="text-gray-500 font-medium">
               Página {page} de {totalPages}
@@ -149,9 +157,10 @@ export function ClientesView() {
               type="button"
               disabled={page === totalPages}
               onClick={() => setPage((p) => Math.min(p + 1, totalPages))}
-              className="font-semibold text-gray-700 disabled:opacity-30 hover:underline"
+              className="inline-flex items-center gap-1 font-semibold text-gray-700 disabled:opacity-30 hover:underline"
             >
-              Siguiente
+              <span>Siguiente</span>
+              <ChevronRightIcon className="w-3.5 h-3.5 shrink-0" aria-hidden="true" />
             </button>
           </div>
         )}

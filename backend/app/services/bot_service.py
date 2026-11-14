@@ -159,6 +159,14 @@ class BotService:
             # Un empleado intervino el chat mientras el mensaje esperaba en la cola: no se responde, solo se guarda.
             derivaciones.registrar_mensaje_del_cliente(clave, mensaje)
             return
+
+        from app.db.session import SessionLocal
+        from app.services import delivery_review_service
+
+        with SessionLocal() as db:
+            if delivery_review_service.process_possible_review(db, canal.canal.value, chat_id, mensaje):
+                await canal.enviar_mensaje(chat_id, delivery_review_service.THANK_YOU_MESSAGE)
+                return
         try:
             indicador = asyncio.create_task(_mantener_escribiendo(canal, chat_id))
             try:

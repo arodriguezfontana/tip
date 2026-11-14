@@ -173,9 +173,11 @@ def test_asistente_insight_estrategico(client, db_session):
 
     assert "summary" in data and len(data["summary"]) > 0
     assert isinstance(data["highlights"], list) and len(data["highlights"]) > 0
-    assert isinstance(data["recommendations"], list) and len(data["recommendations"]) > 0
+    assert isinstance(data["recommendations"], list) and len(data["recommendations"]) == 6
     assert "operational_weaknesses" in data
     assert isinstance(data["operational_weaknesses"], list)
+    assert "spending_recommendations" in data
+    assert isinstance(data["spending_recommendations"], list) and len(data["spending_recommendations"]) > 0
 
 
 def test_asistente_insight_tiempos_espera_y_flujos_operativos(client, db_session):

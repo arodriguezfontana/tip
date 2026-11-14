@@ -13,7 +13,7 @@ function Metric({
   highlight?: boolean;
 }) {
   return (
-    <div className={`rounded-xl p-4 ${highlight ? 'bg-amber-50 border border-amber-200' : 'bg-gray-50'}`}>
+    <div className={`rounded-xl p-4 ${highlight ? 'bg-gray-100 border border-gray-200' : 'bg-gray-50'}`}>
       <p className="text-xs font-semibold uppercase tracking-wide text-gray-500">{label}</p>
       <p className="text-2xl font-bold text-gray-900 mt-1">{value}</p>
       {hint && <p className="text-[11px] text-gray-500 mt-1">{hint}</p>}

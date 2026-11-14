@@ -12,9 +12,6 @@ export function CashHeader({ isOpen, error, onRefresh, onDismissError }: CashHea
       <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4 bg-white p-5 rounded-2xl shadow-xs border border-gray-100">
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Control de caja</h1>
-          <p className="text-sm text-gray-500 mt-0.5">
-            Gestión de turnos de caja y movimientos de efectivo en tiempo real.
-          </p>
         </div>
         <div className="flex items-center gap-3">
           {isOpen ? (

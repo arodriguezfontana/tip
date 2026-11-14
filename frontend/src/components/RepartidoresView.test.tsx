@@ -14,6 +14,9 @@ const CARLOS: DeliveryDriver = {
   name: 'Carlos Repartos',
   phone: '11 4444-5555',
   is_active: true,
+  rating_average: 4.8,
+  ratings_count: 5,
+  reviews_count: 5,
   created_at: '2026-10-01T15:00:00Z',
   updated_at: '2026-10-01T15:00:00Z',
 };
@@ -23,6 +26,9 @@ const LAURA: DeliveryDriver = {
   name: 'Laura Delivery',
   phone: '11 6666-7777',
   is_active: false,
+  rating_average: null,
+  ratings_count: 0,
+  reviews_count: 0,
   created_at: '2026-10-02T15:00:00Z',
   updated_at: '2026-10-02T15:00:00Z',
 };
@@ -165,6 +171,46 @@ describe('RepartidoresView', () => {
     render(<RepartidoresView />);
 
     expect(await screen.findByText('No se pudo cargar la lista de repartidores.')).toBeInTheDocument();
+  });
+
+  it('muestra la columna de puntaje promedio y permite abrir el modal de reseñas anónimas', async () => {
+    service.fetchDriverReviews.mockResolvedValue({
+      driver_id: 1,
+      driver_name: 'Carlos Repartos',
+      delivered_orders_count: 10,
+      rating_average: 4.8,
+      ratings_count: 5,
+      reviews_count: 5,
+      reviews: [
+        {
+          id: 101,
+          rating: 5,
+          comment: 'Excelente atención, llegó muy rápido',
+          created_at: '2026-11-14T02:00:00Z',
+        },
+      ],
+    });
+
+    render(<RepartidoresView />);
+    const user = userEvent.setup();
+
+    // Ver columna de puntaje con promedio y cantidad
+    expect(await screen.findByText('4.8')).toBeInTheDocument();
+    expect(within(row('Carlos Repartos')).getByText('(5)')).toBeInTheDocument();
+    // Laura no tiene puntaje
+    expect(within(row('Laura Delivery')).getByText('-')).toBeInTheDocument();
+
+    // Abrir modal de reseñas
+    const reviewsBtn = within(row('Carlos Repartos')).getByRole('button', { name: /Ver reseñas/i });
+    await user.click(reviewsBtn);
+
+    expect(await screen.findByRole('heading', { name: 'Reseñas de Carlos Repartos' })).toBeInTheDocument();
+    expect(screen.getByText('«Excelente atención, llegó muy rápido»')).toBeInTheDocument();
+    expect(screen.getByText('5/5')).toBeInTheDocument();
+
+    // Cerrar modal
+    await user.click(screen.getByRole('button', { name: 'Cerrar' }));
+    expect(screen.queryByRole('heading', { name: 'Reseñas de Carlos Repartos' })).not.toBeInTheDocument();
   });
 });
 

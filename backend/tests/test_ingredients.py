@@ -218,8 +218,8 @@ def test_consumo_de_los_pedidos_finalizados(client, db_session, products, recipe
 
     assert body["completed_orders"] == 2
     assert body["items"] == [
-        {"ingredient_id": body["items"][0]["ingredient_id"], "ingredient_name": "Muzzarella", "unit": "gramos", "total_quantity": 750},
-        {"ingredient_id": body["items"][1]["ingredient_id"], "ingredient_name": "Salsa de tomate", "unit": "gramos", "total_quantity": 300},
+        {"ingredient_id": body["items"][0]["ingredient_id"], "ingredient_name": "Muzzarella", "unit": "gramos", "total_quantity": 750, "unit_cost": 0.0, "total_cost": 0.0},
+        {"ingredient_id": body["items"][1]["ingredient_id"], "ingredient_name": "Salsa de tomate", "unit": "gramos", "total_quantity": 300, "unit_cost": 0.0, "total_cost": 0.0},
     ]
     assert body["products_without_recipe"] == ["Coca-Cola 500ml"]
 
@@ -252,7 +252,7 @@ def test_un_ingrediente_sin_consumo_figura_en_cero_al_filtrarlo(client, db_sessi
     body = client.get(CONSUMPTION_URL, params={"ingredient_id": ingredients["huevo"].id}).json()
 
     assert body["items"] == [
-        {"ingredient_id": ingredients["huevo"].id, "ingredient_name": "Huevo", "unit": "unidades", "total_quantity": 0},
+        {"ingredient_id": ingredients["huevo"].id, "ingredient_name": "Huevo", "unit": "unidades", "total_quantity": 0, "unit_cost": 0.0, "total_cost": 0.0},
     ]
 
 

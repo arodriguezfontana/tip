@@ -9,10 +9,13 @@ export function PromotionCard({ promotion }: { promotion: Promotion }) {
   const cartItem = items.find((item) => item.promotion?.id === promotion.id);
 
   return (
-    <div className="bg-white rounded-2xl shadow-md p-4 sm:p-5 flex flex-col justify-between border-2 border-amber-200/80 bg-gradient-to-b from-amber-50/30 to-white relative overflow-hidden">
+    <div
+      style={{ borderColor: 'var(--primary-border, #e4e4e7)' }}
+      className="bg-white rounded-2xl shadow-md p-4 sm:p-5 flex flex-col justify-between border-2 relative overflow-hidden"
+    >
       <div className="space-y-3">
         {promotion.image_url && (
-          <div className="w-full h-44 rounded-xl overflow-hidden bg-gray-100 border border-amber-100/80">
+          <div className="w-full h-44 rounded-xl overflow-hidden bg-gray-100 border border-gray-200">
             <img
               src={productImageSrc(promotion.image_url)}
               alt={`Foto de ${promotion.name}`}
@@ -40,9 +43,12 @@ export function PromotionCard({ promotion }: { promotion: Promotion }) {
               {promotion.items.map((it) => (
                 <li
                   key={it.product_id}
-                  className="bg-white border border-amber-200/60 text-gray-800 text-xs px-2.5 py-1 rounded-lg font-medium shadow-2xs"
+                  style={{ borderColor: 'var(--primary-border, #e4e4e7)' }}
+                  className="bg-white border text-gray-800 text-xs px-2.5 py-1 rounded-lg font-medium shadow-2xs"
                 >
-                  <span className="font-bold text-amber-700">{it.quantity}x</span>{' '}
+                  <span className="font-bold" style={{ color: 'var(--primary-text, #18181b)' }}>
+                    {it.quantity}x
+                  </span>{' '}
                   {it.product_name}
                 </li>
               ))}
@@ -51,7 +57,10 @@ export function PromotionCard({ promotion }: { promotion: Promotion }) {
         </div>
       </div>
 
-      <div className="flex items-center justify-between mt-4 pt-3 border-t border-amber-100">
+      <div
+        style={{ borderColor: 'var(--primary-border, #e4e4e7)' }}
+        className="flex items-center justify-between mt-4 pt-3 border-t"
+      >
         <span className="text-lg font-black text-gray-900">
           {formatCurrency(promotion.price)}
         </span>

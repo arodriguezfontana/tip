@@ -239,9 +239,9 @@ describe('AdminDashboardPage', () => {
         .getAllByRole('button')
         .map((button) => button.textContent);
     expect(labels('Operación')).toEqual(['Comandas', 'Tomar pedido', 'Control de caja', 'Historial', 'Clientes', 'Repartidores']);
-    expect(labels('Catálogo')).toEqual(['Productos y categorías', 'Promociones', 'Ingredientes']);
+    expect(labels('Catálogo')).toEqual(['Productos', 'Categorías', 'Promociones', 'Ingredientes']);
     expect(labels('Reportes')).toEqual(['Estadísticas', 'Reporte de ingredientes']);
-    expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Configuración', 'Impresoras']);
+    expect(labels('Configuración')).toEqual(['Horarios', 'Menú y promociones', 'Impresoras', 'Configuración']);
     expect(screen.queryByRole('button', { name: 'Ingresos' })).not.toBeInTheDocument();
     expect(screen.getByRole('button', { name: 'Comandas' })).toHaveAttribute('aria-current', 'page');
   });
@@ -286,10 +286,17 @@ describe('AdminDashboardPage', () => {
     ['Repartidores', async () => expect(await screen.findByText('Aún no hay repartidores registrados en el sistema.')).toBeInTheDocument()],
     ['Ingredientes', async () => expect(await screen.findByText('Todavía no cargaste ingredientes.')).toBeInTheDocument()],
     [
-      'Productos y categorías',
+      'Productos',
       async () => {
-        expect(screen.getByRole('heading', { name: 'Productos y categorías' })).toBeInTheDocument();
+        expect(screen.getByRole('heading', { name: 'Productos' })).toBeInTheDocument();
         expect(await screen.findByText('Todavía no hay productos en el catálogo.')).toBeInTheDocument();
+      },
+    ],
+    [
+      'Categorías',
+      async () => {
+        expect(screen.getByRole('heading', { name: 'Categorías' })).toBeInTheDocument();
+        expect(await screen.findByText('Todavía no creaste categorías.')).toBeInTheDocument();
       },
     ],
     [

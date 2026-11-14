@@ -5,7 +5,8 @@ from dataclasses import dataclass
 from datetime import datetime, timezone
 
 from app.core.time import RESTAURANT_TZ
-from app.models.order import Order, OrderStatus
+from app.models.order import DeliveryMethod, Order, OrderStatus
+from app.services import delivery_review_service
 from app.services.channels import enviar_mensaje
 
 logger = logging.getLogger(__name__)
@@ -28,6 +29,8 @@ class OrderSnapshot:
     is_paid: bool = False
     # Llegada estimada a la parada del viaje (solo pedidos despachados).
     eta_minutes: int | None = None
+    delivery_driver_id: int | None = None
+    delivery_method: str | None = None
 
     @classmethod
     def of(cls, order: Order) -> "OrderSnapshot":
@@ -40,6 +43,8 @@ class OrderSnapshot:
             scheduled_for=order.scheduled_for,
             is_paid=bool(order.is_paid),
             eta_minutes=order.eta_minutes,
+            delivery_driver_id=order.delivery_driver_id,
+            delivery_method=order.delivery_method,
         )
 
 
@@ -76,6 +81,10 @@ def build_status_message(
         return _mensaje_de_cancelacion(order)
     if new_status == OrderStatus.READY_FOR_PICKUP:
         return "¡Tu pedido está listo para retirar! 🎉 Ya podés pasar a buscarlo."
+    if new_status == OrderStatus.COMPLETED:
+        if order.delivery_method == DeliveryMethod.DELIVERY.value and order.delivery_driver_id is not None:
+            return delivery_review_service.INVITATION_MESSAGE
+        return "¡Muchas gracias por tu compra! Esperamos que disfrutes tu pedido. 🎉"
     return None
 
 
@@ -119,5 +128,14 @@ async def notify_order_status_change(
     mensaje = build_status_message(order, new_status, payment_instructions)
     if mensaje is None:
         return
+
+    if (
+        new_status == OrderStatus.COMPLETED
+        and order.delivery_method == DeliveryMethod.DELIVERY.value
+        and order.delivery_driver_id is not None
+    ):
+        delivery_review_service.open_review_window(
+            order.channel, order.chat_id, order.id, order.delivery_driver_id
+        )
 
     await enviar_mensaje(order.channel, order.chat_id, mensaje)

@@ -107,17 +107,17 @@ export function ShiftsHistoryTable({ title, items, loading, onViewDetail, loadin
     <div className="bg-white rounded-2xl border border-gray-200 overflow-hidden shadow-sm">
       {heading}
       <div className="overflow-x-auto">
-        <table className="w-full text-left text-xs">
+        <table className="w-full text-left text-xs table-fixed min-w-[700px]">
           <thead>
             <tr className="bg-gray-50 border-b border-gray-200 text-gray-500 uppercase tracking-wider">
-              <th className="py-3 px-3">Turno</th>
-              <th className="py-3 px-3">Apertura</th>
-              <th className="py-3 px-3">Cierre</th>
-              <th className="py-3 px-3 text-right">Fondo inicial</th>
-              <th className="py-3 px-3 text-right">Caja teórica</th>
-              <th className="py-3 px-3 text-right">Monto real</th>
-              <th className="py-3 px-3 text-center">Diferencia</th>
-              <th className="py-3 px-3 text-center">Acción</th>
+              <th className="w-16 py-3 px-3">Turno</th>
+              <th className="w-36 py-3 px-3">Apertura</th>
+              <th className="w-36 py-3 px-3">Cierre</th>
+              <th className="w-28 py-3 px-3 text-right">Fondo inicial</th>
+              <th className="w-28 py-3 px-3 text-right">Caja teórica</th>
+              <th className="w-28 py-3 px-3 text-right">Monto real</th>
+              <th className="w-28 py-3 px-3 text-center">Diferencia</th>
+              <th className="w-24 py-3 px-3 text-center">Acción</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-gray-100">

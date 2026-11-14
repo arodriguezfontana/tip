@@ -43,6 +43,12 @@ export interface TopProductKpi {
   revenue_growth_pct?: number | null;
 }
 
+export interface TopPromotionKpi {
+  promotion_name: string;
+  total_quantity: number;
+  total_revenue: number;
+}
+
 export interface DashboardKPIsResponse {
   revenue: GrowthMetric;
   orders_count: GrowthMetric;
@@ -61,6 +67,7 @@ export interface DashboardKPIsResponse {
   };
   status_distribution: Record<string, number>;
   top_products: TopProductKpi[];
+  top_promotions?: TopPromotionKpi[];
 }
 
 export interface BusinessGoalItem {
@@ -95,6 +102,7 @@ export interface StrategicInsightResponse {
   warnings: string[];
   operational_weaknesses?: string[];
   recommendations: string[];
+  spending_recommendations?: string[];
   operational_metrics?: OperationalMetricsContext | null;
   generated_at: string;
 }

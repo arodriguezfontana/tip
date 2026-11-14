@@ -11,13 +11,15 @@ function MoneyCard({ label, value, valueClass }: { label: string; value: string;
   );
 }
 
-function DigitalSales({ summary }: { summary?: CashShiftSummaryBreakdown | null }) {
+function DigitalSales({
+  summary,
+}: {
+  summary?: CashShiftSummaryBreakdown | null;
+}) {
   return (
     <div className="bg-gradient-to-r from-slate-50 to-gray-50 rounded-2xl border border-gray-200 p-4 flex flex-col md:flex-row md:items-center justify-between gap-4">
-      <div className="space-y-1">
-        <div className="text-xs font-bold uppercase tracking-wider text-gray-500">
-          Ventas digitales del turno (no ingresan en caja física)
-        </div>
+      <div className="space-y-1.5">
+        <span className="text-xs font-bold uppercase tracking-wider text-gray-500">Ventas digitales</span>
         <div className="flex flex-wrap items-center gap-x-4 gap-y-1 text-xs text-gray-700">
           <span>
             MercadoPago: <strong className="text-gray-900">{formatCurrency(summary?.mercadopago_sales ?? 0)}</strong>
@@ -30,14 +32,6 @@ function DigitalSales({ summary }: { summary?: CashShiftSummaryBreakdown | null 
           <span>
             Tarjeta: <strong className="text-gray-900">{formatCurrency(summary?.tarjeta_sales ?? 0)}</strong>
           </span>
-          {Boolean(summary?.other_digital_sales) && (
-            <>
-              <span>·</span>
-              <span>
-                Otros digitales: <strong className="text-gray-900">{formatCurrency(summary?.other_digital_sales ?? 0)}</strong>
-              </span>
-            </>
-          )}
         </div>
       </div>
 
@@ -55,9 +49,14 @@ function DigitalSales({ summary }: { summary?: CashShiftSummaryBreakdown | null 
   );
 }
 
+interface ShiftSummaryCardsProps {
+  shift: CashShiftDetail;
+}
+
 /** Datos del turno abierto, el dinero físico de la caja y lo cobrado por medios digitales. */
-export function ShiftSummaryCards({ shift }: { shift: CashShiftDetail }) {
+export function ShiftSummaryCards({ shift }: ShiftSummaryCardsProps) {
   const summary = shift.summary;
+
   return (
     <>
       <div className="bg-white rounded-2xl border border-gray-200 p-4 flex flex-wrap items-center justify-between gap-4 text-xs text-gray-600">

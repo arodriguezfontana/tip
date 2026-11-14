@@ -9,6 +9,13 @@ export function applyThemeColor(color?: ThemeColor | string | null) {
   const theme = getThemeOption(color);
   if (typeof document !== 'undefined') {
     document.documentElement.style.setProperty('--primary-color', theme.hex);
+    document.documentElement.style.setProperty('--primary-light', `${theme.hex}15`);
+    document.documentElement.style.setProperty('--primary-light-hover', `${theme.hex}25`);
+    document.documentElement.style.setProperty('--primary-border', `${theme.hex}40`);
+    document.documentElement.style.setProperty(
+      '--primary-text',
+      theme.hex === '#18181b' || theme.hex === '#000000' ? '#27272a' : theme.hex
+    );
   }
   return theme;
 }

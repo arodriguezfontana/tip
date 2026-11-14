@@ -259,8 +259,8 @@ describe('TomarPedidoView', () => {
       const user = userEvent.setup();
 
       // Se muestran el botón de categoría "Promociones" y la sección con la tarjeta
-      expect(await screen.findByRole('button', { name: /Promociones/ })).toBeInTheDocument();
-      expect(screen.getByText('Promociones vigentes')).toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: /^Promociones$/ })).toBeInTheDocument();
+      expect(screen.getByRole('heading', { name: 'Promociones' })).toBeInTheDocument();
       const promoBtn = screen.getByRole('button', { name: /Combo Pizzeros/ });
       expect(promoBtn).toBeInTheDocument();
 

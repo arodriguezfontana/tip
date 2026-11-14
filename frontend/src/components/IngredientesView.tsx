@@ -116,7 +116,8 @@ export function IngredientesView() {
           <button
             type="submit"
             disabled={creating}
-            className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="text-white rounded-xl px-5 py-2 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60"
           >
             {creating ? 'Agregando...' : 'Agregar'}
           </button>

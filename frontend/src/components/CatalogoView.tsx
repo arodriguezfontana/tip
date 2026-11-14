@@ -1,17 +1,15 @@
 import { useState } from 'react';
 import { CategoriasView } from '@/components/CategoriasView';
 import { ProductosView } from '@/components/ProductosView';
-import { PromocionesView } from '@/components/PromocionesView';
 
-type CatalogTab = 'productos' | 'categorias' | 'promociones';
+type CatalogTab = 'productos' | 'categorias';
 
 const TABS: { key: CatalogTab; label: string }[] = [
   { key: 'productos', label: 'Productos' },
   { key: 'categorias', label: 'Categorías' },
-  { key: 'promociones', label: 'Promociones' },
 ];
 
-/** Sección del panel para gestionar el catálogo: productos (con su receta e imagen), categorías del menú y promociones. */
+/** Sección del panel para gestionar el catálogo: productos (con su receta e imagen) y categorías del menú. */
 export function CatalogoView() {
   const [tab, setTab] = useState<CatalogTab>('productos');
 
@@ -21,7 +19,7 @@ export function CatalogoView() {
         <div className="flex-1">
           <h1 className="text-lg font-bold text-gray-900">Productos y categorías</h1>
           <p className="text-xs text-gray-500">
-            Organizá la oferta del local: productos, categorías y promociones. Lo que cambies acá se ve al instante en el menú web y en el chatbot.
+            Organizá la oferta del local: productos y categorías del menú. Lo que cambies acá se ve al instante en el menú web y en el chatbot.
           </p>
         </div>
         <div role="tablist" aria-label="Catálogo" className="inline-flex self-start sm:self-auto rounded-xl bg-gray-100 p-1">
@@ -51,13 +49,7 @@ export function CatalogoView() {
         aria-labelledby={`catalog-tab-${tab}`}
         className="flex flex-col lg:flex-1 lg:min-h-0"
       >
-        {tab === 'productos' ? (
-          <ProductosView />
-        ) : tab === 'categorias' ? (
-          <CategoriasView />
-        ) : (
-          <PromocionesView />
-        )}
+        {tab === 'productos' ? <ProductosView /> : <CategoriasView />}
       </div>
     </div>
   );

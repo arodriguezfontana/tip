@@ -115,6 +115,19 @@ describe('ProductosView', () => {
     expect(screen.queryByText('Coca-Cola 500ml', { selector: 'p' })).not.toBeInTheDocument();
   });
 
+  it('filtra productos por restricción alimentaria', async () => {
+    const vegProduct = makeAdminProduct({ id: 13, name: 'Pizza Vegana', dietary_restrictions: ['vegano'] });
+    catalog.fetchAdminProducts.mockResolvedValue([MUZZA, COCA, vegProduct]);
+    render(<ProductosView />);
+    const user = userEvent.setup();
+    await screen.findByText('Pizza Muzzarella', { selector: 'p' });
+
+    await user.selectOptions(screen.getByLabelText('Filtrar por restricción'), 'vegano');
+    expect(screen.getByText('Pizza Vegana', { selector: 'p' })).toBeInTheDocument();
+    expect(screen.queryByText('Pizza Muzzarella', { selector: 'p' })).not.toBeInTheDocument();
+    expect(screen.queryByText('Coca-Cola 500ml', { selector: 'p' })).not.toBeInTheDocument();
+  });
+
   it('crea un producto seleccionando adicionales permitidos', async () => {
     const created = makeAdminProduct({ id: 25, name: 'Pizza Especial', description: 'Rica.', price: 12000 });
     catalog.createProduct.mockResolvedValue(created);

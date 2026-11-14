@@ -27,6 +27,9 @@ class DeliveryDriverResponse(BaseModel):
     is_active: bool
     created_at: datetime
     updated_at: datetime
+    rating_average: float | None = None
+    ratings_count: int = 0
+    reviews_count: int = 0
 
     model_config = ConfigDict(from_attributes=True)
 
@@ -65,3 +68,22 @@ class DriverActivityResponse(BaseModel):
     trips: list[TripSummaryResponse]
 
     model_config = ConfigDict(from_attributes=True)
+
+
+class DriverReviewResponse(BaseModel):
+    id: int
+    rating: int | None
+    comment: str | None
+    created_at: datetime
+
+    model_config = ConfigDict(from_attributes=True)
+
+
+class DriverReviewsDetailResponse(BaseModel):
+    driver_id: int
+    driver_name: str
+    delivered_orders_count: int
+    rating_average: float | None
+    ratings_count: int
+    reviews_count: int
+    reviews: list[DriverReviewResponse]

@@ -29,9 +29,9 @@ export function LoginBackgroundSection({ loginBg, setLoginBg, loginBgImage, bgFi
   return (
     <section className="bg-white rounded-2xl shadow-sm border border-gray-100 p-6 space-y-4">
       <div>
-        <h2 className="text-base font-bold text-gray-900">Imagen de Fondo para Inicio de Sesión</h2>
+        <h2 className="text-base font-bold text-gray-900">Fondo de Inicio de Sesión</h2>
         <p className="text-xs text-gray-500 mt-1">
-          Elegí la imagen que se mostrará como fondo en la pantalla de ingreso al sistema, o subí una propia desde tu dispositivo. Por defecto está seleccionada Salón.
+          Imagen de fondo de la pantalla de ingreso.
         </p>
       </div>
 

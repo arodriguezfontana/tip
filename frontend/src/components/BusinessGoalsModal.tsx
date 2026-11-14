@@ -52,13 +52,13 @@ function proportionalGoals(monthly: GoalValues): Pick<Record<GoalPeriod, GoalVal
 const PERIODS: { period: GoalPeriod; title: string; boxClass: string; titleClass: string; note?: string }[] = [
   {
     period: 'monthly',
-    title: '📅 Meta Mensual (Último mes)',
+    title: 'Meta Mensual',
     boxClass: 'bg-amber-50/60 border-amber-200/70',
     titleClass: 'text-amber-900',
     note: 'Base principal',
   },
-  { period: 'weekly', title: '📆 Meta Semanal (Última semana)', boxClass: 'bg-sky-50/60 border-sky-200/70', titleClass: 'text-sky-900' },
-  { period: 'daily', title: '☀️ Meta Diaria (Hoy)', boxClass: 'bg-emerald-50/60 border-emerald-200/70', titleClass: 'text-emerald-900' },
+  { period: 'weekly', title: 'Meta Semanal', boxClass: 'bg-sky-50/60 border-sky-200/70', titleClass: 'text-sky-900' },
+  { period: 'daily', title: 'Meta Diaria', boxClass: 'bg-emerald-50/60 border-emerald-200/70', titleClass: 'text-emerald-900' },
 ];
 
 const INPUT_CLASS =
@@ -169,7 +169,7 @@ function BusinessGoalsForm({ initialGoals, onClose, onSaved }: BusinessGoalsForm
           onClick={handleAutoCalculate}
           className="text-xs font-semibold text-amber-800 hover:text-amber-900 underline flex items-center gap-1"
         >
-          ⚡ Autocalcular semanal y diario proporcionalmente
+          Autocalcular semanal y diario proporcionalmente
         </button>
       </div>
 
@@ -219,7 +219,7 @@ export function BusinessGoalsModal({ isOpen, onClose, onSaved }: BusinessGoalsMo
         <div className="flex items-center justify-between pb-4 border-b border-gray-100">
           <div>
             <h2 id="goals-modal-title" className="text-lg font-bold text-gray-900 flex items-center gap-2">
-              <span>🎯</span> Configuración de Metas Comerciales
+              Configuración de Metas Comerciales
             </h2>
             <p className="text-xs text-gray-500 mt-0.5">
               Definí objetivos cuantitativos para evaluar el crecimiento real y supervisar el cumplimiento.

@@ -11,7 +11,6 @@ import type { StrategicInsightResponse } from '@/types/stats';
 const PRESETS: DateRangePreset[] = ['today', 'week', 'month', 'all', 'custom'];
 
 import { AiAdviceSection } from '@/components/stats/AiAdviceSection';
-import { BestDayAndStatuses } from '@/components/stats/BestDayAndStatuses';
 import { GoalsProgress } from '@/components/stats/GoalsProgress';
 import { KpiCards } from '@/components/stats/KpiCards';
 import { TopProductsTable } from '@/components/stats/TopProductsTable';
@@ -58,13 +57,17 @@ export function StatsSection() {
     dateTo: range.to,
   });
 
+  const hasActivity = kpis
+    ? kpis.orders_count.current > 0 || kpis.completed_orders_count > 0 || kpis.revenue.current > 0
+    : true;
+
   return (
-    <div className="flex flex-col gap-6 lg:h-full">
-      {/* Barra superior con filtros y acciones */}
+    <div className="flex flex-col gap-6 lg:h-full pb-28">
+      {/* Barra superior con filtros */}
       <div className="shrink-0 flex flex-col lg:flex-row lg:items-center justify-between gap-4 bg-white rounded-2xl shadow-md p-6 border border-gray-100">
         <div>
-          <h3 className="text-lg font-bold text-gray-900">Panel de Rendimiento y Ventas</h3>
-          <p className="text-xs text-gray-500 mt-0.5">Métricas clave, seguimiento de metas y evaluación de rentabilidad comercial.</p>
+          <h3 className="text-lg font-bold text-gray-900">Estadísticas</h3>
+          <p className="text-xs text-gray-500 mt-0.5">Panel de Rendimiento y Ventas</p>
         </div>
 
         <div className="flex flex-wrap items-center gap-2">
@@ -80,24 +83,6 @@ export function StatsSection() {
               {presetLabel(p)}
             </button>
           ))}
-
-          <div className="h-4 w-px bg-gray-200 mx-1 hidden sm:block" />
-
-          <button
-            type="button"
-            onClick={() => setGoalsModalOpen(true)}
-            className="rounded-xl px-3 py-1.5 text-xs font-semibold bg-amber-50 hover:bg-amber-100 text-amber-900 border border-amber-200 transition flex items-center gap-1.5 shadow-2xs"
-          >
-            <span>🎯</span> Metas Comerciales
-          </button>
-
-          <button
-            type="button"
-            onClick={handleRequestAi}
-            className="rounded-xl px-3 py-1.5 text-xs font-semibold bg-sky-50 hover:bg-sky-100 text-sky-900 border border-sky-200 transition flex items-center gap-1.5 shadow-2xs cursor-pointer"
-          >
-            <span>💡</span> Consejos de IA
-          </button>
         </div>
       </div>
 
@@ -124,12 +109,18 @@ export function StatsSection() {
       ) : error ? (
         <div className="shrink-0 rounded-xl bg-red-50 text-red-700 px-4 py-3 text-sm">{error}</div>
       ) : (
-        <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0">
+        <div className="flex flex-col gap-6 lg:flex-1 lg:min-h-0 pb-16">
+          <AiAdviceSection
+            aiData={aiData}
+            aiLoading={aiLoading}
+            aiError={aiError}
+            handleRequestAi={handleRequestAi}
+            hasActivity={hasActivity}
+          />
           <GoalsProgress kpis={kpis} setGoalsModalOpen={setGoalsModalOpen} />
-          <KpiCards kpis={kpis} />
-          <AiAdviceSection aiData={aiData} aiLoading={aiLoading} aiError={aiError} handleRequestAi={handleRequestAi} />
-          <BestDayAndStatuses kpis={kpis} bestDay={bestDay} statusDistribution={statusDistribution} />
+          <KpiCards kpis={kpis} bestDay={bestDay} statusDistribution={statusDistribution} />
           <TopProductsTable kpis={kpis} topProducts={topProducts} />
+          <div className="h-10 shrink-0" aria-hidden="true" />
         </div>
       )}
 

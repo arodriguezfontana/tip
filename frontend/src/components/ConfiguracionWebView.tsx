@@ -42,7 +42,7 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
         <div>
           <h1 className="text-2xl font-bold text-gray-900">Configuración</h1>
           <p className="text-sm text-gray-500 mt-1">
-            Personalizá la identidad visual, el logotipo, los colores, el fondo de inicio de sesión, el fondo del panel y los datos de contacto del local.
+            Identidad visual, datos del local y seguridad.
           </p>
         </div>
       </div>
@@ -75,7 +75,6 @@ export function ConfiguracionWebView({ onConfigUpdated }: ConfiguracionWebViewPr
           storeName={form.storeName}
           address={form.address}
           contactPhone={form.contactPhone}
-          mpAlias={form.mpAlias}
         />
         <LoginBackgroundSection
           loginBg={form.loginBg}

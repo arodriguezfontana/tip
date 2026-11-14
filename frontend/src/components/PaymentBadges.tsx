@@ -21,7 +21,7 @@ export function PaymentBadges({ order, hasPartialPayment, onMarkPaid }: PaymentB
           <span className="bg-emerald-50 text-emerald-700 border border-emerald-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
             Pagado {order.payment_method ? PAYMENT_METHOD_LABEL[order.payment_method] : ''}: {formatCurrency(order.paid_amount ?? 0)}
           </span>
-          <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+          <span className="bg-sky-100 text-sky-800 border border-sky-300 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
             Cobrar {order.balance_payment_method ? PAYMENT_METHOD_LABEL[order.balance_payment_method] : 'diferencia'}:{' '}
             {formatCurrency(order.pending_amount ?? 0)}
           </span>
@@ -57,12 +57,12 @@ export function PaymentBadges({ order, hasPartialPayment, onMarkPaid }: PaymentB
           }}
           title="Hacé clic para marcar como abonado"
           aria-label="Pago pendiente: marcar como abonado"
-          className="bg-amber-50 hover:bg-amber-100 disabled:opacity-60 text-amber-800 border border-amber-200 hover:border-amber-300 px-2 py-1 rounded-xl font-semibold whitespace-nowrap transition cursor-pointer"
+          className="bg-sky-100 hover:bg-sky-200 disabled:opacity-60 text-sky-900 border border-sky-300 hover:border-sky-400 px-2 py-1 rounded-xl font-semibold whitespace-nowrap transition cursor-pointer"
         >
           Pago Pendiente
         </button>
       ) : (
-        <span className="bg-amber-50 text-amber-800 border border-amber-200 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
+        <span className="bg-sky-100 text-sky-900 border border-sky-300 px-2 py-1 rounded-xl font-semibold whitespace-nowrap">
           Pago Pendiente
         </span>
       )}

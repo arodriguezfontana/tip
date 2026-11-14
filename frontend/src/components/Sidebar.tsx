@@ -1,5 +1,24 @@
 import { useState } from 'react';
 import { getThemeOption, type ThemeColor } from '@/types/storeConfig';
+import {
+  UtensilsIcon,
+  ShoppingBagIcon,
+  CashIcon,
+  ClockIcon,
+  UserIcon,
+  DeliveryIcon,
+  PizzaIcon,
+  TagIcon,
+  SparklesIcon,
+  KitchenIcon,
+  TrendingUpIcon,
+  ClipboardListIcon,
+  CalendarIcon,
+  ImageIcon,
+  PrinterIcon,
+  SettingsIcon,
+  ChevronDownIcon,
+} from '@/components/Icons';
 
 export type ViewKey =
   | 'tomar-pedido'
@@ -11,6 +30,7 @@ export type ViewKey =
   | 'clientes'
   | 'repartidores'
   | 'productos'
+  | 'categorias'
   | 'promociones'
   | 'ingredientes'
   | 'menu-imagen'
@@ -34,7 +54,8 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
   {
     title: 'Catálogo',
     items: [
-      { key: 'productos', label: 'Productos y categorías' },
+      { key: 'productos', label: 'Productos' },
+      { key: 'categorias', label: 'Categorías' },
       { key: 'promociones', label: 'Promociones' },
       { key: 'ingredientes', label: 'Ingredientes' },
     ],
@@ -51,8 +72,8 @@ const NAV_GROUPS: { title: string; items: { key: ViewKey; label: string }[] }[] 
     items: [
       { key: 'horarios', label: 'Horarios' },
       { key: 'menu-imagen', label: 'Menú y promociones' },
-      { key: 'configuracion-web', label: 'Configuración' },
       { key: 'impresoras', label: 'Impresoras' },
+      { key: 'configuracion-web', label: 'Configuración' },
     ],
   },
 ];
@@ -82,6 +103,45 @@ function saveCollapsedGroups(titles: string[]) {
     localStorage.setItem(COLLAPSED_STORAGE_KEY, JSON.stringify(titles));
   } catch {
     // Sin almacenamiento (ej. navegación privada): el estado dura solo mientras la página está abierta.
+  }
+}
+
+function getNavIcon(key: ViewKey) {
+  switch (key) {
+    case 'comandas':
+      return <UtensilsIcon className="w-4 h-4 shrink-0" />;
+    case 'tomar-pedido':
+      return <ShoppingBagIcon className="w-4 h-4 shrink-0" />;
+    case 'caja':
+      return <CashIcon className="w-4 h-4 shrink-0" />;
+    case 'historial':
+      return <ClockIcon className="w-4 h-4 shrink-0" />;
+    case 'clientes':
+      return <UserIcon className="w-4 h-4 shrink-0" />;
+    case 'repartidores':
+      return <DeliveryIcon className="w-4 h-4 shrink-0" />;
+    case 'productos':
+      return <PizzaIcon className="w-4 h-4 shrink-0" />;
+    case 'categorias':
+      return <TagIcon className="w-4 h-4 shrink-0" />;
+    case 'promociones':
+      return <SparklesIcon className="w-4 h-4 shrink-0" />;
+    case 'ingredientes':
+      return <KitchenIcon className="w-4 h-4 shrink-0" />;
+    case 'estadisticas':
+      return <TrendingUpIcon className="w-4 h-4 shrink-0" />;
+    case 'reporte-ingredientes':
+      return <ClipboardListIcon className="w-4 h-4 shrink-0" />;
+    case 'horarios':
+      return <CalendarIcon className="w-4 h-4 shrink-0" />;
+    case 'menu-imagen':
+      return <ImageIcon className="w-4 h-4 shrink-0" />;
+    case 'impresoras':
+      return <PrinterIcon className="w-4 h-4 shrink-0" />;
+    case 'configuracion-web':
+      return <SettingsIcon className="w-4 h-4 shrink-0" />;
+    default:
+      return null;
   }
 }
 
@@ -146,18 +206,9 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
                   }`}
                 >
                   {group.title}
-                  <svg
-                    viewBox="0 0 20 20"
-                    fill="currentColor"
-                    aria-hidden="true"
+                  <ChevronDownIcon
                     className={`w-4 h-4 transition-transform duration-200 ${expanded ? 'rotate-0' : '-rotate-90'}`}
-                  >
-                    <path
-                      fillRule="evenodd"
-                      d="M5.23 7.21a.75.75 0 0 1 1.06.02L10 11.06l3.71-3.83a.75.75 0 1 1 1.08 1.04l-4.25 4.39a.75.75 0 0 1-1.08 0L5.21 8.27a.75.75 0 0 1 .02-1.06Z"
-                      clipRule="evenodd"
-                    />
-                  </svg>
+                  />
                 </button>
                 <div id={listId} role="group" aria-labelledby={titleId} hidden={!expanded} className="space-y-1 pt-1 pb-2">
                   {group.items.map((item) => (
@@ -166,16 +217,17 @@ export function Sidebar({ open, onClose, activeView, onSelect, themeColor }: Sid
                       type="button"
                       onClick={() => onSelect(item.key)}
                       aria-current={activeView === item.key ? 'page' : undefined}
-                      style={activeView === item.key && themeHex ? { backgroundColor: themeHex } : undefined}
-                      className={`w-full text-left rounded-xl px-4 py-2.5 text-sm font-semibold transition ${
+                      style={activeView === item.key ? { backgroundColor: 'var(--primary-color, #18181b)' } : undefined}
+                      className={`w-full text-left rounded-xl px-3.5 py-2.5 text-sm font-semibold transition flex items-center gap-3 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-black ${
                         activeView === item.key
-                          ? themeHex
-                            ? 'text-white shadow-xs'
-                            : 'bg-black text-white'
+                          ? 'text-white shadow-xs'
                           : 'text-gray-700 hover:bg-gray-200'
                       }`}
                     >
-                      {item.label}
+                      <span className="shrink-0 text-current" aria-hidden="true">
+                        {getNavIcon(item.key)}
+                      </span>
+                      <span className="truncate">{item.label}</span>
                     </button>
                   ))}
                 </div>

@@ -11,7 +11,7 @@ import type { CashTab } from '@/hooks/useCashControl';
 import { useCloseShiftForm, useMovementForm, useOpenShiftForm } from '@/hooks/useCashForms';
 
 const TABS: { key: CashTab; label: (movementsCount: number) => string }[] = [
-  { key: 'movimientos', label: (count) => `Movimientos de caja (${count})` },
+  { key: 'movimientos', label: (count) => `Movimientos (${count})` },
   { key: 'cierre', label: () => 'Cierre de caja' },
   { key: 'historial', label: () => 'Historial de turnos' },
 ];
@@ -89,7 +89,10 @@ export function ControlCajaView() {
           <ShiftSummaryCards shift={cash.currentShift} />
           <CashTabs
             active={cash.activeTab}
-            movementsCount={cash.currentShift.movements?.length ?? 0}
+            movementsCount={
+              (cash.currentShift.movements?.length ?? 0) +
+              (cash.currentShift.orders?.filter((o) => o.is_billable).length ?? 0)
+            }
             onChange={cash.setActiveTab}
           />
           {cash.activeTab === 'movimientos' && (
@@ -98,6 +101,7 @@ export function ControlCajaView() {
               onInvalid={cash.setError}
               onAdd={cash.addMovement}
               movements={cash.currentShift.movements ?? []}
+              orders={cash.currentShift.orders ?? []}
               onDelete={handleDeleteMovement}
             />
           )}

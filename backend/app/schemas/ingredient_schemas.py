@@ -67,6 +67,8 @@ class IngredientConsumptionItem(BaseModel):
     ingredient_name: str
     unit: str
     total_quantity: float
+    unit_cost: float = 0.0
+    total_cost: float = 0.0
 
 
 class IngredientConsumptionResponse(BaseModel):

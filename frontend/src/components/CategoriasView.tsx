@@ -69,14 +69,15 @@ export function CategoriasView() {
           type="button"
           onClick={() => setCategoryForm({ category: null })}
           disabled={loading}
-          className="bg-black text-white rounded-xl px-5 py-2 text-sm font-semibold hover:bg-gray-800 transition disabled:opacity-60 whitespace-nowrap"
+          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+          className="text-white rounded-xl px-5 py-2 text-sm font-semibold hover:opacity-90 transition disabled:opacity-60 whitespace-nowrap"
         >
           + Nueva categoría
         </button>
       </div>
 
       {withoutCategory.length > 0 && (
-        <div className="shrink-0 rounded-xl bg-amber-50 text-amber-800 border border-amber-200 px-4 py-3 text-sm">
+        <div className="shrink-0 rounded-xl bg-gray-50 text-gray-700 border border-gray-200 px-4 py-3 text-sm">
           Sin categoría (no se muestran en el menú):{' '}
           <strong>{withoutCategory.map((product) => product.name).join(', ')}</strong>. Agregalos a una categoría para
           volver a ofrecerlos.
@@ -95,13 +96,13 @@ export function CategoriasView() {
         ) : categories.length === 0 ? (
           <p className="text-sm text-gray-500 text-center py-16">Todavía no creaste categorías.</p>
         ) : (
-          <div className="overflow-auto lg:min-h-0">
+          <div className="overflow-hidden lg:min-h-0">
             <table className="w-full text-left text-sm">
               <thead className="sticky top-0 z-10 bg-gray-50 text-[11px] font-bold text-gray-500 uppercase tracking-wider">
                 <tr>
-                  <th className="py-3 px-5">Categoría</th>
+                  <th className="w-1/4 sm:w-56 py-3 px-5">Categoría</th>
                   <th className="py-3 px-5">Productos</th>
-                  <th className="py-3 px-5 text-right">Acciones</th>
+                  <th className="w-28 py-3 px-5 text-right">Acciones</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-gray-100">
@@ -111,12 +112,8 @@ export function CategoriasView() {
                       <p className="font-semibold text-gray-900">{category.name}</p>
                       {category.sector && SECTOR_CONFIG[category.sector as PreparationSector] && (
                         <div className="mt-0.5">
-                          <span
-                            className={`inline-flex items-center gap-1.5 px-2 py-0.5 rounded-full text-[11px] font-medium ${
-                              SECTOR_CONFIG[category.sector as PreparationSector].badgeClass
-                            }`}
-                          >
-                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0" />
+                          <span className="inline-flex items-center gap-1.5 text-[11px] font-medium text-gray-600">
+                            <SectorIcon sector={category.sector} className="w-3.5 h-3.5 shrink-0 text-gray-500" />
                             <span>{SECTOR_CONFIG[category.sector as PreparationSector].label}</span>
                           </span>
                         </div>

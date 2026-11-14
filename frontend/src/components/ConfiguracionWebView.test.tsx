@@ -3,10 +3,12 @@ import userEvent from '@testing-library/user-event';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 import { ConfiguracionWebView } from '@/components/ConfiguracionWebView';
 import * as storeConfigService from '@/services/storeConfigService';
+import * as securityService from '@/services/securityService';
 import type { StoreConfig } from '@/types/storeConfig';
 import { resizeImageToDataUrl } from '@/utils/images';
 
 vi.mock('@/services/storeConfigService');
+vi.mock('@/services/securityService');
 vi.mock('@/utils/images');
 
 const initialConfig: StoreConfig = {
@@ -21,6 +23,19 @@ const initialConfig: StoreConfig = {
 
 beforeEach(() => {
   vi.resetAllMocks();
+  vi.mocked(securityService.fetchPinStatus).mockResolvedValue({
+    admin_pin_required: true,
+    admin_blocked: false,
+    admin_blocked_seconds_remaining: 0,
+    cash_pin_required: false,
+    cash_blocked: false,
+    cash_blocked_seconds_remaining: 0,
+  });
+  vi.mocked(securityService.verifyAdminPin).mockResolvedValue({
+    token: 'admin-mock-token',
+    expires_in: 3600,
+    message: 'PIN válido',
+  });
   vi.mocked(storeConfigService.fetchStoreConfig).mockResolvedValue(initialConfig);
   vi.mocked(resizeImageToDataUrl).mockResolvedValue('data:image/jpeg;base64,fondo-propio');
   vi.mocked(storeConfigService.updateStoreConfig).mockImplementation(async (payload) => ({
@@ -129,11 +144,12 @@ describe('ConfiguracionWebView', () => {
     expect(await screen.findByText(/¡Configuración guardada exitosamente!/i)).toBeInTheDocument();
   });
 
-  it('no muestra el campo para agregar el alias de MercadoPago', async () => {
+  it('no muestra el campo para agregar el alias de MercadoPago ni en la vista previa', async () => {
     render(<ConfiguracionWebView />);
 
     await screen.findByDisplayValue('Pizzería Los Troncos');
     expect(screen.queryByLabelText(/Alias de MercadoPago/i)).not.toBeInTheDocument();
+    expect(screen.queryByText(/Alias MercadoPago/i)).not.toBeInTheDocument();
   });
 
   it('permite subir un archivo de imagen como logo y luego quitarlo', async () => {
@@ -341,15 +357,25 @@ describe('ConfiguracionWebView', () => {
   });
 
   describe('Seguridad y PIN de Caja', () => {
-    it('permite habilitar protección por PIN, valida 4 dígitos y lo guarda', async () => {
+    it('pide PIN de admin para habilitar protección por PIN, valida 4 dígitos y lo guarda', async () => {
       const user = userEvent.setup();
       render(<ConfiguracionWebView />);
       await screen.findByDisplayValue('Pizzería Los Troncos');
 
-      const checkbox = screen.getByRole('checkbox', { name: /Proteger el módulo de Caja/i });
+      const checkbox = screen.getByRole('checkbox', { name: /Proteger Caja con un PIN de 4 dígitos/i });
       expect(checkbox).not.toBeChecked();
 
+      // Al hacer clic, se abre el modal de PIN de admin
       await user.click(checkbox);
+      expect(screen.getByRole('heading', { name: 'Autorización de Administrador' })).toBeInTheDocument();
+
+      // Ingresar los 4 dígitos del PIN de admin
+      await user.keyboard('1234');
+      await waitFor(() => {
+        expect(securityService.verifyAdminPin).toHaveBeenCalledWith('1234');
+        expect(screen.queryByRole('heading', { name: 'Autorización de Administrador' })).not.toBeInTheDocument();
+      });
+
       expect(checkbox).toBeChecked();
 
       const pinInput = screen.getByLabelText(/PIN de Caja/i);

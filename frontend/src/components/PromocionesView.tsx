@@ -141,7 +141,8 @@ export function PromocionesView() {
         <button
           type="button"
           onClick={() => setModalPromotion({ promo: null })}
-          className="w-full sm:w-auto px-4 py-2 bg-black hover:bg-gray-800 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-1.5 shadow-xs"
+          style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+          className="w-full sm:w-auto px-4 py-2 hover:opacity-90 text-white rounded-xl text-sm font-semibold transition flex items-center justify-center gap-1.5 shadow-xs"
         >
           <span className="text-base font-bold leading-none">+</span> Nueva promoción
         </button>
@@ -171,7 +172,8 @@ export function PromocionesView() {
               <button
                 type="button"
                 onClick={() => setModalPromotion({ promo: null })}
-                className="mt-2 px-4 py-2 bg-black text-white rounded-xl text-xs font-semibold hover:bg-gray-800 transition"
+                style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+                className="mt-2 px-4 py-2 hover:opacity-90 text-white rounded-xl text-xs font-semibold transition"
               >
                 Crear primera promoción
               </button>

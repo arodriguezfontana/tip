@@ -31,23 +31,29 @@ export function OpenShiftPanel({ form, onInvalid, onOpen }: OpenShiftPanelProps)
 
   return (
     <>
-      <div className="bg-amber-50 border border-amber-200 rounded-2xl p-5 text-amber-900 flex flex-col md:flex-row md:items-center justify-between gap-4">
-        <div className="space-y-1">
-          <h2 className="text-base font-bold">La caja no está abierta actualmente</h2>
-          <p className="text-sm text-amber-800">
-            El sistema requiere tener un turno de caja abierto para poder tomar y facturar pedidos presenciales en mostrador o registrar cobros.
+      <div
+        className="rounded-2xl p-4 flex flex-col md:flex-row md:items-center justify-between gap-3 border"
+        style={{
+          backgroundColor: 'var(--primary-light, #f4f4f5)',
+          borderColor: 'var(--primary-border, #e4e4e7)',
+          color: 'var(--primary-text, #18181b)',
+        }}
+      >
+        <div className="space-y-0.5">
+          <h2 className="text-sm font-bold">La caja no está abierta actualmente</h2>
+          <p className="text-xs opacity-90">
+            Abrí un turno de caja para registrar cobros y pedidos.
           </p>
         </div>
       </div>
 
       <div className="bg-white rounded-2xl shadow-sm border border-gray-200 p-6 max-w-xl mx-auto">
-        <div className="flex items-center gap-3 border-b border-gray-100 pb-4 mb-5">
+        <div className="flex items-center gap-3 border-b border-gray-100 pb-3 mb-5">
           <div className="p-2.5 rounded-xl bg-gray-100 text-gray-800">
             <CashIcon className="w-5 h-5" />
           </div>
           <div>
-            <h2 className="text-lg font-bold text-gray-900">Apertura de turno de caja</h2>
-            <p className="text-xs text-gray-500">Ingresá el fondo inicial en efectivo para iniciar el turno.</p>
+            <h2 className="text-base font-bold text-gray-900">Apertura de turno de caja</h2>
           </div>
         </div>
 
@@ -86,7 +92,8 @@ export function OpenShiftPanel({ form, onInvalid, onOpen }: OpenShiftPanelProps)
           <button
             type="submit"
             disabled={opening}
-            className="w-full py-3 rounded-xl bg-black text-white font-bold hover:bg-gray-800 transition disabled:opacity-50"
+            style={{ backgroundColor: 'var(--primary-color, #18181b)' }}
+            className="w-full py-3 rounded-xl text-white font-bold hover:opacity-90 transition disabled:opacity-50"
           >
             {opening ? 'Abriendo caja...' : 'Abrir caja e iniciar turno'}
           </button>

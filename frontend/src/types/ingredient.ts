@@ -36,6 +36,8 @@ export interface IngredientConsumption {
   ingredient_name: string;
   unit: string;
   total_quantity: number;
+  unit_cost?: number;
+  total_cost?: number;
 }
 
 export interface IngredientConsumptionReport {

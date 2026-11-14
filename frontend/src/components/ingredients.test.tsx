@@ -6,14 +6,17 @@ import { ProductosView } from '@/components/ProductosView';
 import { ReporteIngredientesView } from '@/components/ReporteIngredientesView';
 import * as catalogService from '@/services/catalogService';
 import * as ingredientService from '@/services/ingredientService';
+import * as statsService from '@/services/statsService';
 import type { AdminProduct } from '@/types/catalog';
 import type { Ingredient, IngredientConsumptionReport } from '@/types/ingredient';
 
 vi.mock('@/services/ingredientService');
 vi.mock('@/services/catalogService');
+vi.mock('@/services/statsService');
 
 const service = vi.mocked(ingredientService);
 const catalog = vi.mocked(catalogService);
+const stats = vi.mocked(statsService);
 
 const plain = (text: string | null) => (text ?? '').replace(/\s/g, ' ');
 
@@ -51,8 +54,8 @@ const COCA: AdminProduct = {
 const REPORT: IngredientConsumptionReport = {
   completed_orders: 3,
   items: [
-    { ingredient_id: 1, ingredient_name: 'Muzzarella', unit: 'gramos', total_quantity: 1250.5 },
-    { ingredient_id: 2, ingredient_name: 'Salsa de tomate', unit: 'gramos', total_quantity: 500 },
+    { ingredient_id: 1, ingredient_name: 'Muzzarella', unit: 'gramos', total_quantity: 1250.5, unit_cost: 10, total_cost: 12505 },
+    { ingredient_id: 2, ingredient_name: 'Salsa de tomate', unit: 'gramos', total_quantity: 500, unit_cost: 5, total_cost: 2500 },
   ],
   products_without_recipe: ['Coca-Cola 500ml'],
 };
@@ -280,7 +283,9 @@ describe('ReporteIngredientesView', () => {
       ingredientId: undefined,
     });
     expect(plain(within(row('Muzzarella')).getAllByRole('cell')[1].textContent)).toBe('1.250,5 gramos');
-    expect(screen.getByText('Pedidos finalizados').nextElementSibling).toHaveTextContent('3');
+    expect(screen.queryByText('Pedidos finalizados')).not.toBeInTheDocument();
+    expect(screen.getByText('Gasto total en ingredientes')).toBeInTheDocument();
+    expect(screen.getByText(/15\.005/)).toBeInTheDocument();
     expect(screen.queryByText(/no tienen receta/)).toBeNull();
   });
 
@@ -337,5 +342,35 @@ describe('ReporteIngredientesView', () => {
     render(<ReporteIngredientesView />);
 
     expect(await screen.findByText('No se pudo cargar el reporte de ingredientes.')).toBeInTheDocument();
+  });
+
+  it('muestra la sección de consejos de IA con compras y control de gastos para insumos', async () => {
+    stats.fetchStrategicInsight.mockResolvedValue({
+      generated_at: '2026-10-29T12:00:00Z',
+      summary: 'Buen rendimiento',
+      recommendations: [],
+      spending_recommendations: [
+        "Comprar con mayor volumen: 'Muzzarella'",
+        "Comprar menos / regular stock: 'Rúcula'",
+      ],
+      highlights: [],
+      warnings: [],
+      operational_weaknesses: [],
+      operational_metrics: null,
+    });
+
+    render(<ReporteIngredientesView />);
+    const user = userEvent.setup();
+    await screen.findByRole('cell', { name: 'Muzzarella' });
+
+    expect(screen.getByRole('heading', { name: 'Consejos de IA' })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Consejos con IA' }));
+
+    expect(await screen.findByText('Compras y Control de Gastos')).toBeInTheDocument();
+    expect(screen.getByText('Insumos y rotación de platos')).toBeInTheDocument();
+    expect(
+      screen.getByText('Sugerencias de abastecimiento según el consumo de ingredientes y la demanda de tus productos:')
+    ).toBeInTheDocument();
+    expect(screen.getByText(/Comprar con mayor volumen: 'Muzzarella'/)).toBeInTheDocument();
   });
 });

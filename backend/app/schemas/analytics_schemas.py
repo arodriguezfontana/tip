@@ -56,6 +56,14 @@ class TopProductKpi(BaseModel):
     revenue_growth_pct: float | None = None
 
 
+class TopPromotionKpi(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    promotion_name: str
+    total_quantity: int
+    total_revenue: float
+
+
 class DashboardKPIsResponse(BaseModel):
     model_config = ConfigDict(from_attributes=True)
 
@@ -71,6 +79,7 @@ class DashboardKPIsResponse(BaseModel):
     best_selling_day: dict[str, Any]
     status_distribution: dict[str, int]
     top_products: list[TopProductKpi]
+    top_promotions: list[TopPromotionKpi] = Field(default_factory=list)
 
 
 class OperationalMetricsContext(BaseModel):
@@ -94,5 +103,6 @@ class StrategicInsightResponse(BaseModel):
     warnings: list[str] = Field(default_factory=list, description="Puntos de atención y alertas")
     operational_weaknesses: list[str] = Field(default_factory=list, description="Debilidades operativas detectadas")
     recommendations: list[str]
+    spending_recommendations: list[str] = Field(default_factory=list, description="Recomendaciones de compras, insumos y control de gastos")
     operational_metrics: OperationalMetricsContext | None = None
     generated_at: datetime
